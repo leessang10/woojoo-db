@@ -119,3 +119,9 @@
   .tree-db > span:not(.count) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: left; }
   .tree-db > svg, .tree-db .count { flex-shrink: 0; }
 }
+
+@layer components {
+  .connection-modal .engine-options { margin-top: 0; margin-bottom: 20px; }
+  .sqlite-file-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
+  .connection-modal .modal-actions { flex-wrap: wrap; gap: 10px; }
+}
