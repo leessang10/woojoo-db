@@ -31,7 +31,7 @@ import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
 import type { StructurePlan } from './structure';
 import { ObjectPage } from './ObjectPage';
 import { createTab, isDirty, useWorkspaceTabs, type WorkspaceTab } from './workspace-tabs';
-import { ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Database, FileCode2, Filter, KeyRound, Layers3, Loader2, Plus, RefreshCw, Search, Settings2, Table2, Terminal, Undo2, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronRight, CircleHelp, Database, FileCode2, Filter, KeyRound, Layers3, Loader2, Plus, RefreshCw, Search, Settings2, Table2, Terminal, Undo2, X } from 'lucide-react';
 import * as api from './api';
 import { collectEdits, csv, tableQuery, type Profile, type Table, type Result } from './model';
 
@@ -94,8 +94,6 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
   const [showExecutions,setShowExecutions]=useState(false);
   useEffect(()=>{if(!api.desktop)return;const subscription=listen<string>("execution-log-error",event=>setNotice(event.payload)).catch(()=>()=>{});return()=>{void subscription.then(unlisten=>unlisten()).catch(()=>{});};},[]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<{ sql: string; time: string; session: string }[]>([]);
   const [scroll, setScroll] = workspace.field('scroll');
   const [sort, setSort] = workspace.field('sort');
   const [editing, setEditing] = useState<{ index: number; col: string; value: string; isNull: boolean } | null>(null);
@@ -317,10 +315,10 @@ export default function App() {
         if (event.key === 'Escape') setShowSettings(false);
         return;
       }
-      if (showConnect || showReview || showHelp || editing || showHistory || showExecutions) {
+      if (showConnect || showReview || showHelp || editing || showExecutions) {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') event.preventDefault();
         if (event.key === 'Escape' && !busyRef.current) {
-          setEditing(null); setShowReview(false); setShowHelp(false); setShowHistory(false);
+          setEditing(null); setShowReview(false); setShowHelp(false);
         }
         return;
       }
@@ -332,7 +330,7 @@ export default function App() {
     const leave = (event: BeforeUnloadEvent) => { if (allTabsRef.current.some(isDirty)||Object.values(dataDirty).some(Boolean)) event.preventDefault(); };
     window.addEventListener('keydown', key); window.addEventListener('beforeunload', leave);
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('beforeunload', leave); };
-  }, [confirming, showConnect, showReview, showHelp, showSettings, editing, showHistory,showExecutions,dataDirty]);
+  }, [confirming, showConnect, showReview, showHelp, showSettings, editing,showExecutions,dataDirty]);
   useEffect(() => {
     if (gridRef.current) gridRef.current.scrollTop = scroll;
   }, [tab.id, scroll]);
@@ -352,7 +350,6 @@ export default function App() {
       workspace.markQuery(tab.id);
       setLastQuery(text);
       setResult(data); setSource('query'); setDraft({}); setFilter(''); setSort(null); setScroll(0);
-      setHistory(h => [{ sql: text, session: active, time: new Date().toLocaleTimeString(language === 'ko' ? 'ko-KR' : 'en-US') }, ...h].slice(0, 30));
     });
   };
   const run = () => { if (tab.kind === 'table' || tab.kind === 'query') executeQuery(editorSelection.current.trim() || editorSql.trim()); };
@@ -405,9 +402,8 @@ export default function App() {
   return <div className="app">
     <aside className="rail">
       <span className="brand-mark" aria-label="Woojoo">W</span>
-      <Button variant="ghost" size="bare" className={`rail-button ${sidebarOpen ? 'selected' : ''}`} aria-expanded={sidebarOpen} title={t("데이터베이스")} onClick={toggleSidebar}><Database size={21}/></Button>
-      <Button variant="ghost" size="bare" className={`rail-button ${showHistory ? 'selected' : ''}`} title={t("쿼리 기록")} onClick={() => setShowHistory(v => !v)}><Clock3 size={21}/></Button>
-      <Button variant="ghost" size="bare" className={`rail-button ${showExecutions?'selected':''}`} title={tr("실행한 쿼리","Executed queries")} aria-label={tr("실행한 쿼리","Executed queries")} onClick={()=>{setShowHistory(false);setShowExecutions(v=>!v);}}><ScrollText size={21}/></Button>
+      <Button variant="ghost" size="bare" className={`rail-button ${!showExecutions ? 'selected' : ''}`} aria-current={!showExecutions ? 'page' : undefined} aria-label={t("데이터베이스")} title={t("데이터베이스")} onClick={() => setShowExecutions(false)}><Database size={21}/></Button>
+      <Button variant="ghost" size="bare" className={`rail-button ${showExecutions?'selected':''}`} title={tr("실행한 쿼리","Executed queries")} aria-label={tr("실행한 쿼리","Executed queries")} aria-current={showExecutions ? 'page' : undefined} onClick={()=>setShowExecutions(true)}><ScrollText size={21}/></Button>
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
     {sidebarOpen && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:busy}]).onContextMenu(event); }}>
@@ -513,7 +509,6 @@ export default function App() {
     {showConnect && <ConnectionDialog initialProfile={editProfile} onClose={() => {setShowConnect(false);setEditProfile(undefined);}} onSave={saveProfile} onConnected={acceptConnection}/>}
     {editing && <ModalSurface title={t("셀 편집")} onClose={() => setEditing(null)} locked={false}><div className="modal cell-modal" role="dialog" aria-modal="true" aria-label={t("셀 편집")}><div className="modal-heading"><h2> {t("셀 편집")} </h2><Button variant="ghost" size="bare" onClick={() => setEditing(null)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{selected?.name} / <strong>{editing.col}</strong> {t("· 행")} {editing.index + 1}</p><Textarea aria-label={t("셀 값")} autoFocus value={editing.value} disabled={editing.isNull} onChange={e => setEditing({...editing,value:e.target.value})}/><label className="checkbox-label"><Input type="checkbox" checked={editing.isNull} onChange={e => setEditing({...editing,isNull:e.target.checked})}/> {t("NULL로 설정")} </label><div className="modal-actions"><Button variant="outline" size="sm" className="secondary-button" onClick={() => setEditing(null)}> {t("취소")} </Button><Button variant="default" size="sm" className="primary-button" onClick={() => {setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value}));setEditing(null);}}> {t("변경 대기열에 추가")} </Button></div></div></ModalSurface>}
     {showReview && <ModalSurface title={t("변경 사항 검토")} onClose={() => setShowReview(false)} locked={busy}><div className="modal review-modal" role="dialog" aria-modal="true" aria-label={t("변경 사항 검토")}><div className="modal-heading"><h2> {t("변경 사항 검토")} </h2><Button variant="ghost" size="bare" disabled={busy} onClick={() => setShowReview(false)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{t('검토 설명', {table: `${selected?.schema}.${selected?.name}`, count: edits.length})} {active === 'demo' ? t("데모 데이터에만 반영됩니다.") : t("모든 변경을 하나의 트랜잭션으로 적용합니다.")}</p><div className="review-list">{edits.map((edit,i) => <div className="review-row" key={i}><small>{result.columns.filter(c => c.primary).map(c => `${c.name} = ${edit.original[c.name]}`).join(', ')}</small>{Object.entries(edit.changes).map(([col,val]) => <div key={col}><strong>{col}</strong><del>{edit.original[col] ?? 'NULL'}</del><ArrowRight size={14}/><ins>{val ?? 'NULL'}</ins></div>)}</div>)}</div>{error && <p className="dialog-error">{error}</p>}<div className="modal-actions"><Button variant="outline" size="sm" disabled={busy} className="secondary-button" onClick={() => setShowReview(false)}> {t("돌아가기")} </Button><Button variant="default" size="sm" disabled={busy} className="primary-button" onClick={() => void applyChanges()}>{busy ? t("적용 중...") : t('행 적용', {count: edits.length})}</Button></div></div></ModalSurface>}
-    {showHistory && <aside className="history-panel"><div className="modal-heading"><h2> {t("쿼리 기록")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHistory(false)} aria-label={t("닫기")}><X size={18}/></Button></div><p> {t("현재 앱 세션의 실행 기록")} </p>{!history.some(h => h.session === active) && <div className="history-empty"><Clock3 size={28}/><p> {t("실행한 쿼리가 여기에 표시됩니다.")} </p></div>}{history.filter(h => h.session === active).map((h,i) => <Button variant="ghost" size="bare" key={i} {...menuFor([{label:t("새 쿼리"),action:()=>{addQuery(h.sql);setShowHistory(false);}},{label:t("전체 SQL 복사"),action:()=>void copyText(h.sql)}])} className="history-item" disabled={busy} onClick={() => {addQuery(h.sql);setShowHistory(false);}}><small>{h.time}</small><code>{h.sql}</code></Button>)}</aside>}
     {showSettings && <SettingsDialog theme={theme} onThemeChange={next => { saveTheme(next); setTheme(next); }} sidebarOpen={sidebarOpen} onSidebarChange={setSidebarOpen} onClose={() => setShowSettings(false)}/> }
     {showHelp && <ModalSurface title={t("도움말")} onClose={() => setShowHelp(false)} locked={false}><div className="modal" role="dialog" aria-modal="true" aria-label={t("도움말")}><div className="modal-heading"><h2> {t("도움말")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHelp(false)} aria-label={t("닫기")}><X size={20}/></Button></div><div className="help-content"><p><kbd>Ctrl + Enter</kbd> {t("선택한 구문 또는 편집기의 SQL 실행")} </p><p><strong> {t("결과 편집")} </strong> {t("테이블 보기에서 셀 더블클릭 → 변경 검토 → 적용. 기본키와 생성 열은 수정할 수 없습니다.")} </p><p><strong> {t("연결")} </strong> {tr("PostgreSQL·MySQL·MariaDB·SQLite에 연결합니다. 프로필과 SQL 탭은 저장되며 비밀번호는 저장하지 않습니다.","Connect to PostgreSQL, MySQL, MariaDB or SQLite. Profiles and SQL tabs are saved; passwords are not.")} </p><p><strong> {t("쿼리 실행")} </strong> {tr("스크립트 실행·매개변수·수동 커밋을 지원합니다. 테이블의 데이터 도구에서 페이징과 가져오기·내보내기를 사용할 수 있습니다.","Scripts, parameters and manual commit are available. Open Data tools for paging, import and export.")} </p></div><Button variant="default" size="sm" className="primary-button full" onClick={() => setShowHelp(false)}> {t("확인")} </Button></div></ModalSurface>}
   </div>;

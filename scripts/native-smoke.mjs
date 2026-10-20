@@ -12,7 +12,7 @@ for (const [engine, port, username] of [['PostgreSQL',55439,'postgres'],['MySQL'
   await page.getByLabel('연결 이름').fill(`${engine} integration`);
   await page.getByLabel('호스트',{exact:true}).fill('127.0.0.1');
   await page.getByLabel('포트',{exact:true}).fill(String(port));
-  await page.getByLabel('데이터베이스',{exact:true}).fill('woojoo_test');
+  await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('woojoo_test');
   await page.getByLabel('사용자',{exact:true}).fill(username);
   await page.getByLabel('비밀번호',{exact:true}).fill('woojoo-local-test');
   await page.getByLabel('TLS 사용 · 서버 인증서 검증').uncheck();

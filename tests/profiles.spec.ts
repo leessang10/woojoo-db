@@ -5,7 +5,7 @@ test('profiles retain SQLite environment settings but never credentials, and can
   await page.getByLabel('새 연결',{exact:true}).click();
   await page.getByRole('button',{name:'SQLite',exact:true}).click();
   await page.getByLabel('연결 이름',{exact:true}).fill('Local inventory');
-  await page.getByLabel('데이터베이스',{exact:true}).fill('C:\\data\\inventory.sqlite');
+  await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('C:\\data\\inventory.sqlite');
   await page.getByLabel('그룹',{exact:true}).fill('Personal');
   await page.getByLabel('환경',{exact:true}).selectOption('staging');
   await page.getByLabel('읽기 전용 연결').check();

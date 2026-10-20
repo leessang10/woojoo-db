@@ -69,7 +69,7 @@ test('query completion stays in its originating tab', async ({ page }) => {
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(0);
 });
 
-test('history opens a new tab instead of overwriting an unfinished query', async ({ page }) => {
+test('rail navigation restores the workspace without toggling the sidebar or losing SQL', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '새 쿼리', exact: true }).click();
@@ -77,12 +77,26 @@ test('history opens a new tab instead of overwriting an unfinished query', async
   await page.locator('.run-button').click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.locator('.cm-content').fill('SELECT * FROM users LIMIT 7;');
-  await page.getByRole('button', { name: '쿼리 기록', exact: true }).click();
-  await page.locator('.history-item').click();
-  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(3);
-  await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 2;');
-  await page.getByRole('tab', { name: '쿼리 1', exact: true }).click();
-  await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 7;');
+  const database = page.locator('.rail').getByRole('button', { name: '데이터베이스', exact: true });
+  const executions = page.locator('.rail').getByRole('button', { name: '실행한 쿼리', exact: true });
+  await expect(page.locator('.rail').getByRole('button', {name:'쿼리 기록',exact:true})).toHaveCount(0);
+  for (const collapsed of [false, true]) {
+    if (collapsed) await page.getByRole('button', {name:'사이드바 접기',exact:true}).click();
+    await executions.click();
+    await expect(executions).toHaveAttribute('aria-current','page');
+    await expect(database).not.toHaveClass(/selected/);
+    await executions.click();
+    await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toBeVisible();
+    await database.click();
+    await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).not.toBeVisible();
+    await expect(database).toHaveAttribute('aria-current','page');
+    await expect(executions).not.toHaveClass(/selected/);
+    await expect(page.locator('.sidebar')).toHaveCount(collapsed?0:1);
+    await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 7;');
+    await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
+    await database.click();
+    await expect(page.locator('.sidebar')).toHaveCount(collapsed?0:1);
+  }
 });
 
 test('opening the table after a query restores an editable table without losing the SQL', async ({ page }) => {

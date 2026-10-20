@@ -43,7 +43,7 @@ try {
   await page.getByRole('button',{name:'새 연결',exact:true}).first().click();
   await page.getByRole('button',{name:'SQLite',exact:true}).click();
   await page.getByLabel('연결 이름',{exact:true}).fill('Local notes');
-  await page.getByLabel('데이터베이스',{exact:true}).fill('preview.sqlite3');
+  await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('preview.sqlite3');
   await page.getByRole('button',{name:'연결하기',exact:true}).click();
   await expect(page.locator('.cm-content')).toHaveAttribute('contenteditable','true');
   await page.locator('.cm-content').fill(    "CREATE TABLE user (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE);\n"+

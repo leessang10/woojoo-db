@@ -40,6 +40,15 @@ try {
   expect(await page.evaluate(() => !!window.__TAURI_INTERNALS__)).toBe(true);
   await page.getByLabel('언어 / Language').selectOption('ko');
   await expect(page.locator('.workspace-empty')).toBeVisible();
+  const database = page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true});
+  const archive = page.locator('.rail').getByRole('button',{name:'실행한 쿼리',exact:true});
+  await expect(page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true})).toHaveCount(0);
+  await archive.click();
+  await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toBeVisible();
+  await database.click();
+  await expect(page.locator('.workspace-empty')).toBeVisible();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(database).toHaveAttribute('aria-current','page');
   await page.getByRole('button',{name:'새 연결',exact:true}).first().click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
