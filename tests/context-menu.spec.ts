@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('cell menu copies, edits and reverts the selected cell, with read-only guards', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -30,9 +30,11 @@ test('tab and editor menus support keyboard navigation and preserve original tab
   await page.keyboard.press('Enter');
   await expect(page.getByRole('tab')).toHaveCount(2);
   await expect(page.getByRole('tab', { name: '쿼리 1' })).toHaveAttribute('aria-selected', 'true');
-  page.on('dialog', dialog => dialog.accept());
+
+  await page.locator('.cm-content').fill('SELECT 1;');
   await page.getByRole('tab', { name: '쿼리 1' }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: '탭 닫기', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact: true }).click();
   await expect(page.getByRole('tab')).toHaveCount(1);
   await page.locator('.cm-content').click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: '전체 SQL 복사' })).toBeEnabled();

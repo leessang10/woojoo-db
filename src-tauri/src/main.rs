@@ -1,14 +1,55 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use tauri::Manager;
+mod journal;
+mod local_database;
+mod aws;
+mod data;
 mod db;
 mod export;
+mod files;
+mod maintenance;
 mod plan;
+mod sessions;
 mod structure;
 
 fn main() {
     tauri::Builder::default()
         .manage(db::State::default())
+        .setup(|app| {
+            let directory=app.path().app_data_dir()?;
+            std::fs::create_dir_all(&directory)?;
+            let store=tauri::async_runtime::block_on(journal::Journal::open(&directory.join("query-executions.sqlite3"))).map_err(std::io::Error::other)?;
+            app.manage(store);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            local_database::create_local_database,
+            journal::execution_list,
+            journal::execution_detail,
+            journal::execution_connections,
+            aws::aws_cli_info,
+            aws::aws_environment,
+            aws::aws_rds_instances,
+            sessions::run_object_sql,
+            sessions::transaction_mode,
+            sessions::transaction_finish,
+            sessions::execution_state,
+            sessions::cancel_query,
+            structure::table_ddl,
+            structure::object_list,
+            structure::object_definition,
+            data::data_page,
+            data::data_mutate,
+            data::data_export,
+            data::data_copy,
+            files::sql_open_file,
+            files::sql_save_file,
+            db::choose_sqlite_file,
+            maintenance::maintenance_tools,
+            maintenance::maintenance_pick_restore,
+            maintenance::maintenance_backup,
+            maintenance::maintenance_restore,
             db::connect_db,
             db::disconnect_db,
             db::list_tables,

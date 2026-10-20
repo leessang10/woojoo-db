@@ -23,6 +23,8 @@ export type WorkspaceTab = {
   lastQuery: string;
   busy: boolean;
   loaded: boolean;
+  queryTable?: Table | null;
+  file?: { path: string | null; name: string; savedSql: string };
 };
 
 export function createTab(session: string, number: number, table: Table | null = null, sql = ''): WorkspaceTab {
@@ -41,9 +43,32 @@ export function isDirty(tab: WorkspaceTab) {
   return tab.editorSql !== tab.initialSql || collectEdits(tab.result.rows, tab.draft).length > 0;
 }
 
+const STORAGE_KEY = 'woojoo-workspace-v1';
+export function restoreTabs(initial: WorkspaceTab): WorkspaceTab[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    if (!Array.isArray(saved.tabs)) return [initial];
+    const tabs = saved.tabs.slice(0,100).flatMap((item: Record<string, unknown>) => {
+      if (typeof item.profileId !== 'string' || typeof item.editorSql !== 'string' || !['table','query','schema','details','erd'].includes(String(item.kind))) return [];
+      const selected = item.selected as {schema?:unknown;name?:unknown}|null;
+      const table = selected && typeof selected.schema === 'string' && typeof selected.name === 'string' ? {schema:selected.schema,name:selected.name}:null;
+      const tab = createTab(item.profileId === 'demo' ? 'demo' : `saved:${item.profileId}`, Number(item.number)||0, table, item.editorSql);
+      return [{...tab, id:typeof item.id==='string'?item.id:tab.id, kind:item.kind as WorkspaceTab['kind'], objectSchema:typeof item.objectSchema==='string'?item.objectSchema:table?.schema??'',
+        initialSql:typeof item.initialSql==='string'?item.initialSql:'',
+        ...(typeof item.filePath==='string'?{file:{path:item.filePath,name:typeof item.fileName==='string'?item.fileName:'query.sql',savedSql:typeof item.initialSql==='string'?item.initialSql:''}}:{})}];
+    });
+    return tabs.length ? tabs : [initial];
+  } catch { return [initial]; }
+}
+export function persistTabs(tabs: WorkspaceTab[], profiles: Record<string,string>, activeTab?:string) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({activeTab,tabs:tabs.filter(tab=>profiles[tab.session]).map(tab=>({
+    id:tab.id,profileId:profiles[tab.session],number:tab.number,kind:tab.kind,selected:tab.selected,objectSchema:tab.objectSchema,
+    editorSql:tab.editorSql,initialSql:tab.initialSql,filePath:tab.file?.path,fileName:tab.file?.name,
+  }))}));
+}
 export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {
-  const [tabs, setTabs] = useState([initial]);
-  const [selectedIds, setSelectedIds] = useState<Record<string, string>>({ [initial.session]: initial.id });
+  const [tabs, setTabs] = useState(() => restoreTabs(initial));
+  const [selectedIds, setSelectedIds] = useState<Record<string,string>>(()=>{try{const id=JSON.parse(localStorage.getItem(STORAGE_KEY)??'{}').activeTab;const item=tabs.find(tab=>tab.id===id);return item?{[item.session]:item.id}:{};}catch{return {};}});
   const placeholders = useRef(new Map<string, WorkspaceTab>());
   const counters = useRef(new Map<string, number>());
   const connectionTabs = tabs.filter(tab => tab.session === session);
@@ -73,12 +98,12 @@ export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {
     counters.current.set(item.session, number);
     patch(id, { kind: 'query', number, initialSql: '' });
   }
-  function add(table: Table | null = null, sql = '') {
-    const number = table ? 0 : Math.max(counters.current.get(session) ?? 0, ...connectionTabs.map(item => item.number)) + 1;
-    if (!table) counters.current.set(session, number);
-    const next = createTab(session, number, table, sql);
+  function add(table: Table | null = null, sql = '', targetSession = session) {
+    const number = table ? 0 : Math.max(counters.current.get(targetSession) ?? 0, ...tabs.filter(item=>item.session===targetSession).map(item => item.number)) + 1;
+    if (!table) counters.current.set(targetSession, number);
+    const next = createTab(targetSession, number, table, sql);
     setTabs(previous => [...previous, next]);
-    activate(next.id);
+    setSelectedIds(previous=>({...previous,[targetSession]:next.id}));
     return next;
   }
   function close(id: string) {
@@ -94,5 +119,10 @@ export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {
       if (tab.id === id) activate(remaining[Math.min(index, remaining.length - 1)].id);
     }
   }
-  return { tabs, tab, connectionTabs, field, patch, add, activate, close, markQuery };
+  function remapSession(from: string, to: string) {
+    setTabs(previous=>previous.map(item=>item.session===from?{...item,session:to,loaded:false,result:createTab(to,0).result,details:[],draft:{},error:'',busy:false}:item));
+    setSelectedIds(previous=>({...previous,[to]:previous[from]}));
+  }
+  function removeSession(id:string) { setTabs(previous=>previous.filter(item=>item.session!==id)); }
+  return { tabs, tab, connectionTabs, field, patch, add, activate, close, markQuery, remapSession, removeSession };
 }

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('schema and column CRUD with SQL review and deletion confirmation',async({page})=>{
  await page.goto('/');await page.locator('.tree-schema').click();
  await expect(page.getByText('DB 인코딩',{exact:true})).toBeVisible();

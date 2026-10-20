@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('database and schema expanders actually collapse their children', async ({ page }) => {
   await page.goto('/');
@@ -29,10 +29,10 @@ test('query refresh never silently replaces SQL results with table data', async 
   await page.goto('/');
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.locator('.run-button').click();
-  await expect(page.getByText('쿼리 결과 · 읽기 전용')).toBeVisible();
+  await expect(page.getByText('쿼리 결과 · 편집 가능')).toBeVisible();
   await page.getByLabel('테이블 새로고침').click();
   await expect(page.locator('.run-button')).toBeEnabled();
-  await expect(page.getByText('쿼리 결과 · 읽기 전용')).toBeVisible();
+  await expect(page.getByText('쿼리 결과 · 편집 가능')).toBeVisible();
 });
 
 test('query shortcut does not execute behind a connection dialog', async ({ page }) => {
@@ -41,7 +41,7 @@ test('query shortcut does not execute behind a connection dialog', async ({ page
   await page.getByLabel('새 연결').click();
   await page.getByLabel('호스트').press('Control+Enter');
   await expect(page.locator('.run-button')).toBeEnabled();
-  await expect(page.getByText('쿼리 결과 · 읽기 전용')).not.toBeVisible();
+  await expect(page.getByText('쿼리 결과 · 편집 가능')).not.toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('.connection-modal')).not.toBeVisible();
 });

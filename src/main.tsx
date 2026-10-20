@@ -1,8 +1,13 @@
+import { ConfirmProvider } from './components/ConfirmProvider';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './ui.css';
+import './fonts.css';
 import './styles.css';
 import './light-theme.css';
+import './workspace-design.css';
+import './executions.css';
 import { applyTheme, readTheme } from './theme';
 applyTheme(readTheme());
-ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><ConfirmProvider><App /></ConfirmProvider></React.StrictMode>);

@@ -1,3 +1,6 @@
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Position, MarkerType, BaseEdge, getBezierPath, getStraightPath, getSmoothStepPath, useReactFlow, type EdgeProps, type Node, type NodeProps, type Connection } from '@xyflow/react';
 import { Download, GitBranch, LayoutGrid, RefreshCw, Undo2, Redo2, X } from 'lucide-react';
@@ -148,19 +151,19 @@ function ErdCanvas({ session, schema, storageKey, initial, onChange, theme }: Pr
   return <section className={`erd-page ${exporting ? 'erd-exporting' : ''}`} aria-label={`${schema} ERD`} aria-busy={disabled}>
     <div className="erd-toolbar">
       <strong><GitBranch size={16}/>{schema} <span>ERD</span></strong>
-      <label>{t('컬럼 표시')}<select aria-label={t('컬럼 표시')} value={document?.mode ?? 'all'} disabled={!document || disabled} onChange={event => { if (document) commit({ ...document, mode: event.target.value as ColumnMode }); }}>
-        <option value="pk">{t('PK만 보기')}</option><option value="keys">{t('PK, FK 보기')}</option><option value="all">{t('모든 컬럼 보기')}</option>
-      </select></label>
-      <button title={t('자동 배치')} aria-label={t('자동 배치')} disabled={!document || disabled} onClick={() => { if (document) { commit(arrange(document)); fit(); } }}><LayoutGrid size={16}/></button>
-      <button title={t('화면에 맞추기')} disabled={!nodes.length || disabled} onClick={fit}>{t('전체 보기')}</button>
-      <button title={t('실행 취소')} aria-label={t('실행 취소')} disabled={!undo.current.length || disabled} onClick={() => stepHistory(true)}><Undo2 size={16}/></button>
-      <button title={t('다시 실행')} aria-label={t('다시 실행')} disabled={!redo.current.length || disabled} onClick={() => stepHistory(false)}><Redo2 size={16}/></button>
-      <button title={t('메타데이터 새로고침')} aria-label={t('메타데이터 새로고침')} disabled={disabled} onClick={() => void refresh()}><RefreshCw size={16} className={busy ? 'spin' : ''}/></button>
+      <label>{t('컬럼 표시')}<NativeSelect size="sm" aria-label={t('컬럼 표시')} value={document?.mode ?? 'all'} disabled={!document || disabled} onChange={event => { if (document) commit({ ...document, mode: event.target.value as ColumnMode }); }}>
+        <NativeSelectOption value="pk">{t('PK만 보기')}</NativeSelectOption><NativeSelectOption value="keys">{t('PK, FK 보기')}</NativeSelectOption><NativeSelectOption value="all">{t('모든 컬럼 보기')}</NativeSelectOption>
+      </NativeSelect></label>
+      <Button variant="ghost" size="bare" title={t('자동 배치')} aria-label={t('자동 배치')} disabled={!document || disabled} onClick={() => { if (document) { commit(arrange(document)); fit(); } }}><LayoutGrid size={16}/></Button>
+      <Button variant="ghost" size="bare" title={t('화면에 맞추기')} disabled={!nodes.length || disabled} onClick={fit}>{t('전체 보기')}</Button>
+      <Button variant="ghost" size="bare" title={t('실행 취소')} aria-label={t('실행 취소')} disabled={!undo.current.length || disabled} onClick={() => stepHistory(true)}><Undo2 size={16}/></Button>
+      <Button variant="ghost" size="bare" title={t('다시 실행')} aria-label={t('다시 실행')} disabled={!redo.current.length || disabled} onClick={() => stepHistory(false)}><Redo2 size={16}/></Button>
+      <Button variant="ghost" size="bare" title={t('메타데이터 새로고침')} aria-label={t('메타데이터 새로고침')} disabled={disabled} onClick={() => void refresh()}><RefreshCw size={16} className={busy ? 'spin' : ''}/></Button>
       <span className="tabs-spacer"/>
-      <button disabled={!nodes.length || disabled} onClick={() => void download('png')}><Download size={14}/>PNG</button>
-      <button disabled={!nodes.length || disabled} onClick={() => void download('pdf')}><Download size={14}/>PDF</button>
+      <Button variant="ghost" size="bare" disabled={!nodes.length || disabled} onClick={() => void download('png')}><Download size={14}/>PNG</Button>
+      <Button variant="ghost" size="bare" disabled={!nodes.length || disabled} onClick={() => void download('pdf')}><Download size={14}/>PDF</Button>
     </div>
-    {error && <div className="error-banner" role="alert">{error}<button aria-label={t('닫기')} onClick={() => setError('')}><X size={14}/></button></div>}
+    {error && <div className="error-banner" role="alert">{error}<Button variant="ghost" size="bare" aria-label={t('닫기')} onClick={() => setError('')}><X size={14}/></Button></div>}
     <div className="erd-body">
       <div className="erd-canvas" ref={root}>
         <ReactFlow<TableNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} colorMode={theme} fitView minZoom={.05} maxZoom={2}
@@ -187,48 +190,48 @@ function ErdCanvas({ session, schema, storageKey, initial, onChange, theme }: Pr
       </div>
       <aside className="erd-inspector">
         <h3>{t('속성')}</h3>
-        <label>{t('선택 항목')}<select aria-label={t('선택 항목')} value={selected} onChange={event => setSelected(event.target.value)}>
-          <option value="">{t('선택 안 함')}</option>
-          <optgroup label={t('테이블')}>{document?.schema.tables.map(table => <option key={tableId(table.table)} value={tableId(table.table)}>{table.table.schema}.{table.table.name}</option>)}</optgroup>
-          <optgroup label={t('관계')}>{document?.relations.map(edge => <option key={edge.id} value={edge.id}>{edge.label || t('사용자 관계')}</option>)}</optgroup>
-        </select></label>
+        <label>{t('선택 항목')}<NativeSelect size="sm" aria-label={t('선택 항목')} value={selected} onChange={event => setSelected(event.target.value)}>
+          <NativeSelectOption value="">{t('선택 안 함')}</NativeSelectOption>
+          <optgroup label={t('테이블')}>{document?.schema.tables.map(table => <NativeSelectOption key={tableId(table.table)} value={tableId(table.table)}>{table.table.schema}.{table.table.name}</NativeSelectOption>)}</optgroup>
+          <optgroup label={t('관계')}>{document?.relations.map(edge => <NativeSelectOption key={edge.id} value={edge.id}>{edge.label || t('사용자 관계')}</NativeSelectOption>)}</optgroup>
+        </NativeSelect></label>
         <fieldset disabled={disabled}>
           {chosenTable && document && <>
-            <label>{t('테이블 색상')}<input aria-label={t('테이블 색상')} type="color" value={document.styles[selected].color} onChange={event => updateTable({ color: event.target.value })}/></label>
-            <label>{t('테이블 모양')}<select aria-label={t('테이블 모양')} value={document.styles[selected].shape} onChange={event => updateTable({ shape: event.target.value as TableStyle['shape'] })}>
-              <option value="square">{t('사각형')}</option><option value="rounded">{t('둥근 모서리')}</option><option value="card">{t('카드')}</option>
-            </select></label>
-            <label>{t('테이블 너비')}<input aria-label={t('테이블 너비')} type="range" min="220" max="520" step="10" value={document.styles[selected].width} onChange={event => updateTable({ width: Number(event.target.value) })}/><output>{document.styles[selected].width}px</output></label>
+            <label>{t('테이블 색상')}<Input aria-label={t('테이블 색상')} type="color" value={document.styles[selected].color} onChange={event => updateTable({ color: event.target.value })}/></label>
+            <label>{t('테이블 모양')}<NativeSelect size="sm" aria-label={t('테이블 모양')} value={document.styles[selected].shape} onChange={event => updateTable({ shape: event.target.value as TableStyle['shape'] })}>
+              <NativeSelectOption value="square">{t('사각형')}</NativeSelectOption><NativeSelectOption value="rounded">{t('둥근 모서리')}</NativeSelectOption><NativeSelectOption value="card">{t('카드')}</NativeSelectOption>
+            </NativeSelect></label>
+            <label>{t('테이블 너비')}<Input aria-label={t('테이블 너비')} type="range" min="220" max="520" step="10" value={document.styles[selected].width} onChange={event => updateTable({ width: Number(event.target.value) })}/><output>{document.styles[selected].width}px</output></label>
           </>}
           {chosenRelation && document && <>
             <p className="erd-origin">{t(chosenRelation.custom ? '사용자 관계' : 'DB 외래키')}</p>
-            <label>{t('관계 이름')}<input aria-label={t('관계 이름')} value={chosenRelation.label} onChange={event => updateRelation({ label: event.target.value })}/></label>
-            <label>{t('관계 이름 위치')}<input aria-label={t('관계 이름 위치')} type="range" min="-120" max="120" step="4" value={chosenRelation.labelOffset ?? 0} onChange={event => updateRelation({ labelOffset: Number(event.target.value) })}/></label>
+            <label>{t('관계 이름')}<Input aria-label={t('관계 이름')} value={chosenRelation.label} onChange={event => updateRelation({ label: event.target.value })}/></label>
+            <label>{t('관계 이름 위치')}<Input aria-label={t('관계 이름 위치')} type="range" min="-120" max="120" step="4" value={chosenRelation.labelOffset ?? 0} onChange={event => updateRelation({ labelOffset: Number(event.target.value) })}/></label>
             {(['source', 'target'] as const).map(side => {
               const columnsKey = side === 'source' ? 'sourceColumns' : 'targetColumns';
               const table = document.schema.tables.find(table => tableId(table.table) === chosenRelation[side]);
               return <div key={side}>
-                <label>{t(side === 'source' ? '시작 테이블' : '대상 테이블')}<select aria-label={t(side === 'source' ? '시작 테이블' : '대상 테이블')} value={chosenRelation[side]} onChange={event => updateRelation({ [side]: event.target.value, [columnsKey]: [], custom: true })}>
-                  {document.schema.tables.map(table => <option key={tableId(table.table)} value={tableId(table.table)}>{table.table.schema}.{table.table.name}</option>)}
-                </select></label>
-                <label>{t(side === 'source' ? '시작 컬럼' : '대상 컬럼')}<select multiple aria-label={t(side === 'source' ? '시작 컬럼' : '대상 컬럼')} value={chosenRelation[columnsKey]} onChange={event => updateRelation({ [columnsKey]: [...event.target.selectedOptions].map(option => option.value), custom: true })}>
-                  {table?.columns.map(column => <option key={column.name} value={column.name}>{column.name}</option>)}
-                </select></label>
+                <label>{t(side === 'source' ? '시작 테이블' : '대상 테이블')}<NativeSelect size="sm" aria-label={t(side === 'source' ? '시작 테이블' : '대상 테이블')} value={chosenRelation[side]} onChange={event => updateRelation({ [side]: event.target.value, [columnsKey]: [], custom: true })}>
+                  {document.schema.tables.map(table => <NativeSelectOption key={tableId(table.table)} value={tableId(table.table)}>{table.table.schema}.{table.table.name}</NativeSelectOption>)}
+                </NativeSelect></label>
+                <label>{t(side === 'source' ? '시작 컬럼' : '대상 컬럼')}<NativeSelect size="sm" multiple aria-label={t(side === 'source' ? '시작 컬럼' : '대상 컬럼')} value={chosenRelation[columnsKey]} onChange={event => updateRelation({ [columnsKey]: [...event.target.selectedOptions].map(option => option.value), custom: true })}>
+                  {table?.columns.map(column => <NativeSelectOption key={column.name} value={column.name}>{column.name}</NativeSelectOption>)}
+                </NativeSelect></label>
               </div>;
             })}
-            <label>{t('선 색상')}<input aria-label={t('선 색상')} type="color" value={chosenRelation.color} onChange={event => updateRelation({ color: event.target.value })}/></label>
-            <label>{t('연결선 모양')}<select aria-label={t('연결선 모양')} value={chosenRelation.path} onChange={event => updateRelation({ path: event.target.value as Relation['path'] })}>
-              <option value="smoothstep">{t('직각선')}</option><option value="default">{t('곡선')}</option><option value="straight">{t('직선')}</option>
-            </select></label>
-            <label>{t('화살표')}<select aria-label={t('화살표')} value={chosenRelation.arrow} onChange={event => updateRelation({ arrow: event.target.value as Relation['arrow'] })}>
-              <option value="end">{t('끝')}</option><option value="start">{t('시작')}</option><option value="both">{t('양쪽')}</option><option value="none">{t('없음')}</option>
-            </select></label>
-            <label className="erd-checkbox"><input type="checkbox" checked={chosenRelation.dashed} onChange={event => updateRelation({ dashed: event.target.checked })}/>{t('점선')}</label>
-            <button className="secondary-button" onClick={deleteRelation}>{t('관계 삭제')}</button>
+            <label>{t('선 색상')}<Input aria-label={t('선 색상')} type="color" value={chosenRelation.color} onChange={event => updateRelation({ color: event.target.value })}/></label>
+            <label>{t('연결선 모양')}<NativeSelect size="sm" aria-label={t('연결선 모양')} value={chosenRelation.path} onChange={event => updateRelation({ path: event.target.value as Relation['path'] })}>
+              <NativeSelectOption value="smoothstep">{t('직각선')}</NativeSelectOption><NativeSelectOption value="default">{t('곡선')}</NativeSelectOption><NativeSelectOption value="straight">{t('직선')}</NativeSelectOption>
+            </NativeSelect></label>
+            <label>{t('화살표')}<NativeSelect size="sm" aria-label={t('화살표')} value={chosenRelation.arrow} onChange={event => updateRelation({ arrow: event.target.value as Relation['arrow'] })}>
+              <NativeSelectOption value="end">{t('끝')}</NativeSelectOption><NativeSelectOption value="start">{t('시작')}</NativeSelectOption><NativeSelectOption value="both">{t('양쪽')}</NativeSelectOption><NativeSelectOption value="none">{t('없음')}</NativeSelectOption>
+            </NativeSelect></label>
+            <label className="erd-checkbox"><Input type="checkbox" checked={chosenRelation.dashed} onChange={event => updateRelation({ dashed: event.target.checked })}/>{t('점선')}</label>
+            <Button variant="outline" size="sm" className="secondary-button" onClick={deleteRelation}>{t('관계 삭제')}</Button>
           </>}
           {!chosenTable && !chosenRelation && <p className="erd-hint">{t('테이블이나 연결선을 선택하여 편집하세요.')}</p>}
-          <button className="secondary-button erd-add-relation" disabled={!nodes.length} onClick={() => { if (nodes.length) connect({ source: nodes[0].id, target: nodes[1]?.id ?? nodes[0].id, sourceHandle: 'out', targetHandle: 'in' }); }}>{t('관계 추가')}</button>
-          {!!document?.hiddenRelations.length && <button className="secondary-button" onClick={() => { if (document) commit(mergeSchema(document.schema, { ...document, hiddenRelations: [] })); }}>{t('DB 관계 복원')}</button>}
+          <Button variant="outline" size="sm" className="secondary-button erd-add-relation" disabled={!nodes.length} onClick={() => { if (nodes.length) connect({ source: nodes[0].id, target: nodes[1]?.id ?? nodes[0].id, sourceHandle: 'out', targetHandle: 'in' }); }}>{t('관계 추가')}</Button>
+          {!!document?.hiddenRelations.length && <Button variant="outline" size="sm" className="secondary-button" onClick={() => { if (document) commit(mergeSchema(document.schema, { ...document, hiddenRelations: [] })); }}>{t('DB 관계 복원')}</Button>}
         </fieldset>
         <p className="erd-note">{t('캔버스 편집은 DB 구조를 변경하지 않습니다.')}</p>
       </aside>

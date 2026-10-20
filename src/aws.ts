@@ -1,0 +1,10 @@
+import { invoke } from '@tauri-apps/api/core';
+import type { Engine } from './model';
+export type AwsCliInfo={installed:boolean;version:string;profiles:string[]};
+export type AwsEnvironment={account:string;arn:string;region:string;regions:string[];regionsWarning:string|null};
+export type RdsInstance={id:string;engine:string;version:string;status:string;host:string;port:number;database:string;username:string;public:boolean;supported:boolean};
+export const awsCliInfo=()=>invoke<AwsCliInfo>('aws_cli_info');
+export const awsEnvironment=(profile:string)=>invoke<AwsEnvironment>('aws_environment',{profile});
+export const awsRdsInstances=(profile:string,region:string)=>invoke<RdsInstance[]>('aws_rds_instances',{profile,region});
+export const rdsEngine=(engine:string):Engine=>engine==='postgres'||engine==='aurora-postgresql'?'postgres':engine==='mariadb'?'mariadb':'mysql';
+export const awsError=(reason:unknown)=>({AWS_CLI_NOT_FOUND:'AWS CLI를 찾을 수 없습니다. 설치 후 앱을 다시 열거나 다시 확인하세요.',AWS_CLI_START_FAILED:'AWS CLI를 실행할 수 없습니다. 설치와 실행 권한을 확인하세요.',AWS_AUTH_REQUIRED:'AWS 인증이 만료되었거나 없습니다. 터미널에서 해당 프로필로 로그인한 뒤 다시 시도하세요.',AWS_ACCESS_DENIED:'AWS 조회 권한이 없습니다. 선택한 프로필의 IAM 권한을 확인하세요.',AWS_NETWORK_ERROR:'AWS에 연결하지 못했습니다. 네트워크와 프록시 설정을 확인하세요.',AWS_TIMEOUT:'AWS 조회 시간이 초과되었습니다. 다시 시도하세요.',AWS_INVALID_SELECTION:'프로필과 리전을 확인하세요.',AWS_INVALID_RESPONSE:'AWS CLI 응답을 읽을 수 없습니다.',AWS_CLI_FAILED:'AWS CLI 요청이 실패했습니다. 터미널에서 해당 프로필의 설정을 확인하세요.'}[String(reason)]??'AWS CLI 요청이 실패했습니다. 터미널에서 해당 프로필의 설정을 확인하세요.');

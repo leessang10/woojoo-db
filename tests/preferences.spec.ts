@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('sidebar can be collapsed, restored by keyboard, and remembers its state', async ({ page }) => {
   await page.goto('/');

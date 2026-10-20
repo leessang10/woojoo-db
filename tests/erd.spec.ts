@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFile, writeFile } from 'node:fs/promises';
 
 async function openDemo(page: import('@playwright/test').Page) {

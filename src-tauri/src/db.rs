@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlRow, MySqlSslMode},
     postgres::{PgConnectOptions, PgPoolOptions, PgRow, PgSslMode},
-    Column as _, Either, Executor, MySqlPool, PgPool, Row as _, TypeInfo, ValueRef,
+    Column as _, MySqlPool, PgPool, Row as _, TypeInfo, ValueRef,
 };
 use std::{
     collections::HashMap,
@@ -13,19 +13,27 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-type Row = Map<String, Value>;
-type DbResult<T> = Result<T, String>;
+pub(crate) type Row = Map<String, Value>;
+pub(crate) type DbResult<T> = Result<T, String>;
 #[derive(Clone)]
 pub(crate) enum Pool {
     Pg(PgPool),
     My(MySqlPool),
+    Sqlite(sqlx::SqlitePool),
 }
 #[derive(Default)]
 pub struct State {
+    pub(crate) journal_contexts: Mutex<HashMap<String, crate::journal::Context>>,
     pools: Mutex<HashMap<String, Pool>>,
+    identities: Mutex<HashMap<String, (String, String, u16, String, String, bool)>>,
+    pub(crate) sessions: Mutex<HashMap<String, std::sync::Arc<crate::sessions::Session>>>,
 }
 #[derive(Deserialize)]
 pub struct Profile {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
     engine: String,
     host: String,
     port: u16,
@@ -33,6 +41,8 @@ pub struct Profile {
     username: String,
     password: String,
     tls: bool,
+    #[serde(default, rename = "readOnly")]
+    read_only: bool,
 }
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Table {
@@ -42,21 +52,21 @@ pub struct Table {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Column {
-    name: String,
-    data_type: String,
-    primary: bool,
-    editable: bool,
+    pub(crate) name: String,
+    pub(crate) data_type: String,
+    pub(crate) primary: bool,
+    pub(crate) editable: bool,
 }
 #[derive(Serialize)]
 pub struct ErdTable {
     table: Table,
-    columns: Vec<Column>,
+    pub(crate) columns: Vec<Column>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForeignKey {
     id: String,
-    name: String,
+    pub(crate) name: String,
     source: Table,
     target: Table,
     source_columns: Vec<String>,
@@ -71,11 +81,11 @@ pub struct ErdSchema {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResult {
-    columns: Vec<Column>,
-    rows: Vec<Row>,
-    elapsed_ms: u128,
-    affected: u64,
-    truncated: bool,
+    pub(crate) columns: Vec<Column>,
+    pub(crate) rows: Vec<Row>,
+    pub(crate) elapsed_ms: u128,
+    pub(crate) affected: u64,
+    pub(crate) truncated: bool,
 }
 #[derive(Deserialize)]
 pub struct Edit {
@@ -83,7 +93,7 @@ pub struct Edit {
     changes: Value,
 }
 
-fn error(e: impl std::fmt::Display) -> String {
+pub(crate) fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 pub(crate) async fn pool(state: &State, id: &str) -> DbResult<Pool> {
@@ -95,7 +105,7 @@ pub(crate) async fn pool(state: &State, id: &str) -> DbResult<Pool> {
         .cloned()
         .ok_or_else(|| "연결이 닫혔습니다. 다시 연결해 주세요.".into())
 }
-fn qualified(table: &Table, pg: bool) -> String {
+pub(crate) fn qualified(table: &Table, pg: bool) -> String {
     format!(
         "{}.{}",
         quote_ident(&table.schema, pg),
@@ -107,10 +117,14 @@ pub async fn connect_db(state: tauri::State<'_, State>, profile: Profile) -> DbR
     connect(&state, profile).await
 }
 async fn connect(state: &State, profile: Profile) -> DbResult<String> {
-    if profile.host.trim().is_empty()
-        || profile.database.trim().is_empty()
-        || profile.username.trim().is_empty()
-        || profile.port == 0
+    if profile.database.trim().is_empty() {
+        return Err("데이터베이스 또는 SQLite 파일 경로를 입력하세요.".into());
+    }
+    if profile.engine != "sqlite"
+        && (profile.host.trim().is_empty()
+            || profile.database.trim().is_empty()
+            || profile.username.trim().is_empty()
+            || profile.port == 0)
     {
         return Err("호스트, 데이터베이스, 사용자 및 포트를 확인하세요.".into());
     }
@@ -157,21 +171,57 @@ async fn connect(state: &State, profile: Profile) -> DbResult<String> {
                     .map(Pool::My)
                     .map_err(error)
             }
+            "sqlite" => sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(3)
+                .connect_with(
+                    sqlx::sqlite::SqliteConnectOptions::new()
+                        .filename(&profile.database)
+                        .create_if_missing(!profile.read_only)
+                        .read_only(profile.read_only)
+                        .foreign_keys(true),
+                )
+                .await
+                .map(Pool::Sqlite)
+                .map_err(error),
             _ => Err("지원하지 않는 데이터베이스입니다.".into()),
         }
     })
     .await
     .map_err(|_| "연결 제한 시간(12초)을 초과했습니다.".to_string())??;
     let id = uuid::Uuid::new_v4().to_string();
+    let session = crate::sessions::Session::new(&result, profile.read_only).await?;
+    state
+        .sessions
+        .lock()
+        .await
+        .insert(id.clone(), std::sync::Arc::new(session));
+    state.identities.lock().await.insert(
+        id.clone(),
+        (
+            profile.engine.clone(),
+            profile.host.clone(),
+            profile.port,
+            profile.database.clone(),
+            profile.username.clone(),
+            profile.tls,
+        ),
+    );
+    state.journal_contexts.lock().await.insert(id.clone(), crate::journal::Context {profile_id:profile.id.clone(),connection_name:profile.name.clone(),engine:profile.engine.clone(),database:profile.database.clone()});
     state.pools.lock().await.insert(id.clone(), result);
     Ok(id)
 }
 #[tauri::command]
 pub async fn disconnect_db(state: tauri::State<'_, State>, id: String) -> DbResult<()> {
+    if let Some(session) = state.sessions.lock().await.remove(&id) {
+        session.cancel().await?;
+    }
+    state.identities.lock().await.remove(&id);
+    state.journal_contexts.lock().await.remove(&id);
     let connection = state.pools.lock().await.remove(&id);
     match connection {
         Some(Pool::Pg(p)) => p.close().await,
         Some(Pool::My(p)) => p.close().await,
+        Some(Pool::Sqlite(p)) => p.close().await,
         None => (),
     };
     Ok(())
@@ -182,6 +232,7 @@ pub async fn list_tables(state: tauri::State<'_, State>, id: String) -> DbResult
 }
 async fn tables(state: &State, id: String) -> DbResult<Vec<Table>> {
     match pool(&state, &id).await? {
+        Pool::Sqlite(p) => sqlx::query("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetch_all(&p).await.map_err(error)?.into_iter().map(|r| Ok(Table {schema:"main".into(),name:r.try_get(0).map_err(error)?})).collect(),
         Pool::Pg(p) => sqlx::query("SELECT table_schema, table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_schema,table_name")
             .fetch_all(&p).await.map_err(error)?.into_iter().map(|r| Ok(Table {schema:r.try_get(0).map_err(error)?,name:r.try_get(1).map_err(error)?})).collect(),
         Pool::My(p) => sqlx::query("SELECT table_schema, table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema=DATABASE() ORDER BY table_name")
@@ -218,8 +269,27 @@ fn editable_type(kind: &str) -> bool {
             | "jsonb"
     )
 }
-async fn metadata(pool: &Pool, table: &Table) -> DbResult<Vec<Column>> {
+pub(crate) async fn metadata(pool: &Pool, table: &Table) -> DbResult<Vec<Column>> {
     let columns = match pool {
+        Pool::Sqlite(p) => {
+            sqlx::query("SELECT name,type,pk,hidden FROM pragma_table_xinfo(?,?) ORDER BY cid")
+                .bind(&table.name)
+                .bind(&table.schema)
+                .fetch_all(p)
+                .await
+                .map_err(error)?
+                .into_iter()
+                .map(|r| {
+                    let primary = r.get::<i64, _>("pk") != 0;
+                    Ok(Column {
+                        name: r.get("name"),
+                        data_type: r.get("type"),
+                        primary,
+                        editable: !primary && r.get::<i64, _>("hidden") == 0,
+                    })
+                })
+                .collect::<DbResult<Vec<_>>>()?
+        }
         Pool::Pg(p) => {
             let rows = sqlx::query("SELECT c.column_name,c.data_type,c.is_generated,c.is_identity,EXISTS(SELECT 1 FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage k ON tc.constraint_name=k.constraint_name AND tc.constraint_schema=k.constraint_schema AND tc.table_name=k.table_name WHERE tc.constraint_type='PRIMARY KEY' AND k.table_schema=c.table_schema AND k.table_name=c.table_name AND k.column_name=c.column_name) AS pk FROM information_schema.columns c WHERE c.table_schema=$1 AND c.table_name=$2 ORDER BY c.ordinal_position")
                 .bind(&table.schema).bind(&table.name).fetch_all(p).await.map_err(error)?;
@@ -276,6 +346,7 @@ pub async fn read_erd(
 ) -> DbResult<ErdSchema> {
     let p = pool(&state, &id).await?;
     let rows: Vec<(String, String, String, String, String, String, String)> = match &p {
+        Pool::Sqlite(p) => { let mut result = vec![]; for t in tables(&state,id.clone()).await?.into_iter().filter(|t|t.schema==schema) { for r in sqlx::query(r#"SELECT id,seq,"table","from","to" FROM pragma_foreign_key_list(?,?) ORDER BY id,seq"#).bind(&t.name).bind(&schema).fetch_all(p).await.map_err(error)? { result.push((format!("fk_{}",r.get::<i64,_>(0)),schema.clone(),t.name.clone(),r.get(3),schema.clone(),r.get(2),r.try_get::<Option<String>,_>(4).map_err(error)?.unwrap_or_default())); } } result },
         Pool::Pg(p) => sqlx::query(
             "SELECT con.conname, ns.nspname, src.relname, sa.attname, nt.nspname, dst.relname, ta.attname
              FROM pg_catalog.pg_constraint con
@@ -407,6 +478,19 @@ async fn read(state: &State, id: String, table: Table) -> DbResult<QueryResult> 
         }
     );
     let mut rows = match p {
+        Pool::Sqlite(p) => sqlx::query(&sql)
+            .fetch_all(&p)
+            .await
+            .map_err(error)?
+            .into_iter()
+            .map(|r| {
+                columns
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| Ok((c.name.clone(), sqlite_value(&r, i)?)))
+                    .collect::<DbResult<Row>>()
+            })
+            .collect::<DbResult<Vec<_>>>()?,
         Pool::Pg(p) => sqlx::query(&sql)
             .fetch_all(&p)
             .await
@@ -461,7 +545,7 @@ async fn read(state: &State, id: String, table: Table) -> DbResult<QueryResult> 
         truncated,
     })
 }
-fn pg_value(r: &PgRow, i: usize) -> DbResult<Value> {
+pub(crate) fn pg_value(r: &PgRow, i: usize) -> DbResult<Value> {
     if r.try_get_raw(i).map_err(error)?.is_null() {
         return Ok(Value::Null);
     }
@@ -499,7 +583,7 @@ fn pg_value(r: &PgRow, i: usize) -> DbResult<Value> {
         r.columns()[i].type_info().name()
     )))
 }
-fn my_value(r: &MySqlRow, i: usize) -> DbResult<Value> {
+pub(crate) fn my_value(r: &MySqlRow, i: usize) -> DbResult<Value> {
     if r.try_get_raw(i).map_err(error)?.is_null() {
         return Ok(Value::Null);
     }
@@ -538,7 +622,7 @@ fn my_value(r: &MySqlRow, i: usize) -> DbResult<Value> {
         r.columns()[i].type_info().name()
     )))
 }
-fn unique_columns(columns: &[Column]) -> DbResult<()> {
+pub(crate) fn unique_columns(columns: &[Column]) -> DbResult<()> {
     let mut names = std::collections::HashSet::new();
     if columns.iter().any(|c| !names.insert(&c.name)) {
         return Err("중복된 결과 열 이름이 있습니다. SQL의 AS 별칭으로 구분하세요.".into());
@@ -547,108 +631,48 @@ fn unique_columns(columns: &[Column]) -> DbResult<()> {
 }
 #[tauri::command]
 pub async fn run_query(
+    app: tauri::AppHandle,
+    store: tauri::State<'_, crate::journal::Journal>,
     state: tauri::State<'_, State>,
     id: String,
     sql: String,
 ) -> DbResult<QueryResult> {
-    if sql.trim().is_empty() {
-        return Err("SQL을 입력하세요.".into());
-    }
-    let p = pool(&state, &id).await?;
-    tokio::time::timeout(Duration::from_secs(35), execute_query(p, sql))
-        .await
-        .map_err(|_| {
-            "35초 응답 제한을 초과해 연결을 닫았습니다. 쓰기 쿼리는 DB에서 반영되었는지 확인하세요."
-                .to_string()
-        })?
+    crate::journal::record(&app, &store, &state, &id, &sql, "sql", crate::sessions::execute(&state, &id, sql.clone())).await
 }
-#[allow(deprecated)]
+#[cfg(test)]
 async fn execute_query(pool: Pool, sql: String) -> DbResult<QueryResult> {
-    let now = Instant::now();
-    let mut output = QueryResult {
-        columns: vec![],
-        rows: vec![],
-        elapsed_ms: 0,
-        affected: 0,
-        truncated: false,
-    };
-    match pool {
-        Pool::Pg(p) => {
-            let mut conn = p.acquire().await.map_err(error)?;
-            conn.close_on_drop();
-            let desc = (&mut *conn).describe(&sql).await.map_err(error)?;
-            output.columns = desc
-                .columns()
-                .iter()
-                .map(|c| Column {
-                    name: c.name().into(),
-                    data_type: c.type_info().name().into(),
-                    primary: false,
-                    editable: false,
-                })
-                .collect();
-            unique_columns(&output.columns)?;
-            let mut stream = sqlx::query(&sql).fetch_many(&mut *conn);
-            while let Some(item) = stream.try_next().await.map_err(error)? {
-                match item {
-                    Either::Left(r) => output.affected += r.rows_affected(),
-                    Either::Right(r) => {
-                        if output.rows.len() == 500 {
-                            output.truncated = true;
-                            break;
-                        }
-                        output.rows.push(
-                            output
-                                .columns
-                                .iter()
-                                .enumerate()
-                                .map(|(i, c)| Ok((c.name.clone(), pg_value(&r, i)?)))
-                                .collect::<DbResult<Row>>()?,
-                        );
-                    }
-                }
-            }
-        }
-        Pool::My(p) => {
-            let mut conn = p.acquire().await.map_err(error)?;
-            conn.close_on_drop();
-            let desc = (&mut *conn).describe(&sql).await.map_err(error)?;
-            output.columns = desc
-                .columns()
-                .iter()
-                .map(|c| Column {
-                    name: c.name().into(),
-                    data_type: c.type_info().name().into(),
-                    primary: false,
-                    editable: false,
-                })
-                .collect();
-            unique_columns(&output.columns)?;
-            let mut stream = sqlx::query(&sql).fetch_many(&mut *conn);
-            while let Some(item) = stream.try_next().await.map_err(error)? {
-                match item {
-                    Either::Left(r) => output.affected += r.rows_affected(),
-                    Either::Right(r) => {
-                        if output.rows.len() == 500 {
-                            output.truncated = true;
-                            break;
-                        }
-                        output.rows.push(
-                            output
-                                .columns
-                                .iter()
-                                .enumerate()
-                                .map(|(i, c)| Ok((c.name.clone(), my_value(&r, i)?)))
-                                .collect::<DbResult<Row>>()?,
-                        );
-                    }
-                }
-            }
-        }
-    }
-    output.elapsed_ms = now.elapsed().as_millis();
-    Ok(output)
+    let session = crate::sessions::Session::new(&pool, false).await?;
+    session.execute(sql).await
 }
+pub(crate) fn sqlite_value(r: &sqlx::sqlite::SqliteRow, i: usize) -> DbResult<Value> {
+    if r.try_get_raw(i).map_err(error)?.is_null() {
+        return Ok(Value::Null);
+    }
+    if let Ok(v) = r.try_get::<String, _>(i) {
+        return Ok(Value::String(v));
+    }
+    if let Ok(v) = r.try_get::<i64, _>(i) {
+        return Ok(Value::String(v.to_string()));
+    }
+    if let Ok(v) = r.try_get::<f64, _>(i) {
+        return Ok(Value::String(v.to_string()));
+    }
+    if let Ok(v) = r.try_get::<Vec<u8>, _>(i) {
+        return Ok(Value::String(format!(
+            "0x{}",
+            v.iter().map(|b| format!("{b:02x}")).collect::<String>()
+        )));
+    }
+    Err("Unsupported SQLite value".into())
+}
+pub(crate) async fn ensure_writable(state: &State, id: &str) -> DbResult<()> {
+    if crate::sessions::session(state, id).await?.read_only {
+        Err("읽기 전용 연결에서는 변경할 수 없습니다.".into())
+    } else {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub async fn apply_edits(
     state: tauri::State<'_, State>,
@@ -659,6 +683,7 @@ pub async fn apply_edits(
     apply(&state, id, table, edits).await
 }
 async fn apply(state: &State, id: String, table: Table, edits: Vec<Edit>) -> DbResult<usize> {
+    ensure_writable(state, &id).await?;
     if edits.is_empty() || edits.len() > 500 {
         return Err("1~500개의 변경 행이 필요합니다.".into());
     }
@@ -679,6 +704,38 @@ async fn apply(state: &State, id: String, table: Table, edits: Vec<Edit>) -> DbR
     }
     let count = edits.len();
     match p {
+        Pool::Sqlite(p) => {
+            let mut tx = p.begin().await.map_err(error)?;
+            for edit in &edits {
+                let changes = edit.changes.as_object().unwrap();
+                let condition_keys: Vec<&String> = keys.iter().chain(changes.keys()).collect();
+                let assignments = changes
+                    .keys()
+                    .map(|k| format!("{}=?", quote_ident(k, true)))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let conditions = condition_keys
+                    .iter()
+                    .map(|k| format!("CAST({} AS TEXT) IS ?", quote_ident(k, true)))
+                    .collect::<Vec<_>>()
+                    .join(" AND ");
+                let sql = format!(
+                    "UPDATE {} SET {assignments} WHERE {conditions}",
+                    qualified(&table, true)
+                );
+                let mut q = sqlx::query(&sql);
+                for v in changes.values() {
+                    q = q.bind(v.as_str());
+                }
+                for k in condition_keys {
+                    q = q.bind(edit.original[k].as_str());
+                }
+                if q.execute(&mut *tx).await.map_err(error)?.rows_affected() != 1 {
+                    return Err("행 변경 충돌: 전체 변경을 취소했습니다.".into());
+                }
+            }
+            tx.commit().await.map_err(error)?;
+        }
         Pool::Pg(p) => {
             let mut tx = p.begin().await.map_err(error)?;
             let table_name = qualified(&table, true);
@@ -773,6 +830,7 @@ mod integration_tests {
             let id = connect(
                 &state,
                 Profile {
+                    id:"test".into(), name:"Test".into(),
                     engine: engine.into(),
                     host: "127.0.0.1".into(),
                     port,
@@ -784,6 +842,7 @@ mod integration_tests {
                     },
                     password: "woojoo-local-test".into(),
                     tls: false,
+                    read_only: false,
                 },
             )
             .await
@@ -889,7 +948,135 @@ mod integration_tests {
             match p {
                 Pool::Pg(p) => p.close().await,
                 Pool::My(p) => p.close().await,
+                Pool::Sqlite(p) => p.close().await,
             };
         }
     }
+}
+#[tauri::command]
+pub async fn choose_sqlite_file(create: bool) -> DbResult<Option<String>> {
+    let dialog = rfd::AsyncFileDialog::new()
+        .add_filter("SQLite", &["db", "sqlite", "sqlite3"])
+        .add_filter("All files", &["*"]);
+    let selected = if create {
+        dialog.set_file_name("database.sqlite").save_file().await
+    } else {
+        dialog.pick_file().await
+    };
+    Ok(selected.map(|f| f.path().to_string_lossy().into_owned()))
+}
+#[cfg(test)]
+mod sqlite_tests {
+    use super::*;
+    #[tokio::test]
+    async fn file_profile_read_edit_and_readonly_guard() {
+        let path = std::env::temp_dir().join(format!("woojoo-db-{}.sqlite", uuid::Uuid::new_v4()));
+        let state = State::default();
+        let profile = |read_only| Profile {
+            id:"test".into(), name:"Test".into(),
+            engine: "sqlite".into(),
+            host: "".into(),
+            port: 0,
+            database: path.to_string_lossy().into_owned(),
+            username: "".into(),
+            password: "".into(),
+            tls: false,
+            read_only,
+        };
+        let id = connect(&state, profile(false)).await.unwrap();
+        crate::sessions::execute(
+            &state,
+            &id,
+            "CREATE TABLE sample(id INTEGER PRIMARY KEY,value TEXT)".into(),
+        )
+        .await
+        .unwrap();
+        crate::sessions::execute(
+            &state,
+            &id,
+            "INSERT INTO sample VALUES(1,'original')".into(),
+        )
+        .await
+        .unwrap();
+        let table = Table {
+            schema: "main".into(),
+            name: "sample".into(),
+        };
+        let result = read(&state, id.clone(), table.clone()).await.unwrap();
+        assert_eq!(result.rows[0]["id"], "1");
+        assert!(result.columns[0].primary);
+        apply(
+            &state,
+            id.clone(),
+            table.clone(),
+            vec![Edit {
+                original: Value::Object(result.rows[0].clone()),
+                changes: serde_json::json!({"value":"edited"}),
+            }],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            read(&state, id.clone(), table.clone()).await.unwrap().rows[0]["value"],
+            "edited"
+        );
+        assert_eq!(
+            crate::structure::columns(&pool(&state, &id).await.unwrap(), &table)
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
+        let ro = connect(&state, profile(true)).await.unwrap();
+        assert!(ensure_writable(&state, &ro).await.is_err());
+        assert!(apply(
+            &state,
+            ro.clone(),
+            table,
+            vec![Edit {
+                original: serde_json::json!({"id":"1","value":"edited"}),
+                changes: serde_json::json!({"value":"forbidden"})
+            }]
+        )
+        .await
+        .is_err());
+        state.sessions.lock().await.clear();
+        for (_, pool) in state.pools.lock().await.drain() {
+            if let Pool::Sqlite(p) = pool {
+                p.close().await;
+            }
+        }
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+// Native maintenance must target the authenticated connection whose policy was checked.
+pub(crate) async fn validate_connection_profile(
+    state: &State,
+    id: &str,
+    engine: &str,
+    host: &str,
+    port: u16,
+    database: &str,
+    username: &str,
+    tls: bool,
+) -> DbResult<()> {
+    let identities = state.identities.lock().await;
+    let saved = identities.get(id).ok_or("Connection is closed")?;
+    if saved
+        != &(
+            engine.into(),
+            host.into(),
+            port,
+            database.into(),
+            username.into(),
+            tls,
+        )
+    {
+        return Err(
+            "Maintenance target does not match the connected profile. Reconnect before continuing."
+                .into(),
+        );
+    }
+    Ok(())
 }

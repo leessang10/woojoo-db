@@ -22,13 +22,13 @@ const people = [
   ['Ethan Miller', 'ethan.miller', 'Member', 'active'], ['Amelia Song', 'amelia.song', 'Member', 'active'],
 ];
 let demoRows: Row[] = people.map((p, i) => ({ id: String(1001 + i), name: p[0], email: p[1] + '@woojoo.dev', role: p[2], status: p[3], created_at: `2026-10-${String(20 - i).padStart(2, '0')} 09:24:00` }));
-const demoCatalog = new Map<string, {columns:ColumnDetail[];rows:Row[];info:TableInfo}>([['users', {
+export const demoCatalog = new Map<string, {columns:ColumnDetail[];rows:Row[];info:TableInfo}>([['users', {
   columns:columns.map((column,index)=>({...column,nullable:!column.primary,defaultValue:null,charset:null,collation:['varchar'].includes(column.dataType)?'default':null,comment:'',extra:'',ordinal:index+1})),
   rows:demoRows,info:{schema:'public',name:'users',owner:'postgres',engine:'heap',charset:null,collation:null,estimatedRows:demoRows.length,sizeBytes:8192,comment:''}
 }]]);
 const wait = () => new Promise(r => setTimeout(r, 180));
 export async function connect(profile: Profile): Promise<string> {
-  if (!desktop) throw new Error(t('실제 DB 연결은 데스크톱 앱에서 지원합니다. npm run desktop으로 실행해 주세요.'));
+  if (!desktop) throw new Error(t('데이터베이스 연결은 데스크톱 앱에서 사용할 수 있습니다.'));
   return invoke('connect_db', { profile });
 }
 export async function disconnect(id: string) { if (id !== 'demo') await invoke('disconnect_db', { id }); }

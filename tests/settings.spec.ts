@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('settings apply immediately and persist without replacing the current query', async ({ page }) => {
   await page.goto('/');
@@ -12,7 +12,8 @@ test('settings apply immediately and persist without replacing the current query
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
   await expect(settings.getByLabel('Theme', { exact: true })).toHaveValue('light');
   await page.keyboard.press('Control+Enter');
-  await expect(page.getByRole('tab', { name: 'users' })).toBeVisible();
+  // Radix hides the background from assistive technology while the modal is open.
+  await expect(page.locator('.tab-list [role=tab]')).toHaveText('users');
   await page.keyboard.press('Escape');
   await expect(settings).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();

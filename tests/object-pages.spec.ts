@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('schema list opens searchable table details and returns to existing editable data', async ({ page }) => {
   await page.goto('/');
@@ -45,7 +45,7 @@ test('object pages translate and SELECT opens a separate query tab', async ({ pa
 
 test('native metadata errors can be retried without reading table data again', async ({ page }) => {
   await page.addInitScript(() => {
-    let descriptions = 0, reads = 0;
+    let reads = 0;
     Object.defineProperty(window, 'isTauri', { value: true });
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {
       invoke: async (command: string) => {
@@ -58,7 +58,7 @@ test('native metadata errors can be retried without reading table data again', a
         if (command === 'schema_info') return {info:{name:'app'},tables:[{schema:'app',name:'widgets'}]};
         if (command === 'table_info') return {indexes:[],constraints:[]};
         if (command === 'describe_table') {
-          if (++descriptions === 1) throw new Error('Metadata unavailable');
+          if (!(window as any).allowMetadata) throw new Error('Metadata unavailable');
           return [{ name: 'widget_id', dataType: 'uuid', primary: true, editable: false, nullable: false, defaultValue: 'gen_random_uuid()' }];
         }
         throw new Error(`Unexpected command: ${command}`);
@@ -72,6 +72,7 @@ test('native metadata errors can be retried without reading table data again', a
   await page.locator('.tree-table').click({ button: 'right' });
   await page.getByRole('menuitem', { name: '테이블 상세' }).click();
   await expect(page.getByRole('alert')).toContainText('Metadata unavailable');
+  await page.evaluate(()=>{(window as any).allowMetadata=true;});
   await page.getByRole('button', { name: '상세 새로고침' }).click();
   await expect(page.getByRole('alert')).not.toBeVisible();
   await expect(page.locator('.object-table tbody')).toContainText('gen_random_uuid()');

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('tabs preserve SQL, results and filters independently', async ({ page }) => {
   await page.goto('/');
@@ -26,12 +26,12 @@ test('closing a dirty tab can be cancelled and never erases another tab', async 
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '새 쿼리', exact: true }).click();
   await page.locator('.cm-content').fill('SELECT * FROM users LIMIT 3;');
-  page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: '탭 닫기: 쿼리 1', exact: true }).click();
+await page.getByRole('alertdialog').getByRole('button', { name: '취소', exact: true }).click();
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(2);
   await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 3;');
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: '탭 닫기: 쿼리 1', exact: true }).click();
+await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact: true }).click();
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(1);
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '탭 닫기: users', exact: true }).click();

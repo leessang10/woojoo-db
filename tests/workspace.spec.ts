@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('explore, filter, edit, review, save, export, and run SQL', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -23,7 +23,7 @@ test('explore, filter, edit, review, save, export, and run SQL', async ({ page }
   await page.getByLabel('CSV 내보내기').click();
   expect((await download).suggestedFilename()).toBe('users-results.csv');
   await page.locator('.run-button').click();
-  await expect(page.getByText('쿼리 결과 · 읽기 전용')).toBeVisible();
+  await expect(page.getByText('쿼리 결과 · 편집 가능')).toBeVisible();
   await page.screenshot({path:'docs/research/dbeaver/woojoo-preview.png', fullPage:true});
   expect(errors).toEqual([]);
 });

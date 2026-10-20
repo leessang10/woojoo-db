@@ -1,4 +1,4 @@
-export type Engine = 'postgres' | 'mysql' | 'mariadb';
+export type Engine = 'postgres' | 'mysql' | 'mariadb' | 'sqlite';
 export type Row = Record<string, string | null>;
 export type Column = { name: string; dataType: string; primary: boolean; editable: boolean };
 export type Table = { schema: string; name: string };
@@ -7,7 +7,7 @@ export type TableInfo = Table & { owner?: string | null; engine?: string | null;
 export type SchemaInfo = { info: { name: string; owner?: string | null; charset?: string | null; collation?: string | null; comment?: string; version?: string }; tables: TableInfo[] };
 export type TableObjects = { indexes: { name: string; definition: string }[]; constraints: { name: string; definition: string }[] };
 export type Result = { columns: Column[]; rows: Row[]; elapsedMs: number; affected: number; truncated: boolean };
-export type Profile = { id: string; name: string; engine: Engine; host: string; port: number; database: string; username: string; password: string; tls: boolean };
+export type Profile = { id: string; name: string; engine: Engine; host: string; port: number; database: string; username: string; password: string; tls: boolean; group?: string; environment?: 'development' | 'staging' | 'production'; readOnly?: boolean };
 export type Edit = { original: Row; changes: Row };
 export function collectEdits(rows: Row[], draft: Record<string, string | null>): Edit[] {
   return rows.flatMap((original, index) => {
@@ -23,7 +23,7 @@ export function collectEdits(rows: Row[], draft: Record<string, string | null>):
   });
 }
 export function tableQuery(engine: Engine, schema: string, table: string) {
-  const q = (s: string) => engine === 'postgres' ? `"${s.replaceAll('"', '""')}"` : `\`${s.replaceAll('`', '``')}\``;
+  const q = (s: string) => engine === 'postgres' || engine === 'sqlite' ? `"${s.replaceAll('"', '""')}"` : `\`${s.replaceAll('`', '``')}\``;
   return `SELECT *\nFROM ${q(schema)}.${q(table)}\nLIMIT 500;`;
 }
 export function csv(columns: string[], rows: Row[]) {

@@ -62,6 +62,7 @@ function extraSql(old?: ColumnDetail) {
   throw new Error('생성 열·특수 속성은 SQL 편집기에서 변경하세요.');
 }
 export function planStructure(engine: Engine, change: StructureChange, columns: ColumnDetail[] = []): StructurePlan {
+  if (engine === 'sqlite') return planSqliteStructure(change, columns);
   const pg = engine === 'postgres', quote = (name: string) => ident(name, pg);
   const table = `${quote(change.table.schema)}.${quote(change.table.name)}`;
   const sqls: string[] = [];
@@ -116,4 +117,37 @@ export function planStructure(engine: Engine, change: StructureChange, columns: 
   }
   if(!sqls.length) throw new Error('변경 사항이 없습니다.');
   return { change, sqls, expectedColumns: change.kind==='createTable' ? undefined : columns };
+}
+
+function planSqliteStructure(change: StructureChange, columns: ColumnDetail[]): StructurePlan {
+  const q = (name: string) => ident(name, true);
+  const table = q(change.table.schema) + '.' + q(change.table.name);
+  if (change.charset || change.collation || change.comment || change.columns.some(c => c.charset || c.collation || c.comment)) throw new Error('SQLite에서는 charset/comment 편집을 지원하지 않습니다.');
+  const definition = (c: ColumnDraft) => {
+    if (!supportedType(c.dataType)) throw new Error('자료형을 확인하세요.');
+    if (c.defaultMode === 'expression' && !/^(CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME)$/i.test(c.defaultValue.trim())) throw new Error('SQLite 기본값 표현식은 CURRENT_TIMESTAMP/CURRENT_DATE/CURRENT_TIME만 지원합니다.');
+    return q(c.name) + ' ' + c.dataType.trim() + (c.nullable && !c.primary ? '' : ' NOT NULL') + (c.defaultMode === 'literal' ? ' DEFAULT ' + literal(c.defaultValue) : c.defaultMode === 'expression' ? ' DEFAULT ' + c.defaultValue.trim() : '');
+  };
+  const sqls: string[] = [];
+  if (change.kind === 'createTable') {
+    if (!change.columns.length) throw new Error('컬럼을 하나 이상 추가하세요.');
+    if (new Set(change.columns.map(c => c.name.toLowerCase())).size !== change.columns.length) throw new Error('컬럼 이름이 중복됩니다.');
+    const defs = change.columns.map(definition), keys = change.columns.filter(c => c.primary).map(c => q(c.name));
+    if (keys.length) defs.push('PRIMARY KEY (' + keys.join(', ') + ')');
+    sqls.push('CREATE TABLE ' + table + ' (\n  ' + defs.join(',\n  ') + '\n)');
+  } else if (change.kind === 'dropTable') sqls.push('DROP TABLE ' + table);
+  else if (change.kind === 'alterTable') { if (change.name !== change.table.name) sqls.push('ALTER TABLE ' + table + ' RENAME TO ' + q(change.name)); }
+  else if (change.kind === 'dropColumn') { if (!change.original) throw new Error('컬럼을 선택하세요.'); sqls.push('ALTER TABLE ' + table + ' DROP COLUMN ' + q(change.original.name)); }
+  else if (change.kind === 'addColumn') {
+    const c = change.columns[0]; if (!c) throw new Error('컬럼을 입력하세요.');
+    if (c.primary || c.defaultMode === 'expression' || !c.nullable && c.defaultMode !== 'literal') throw new Error('SQLite ADD COLUMN 제한입니다. 테이블 재구성이 필요합니다.');
+    sqls.push('ALTER TABLE ' + table + ' ADD COLUMN ' + definition(c));
+  } else {
+    const c = change.columns[0], old = change.original;
+    if (!c || !old) throw new Error('컬럼을 선택하세요.');
+    if (c.dataType !== old.dataType || c.nullable !== old.nullable || c.primary !== old.primary || c.defaultMode !== 'keep') throw new Error('SQLite 컬럼 속성 변경에는 테이블 재구성이 필요합니다. SQL 편집기에서 검토 후 실행하세요.');
+    if (c.name !== old.name) sqls.push('ALTER TABLE ' + table + ' RENAME COLUMN ' + q(old.name) + ' TO ' + q(c.name));
+  }
+  if (!sqls.length) throw new Error('변경 사항이 없습니다.');
+  return { change, sqls, expectedColumns: change.kind === 'createTable' ? undefined : columns };
 }
