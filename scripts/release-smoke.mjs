@@ -58,6 +58,21 @@ try {
   await expect(page.locator('.workspace-empty')).toBeVisible();
   mkdirSync('test-results',{recursive:true});
   await page.screenshot({path:'test-results/release-smoke.png'});
+  await page.evaluate(()=>{
+    localStorage.setItem('woojoo-profiles-v1',JSON.stringify(Array.from({length:16},(_,i)=>({id:'preview-'+i,name:'Database '+String(i+1).padStart(2,'0'),engine:'sqlite',host:'',port:0,database:'preview-'+i+'.sqlite3',username:'',tls:false,group:i%2?'Personal':'Work',environment:i%2?'development':'production'}))));
+    localStorage.setItem('woojoo-active-profile','preview-0');
+  });
+  await page.reload();
+  await expect(page.locator('.connection')).toHaveCount(1);
+  const treeHeight=(await page.locator('.tree').boundingBox()).height;
+  await page.getByRole('button',{name:'연결 전환',exact:true}).click();
+  await expect(page.locator('[data-connection-option]')).toHaveCount(16);
+  await page.screenshot({path:'test-results/connection-switcher-native.png'});
+  await page.getByRole('textbox',{name:'연결 검색'}).fill('Database 16');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.connection-name')).toContainText('Database 16');
+  expect((await page.locator('.tree').boundingBox()).height).toBe(treeHeight);
   expect(errors).toEqual([]);
   expect(await listening(1420)).toBe(false);
   console.log(JSON.stringify({executable,url:page.url(),developmentServer:false,isolatedProfile:profile,status:'passed'}));

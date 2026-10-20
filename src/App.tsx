@@ -1,3 +1,4 @@
+import { ConnectionSwitcher } from './ConnectionSwitcher';
 import { useConfirm } from './components/ConfirmProvider';
 import { ExecutionsPage, type ExecutionEntry } from './ExecutionsPage';
 import { listen } from '@tauri-apps/api/event';
@@ -399,6 +400,8 @@ export default function App() {
   useEffect(()=>{let cancelled=false;setCompletionSchema({});if(!connected)return;let cursor=0;const fields:Record<string,string[]>={};const worker=async()=>{while(!cancelled&&cursor<tableList.length){const table=tableList[cursor++];try{const cols=await api.describeTable(active,table);if(cancelled)return;fields[table.schema+'.'+table.name]=cols.map(c=>c.name);if(tableList.filter(t=>t.name===table.name).length===1)fields[table.name]=cols.map(c=>c.name);setCompletionSchema({...fields});}catch{/* A metadata failure must not prevent SQL editing. */}}};void Promise.all(Array.from({length:Math.min(3,tableList.length)},worker));return()=>{cancelled=true;};},[active,tableList,catalogVersion]);
   const visibleTables = tableList.filter(t => `${t.schema}.${t.name}`.toLowerCase().includes(search.toLowerCase()));
   const schemas = [...new Set(visibleTables.map(t => t.schema))];
+  const selectableConnections = connections.filter(c=>fixtureMode||c.session!=='demo').sort((a,b)=>(a.profile.group??'').localeCompare(b.profile.group??'')||a.profile.name.localeCompare(b.profile.name));
+  const currentConnection = selectableConnections.find(c=>c.session===active);
   return <div className="app">
     <aside className="rail">
       <span className="brand-mark" aria-label="Woojoo">W</span>
@@ -409,7 +412,7 @@ export default function App() {
     {sidebarOpen && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:busy}]).onContextMenu(event); }}>
       <div className="workspace-brand"><span>Woojoo</span></div>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
-      <div className="connections">{connections.filter(c=>fixtureMode||c.session!=='demo').sort((a,b)=>(a.profile.group??'').localeCompare(b.profile.group??'')).map(c => <Button variant="ghost" size="bare" key={c.session} {...menuFor([
+      <div className="connections">{selectableConnections.length>0&&<ConnectionSwitcher connections={selectableConnections} active={active} onSelect={id=>{editorSelection.current='';void selectConnection(id);}} onAdd={()=>setShowConnect(true)}>{currentConnection ? (()=>{const c=currentConnection;return <Button variant="ghost" size="bare" key={c.session} {...menuFor([
         {label:t('연결 선택'), action:()=>selectConnection(c.session)},
         {label:t('호스트 복사'), action:()=>void copyText(c.profile.host)},
         {label:tr('프로필 수정 / 다시 연결','Edit profile / reconnect'),action:()=>{setEditProfile(c.profile);setShowConnect(true);},disabled:c.session==='demo'},
@@ -417,10 +420,10 @@ export default function App() {
         {label:tr('연결 끊기','Disconnect'),action:()=>void disconnectProfile(c),disabled:c.session==='demo'||c.session.startsWith('saved:')},
         {label:tr('프로필 삭제','Delete profile'),action:()=>void deleteProfile(c),disabled:c.session==='demo'},
         {label:t('연결 추가'), action:()=>setShowConnect(true), divider:true},
-      ])} className={`connection ${active === c.session ? 'active' : ''}`} onClick={() => { editorSelection.current = ''; selectConnection(c.session); }}>
+      ])} className={`connection ${active === c.session ? 'active' : ''}`} aria-label={tr('연결 전환','Switch connection')}>
         <span className={`db-icon ${c.profile.engine !== 'postgres' ? 'mysql' : ''}`}><Database size={18}/></span>
-        <span className="connection-name"><span className="connection-title" title={c.profile.name}>{c.profile.name}</span>{(c.profile.group||c.profile.environment||c.profile.readOnly)&&<small>{[c.profile.group,c.profile.environment,c.profile.readOnly?'RO':null].filter(Boolean).join(' · ')}</small>}<small>{c.profile.engine === 'sqlite' ? 'SQLite' : c.profile.engine === 'postgres' ? 'PostgreSQL' : c.profile.engine === 'mariadb' ? 'MariaDB' : 'MySQL'} <span>· {c.session === 'demo' ? 'Demo' : c.profile.host}</span></small></span><span className={`live-dot ${c.session.startsWith('saved:')?'offline':''}`} data-environment={c.session.startsWith('saved:')?undefined:c.profile.environment}/>
-      </Button>)}</div>
+        <span className="connection-name"><span className="connection-title" title={c.profile.name}>{c.profile.name}</span>{(c.profile.group||c.profile.environment||c.profile.readOnly)&&<small>{[c.profile.group,c.profile.environment,c.profile.readOnly?'RO':null].filter(Boolean).join(' · ')}</small>}<small>{c.profile.engine === 'sqlite' ? 'SQLite' : c.profile.engine === 'postgres' ? 'PostgreSQL' : c.profile.engine === 'mariadb' ? 'MariaDB' : 'MySQL'} {c.profile.engine!=='sqlite'&&<span>· {c.session === 'demo' ? 'Demo' : c.profile.host}</span>}</small></span><span className={`live-dot ${c.session.startsWith('saved:')?'offline':''}`} data-environment={c.session.startsWith('saved:')?undefined:c.profile.environment}/>
+      <ChevronDown size={14}/></Button>;})() : <Button variant="ghost" size="bare" className="connection connection-placeholder" aria-label={tr('연결 전환','Switch connection')}><Database size={18}/><span>{t('연결 선택')}</span><ChevronDown size={14}/></Button>}</ConnectionSwitcher>}</div>
       {!emptyWorkspace&&<><Separator className="divider"/>
       <div className="section-label"> {t("테이블")} <Button variant="ghost" size="bare" title={t("목록 새로고침")} disabled={busy} onClick={() => void perform(async () => { const list = await api.tables(active); if (activeSessionRef.current === active) setTableList(list); })}><RefreshCw size={14}/></Button></div>
       <label className="search-field"><Search size={14}/><Input aria-label={t("테이블 검색")} placeholder={t("테이블 검색")} value={search} onChange={e => setSearch(e.target.value)}/></label>

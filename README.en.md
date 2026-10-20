@@ -14,7 +14,7 @@ Captured from the actual Windows release using a separate SQLite database and fi
 
 | Area | Capabilities |
 | --- | --- |
-| Connections | PostgreSQL, MySQL, MariaDB, SQLite; connection testing; saved profiles; groups, environments, and read-only settings |
+| Connections | PostgreSQL, MySQL, MariaDB, SQLite; connection testing; searchable connection switcher; saved profiles; groups, environments, and read-only settings |
 | AWS RDS | Select a local AWS CLI profile, region, and RDS instance to populate connection details |
 | SQL workspace | Multiple tabs, highlighting, completion, formatting, SQL files, selection and script execution, parameters, EXPLAIN |
 | Sessions | Manual commit and rollback, query cancellation requests, restoration of SQL tabs and file metadata |
@@ -130,7 +130,7 @@ npm run test:release
 
 The binary is written to `src-tauri/target/release/woojoo-db.exe`. Use the Tauri CLI for distribution builds. A plain `cargo build --release` without the production protocol is deliberately rejected. UI tests use an installed Chrome browser. `npm run dev` is a browser UI preview; real database connections require the desktop app.
 
-For v0.1.0, 30 frontend unit tests, 59 browser UI tests, and 21 Rust tests passed. Two integration tests requiring external environments are excluded by default. Some browser tests mock native database/AWS communication; these checks do not establish compatibility with every server configuration. See the [detailed reference and container test commands (Korean)](docs/REFERENCE.ko.md).
+For v0.1.0, 30 frontend unit tests, 61 browser UI tests, and 21 Rust tests passed. Two integration tests requiring external environments are excluded by default. Some browser tests mock native database/AWS communication; these checks do not establish compatibility with every server configuration. See the [detailed reference and container test commands (Korean)](docs/REFERENCE.ko.md).
 
 ## License and credits
 

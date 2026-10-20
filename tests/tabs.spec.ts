@@ -157,10 +157,12 @@ test('connections keep separate tabs while a query completes in the background',
   await page.getByRole('button', { name: '새 쿼리', exact: true }).click();
   await page.locator('.cm-content').fill('SELECT name FROM widgets');
   await page.locator('.run-button').click();
-  await page.locator('.connection').filter({ hasText: 'Woojoo playground' }).click();
+  await page.getByRole('button',{name:'연결 전환',exact:true}).click();
+  await page.locator('[data-connection-option]').filter({hasText:'Woojoo playground'}).click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 2;');
-  await page.locator('.connection').filter({ hasText: 'Mock DB' }).click();
+  await page.getByRole('button',{name:'연결 전환',exact:true}).click();
+  await page.locator('[data-connection-option]').filter({hasText:'Mock DB'}).click();
   await expect(page.getByText('Mock query result', { exact: true })).toBeVisible();
   await expect(page.locator('.cm-content')).toHaveText('SELECT name FROM widgets');
 });

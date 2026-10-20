@@ -14,7 +14,7 @@ PostgreSQL, MySQL, MariaDB, SQLite를 한 작업 공간에서 다루는 데스�
 
 | 영역 | 지원 기능 |
 | --- | --- |
-| 연결 관리 | PostgreSQL · MySQL · MariaDB · SQLite, 연결 테스트, 프로필 저장·수정·삭제, 그룹·환경·읽기 전용 설정 |
+| 연결 관리 | PostgreSQL · MySQL · MariaDB · SQLite, 연결 테스트, 현재 연결 표시·검색 드롭다운 전환, 프로필 저장·수정·삭제, 그룹·환경·읽기 전용 설정 |
 | AWS RDS | 로컬 AWS CLI의 프로필 → 리전 → RDS 인스턴스 선택으로 연결 정보 입력 |
 | SQL 작업 공간 | 다중 탭, 구문 강조·자동완성·형식 정리, SQL 파일 열기·저장, 선택 SQL·스크립트 실행, 매개변수, EXPLAIN |
 | 세션 | 수동 커밋·롤백, 실행 취소 요청, 연결별 SQL 탭과 파일 정보 복원 |
@@ -127,7 +127,7 @@ npm run test:release
 
 빌드 결과는 `src-tauri/target/release/woojoo-db.exe`입니다. 배포에는 Tauri CLI를 사용하세요. 배포 옵션이 빠진 `cargo build --release`는 의도적으로 차단됩니다. UI 테스트는 설치된 Chrome을 사용합니다. `npm run dev`는 브라우저 UI 미리보기용이며 실제 DB 연결은 데스크톱 앱에서 사용합니다.
 
-v0.1.0 기준 단위 테스트 30개, UI 테스트 59개, Rust 테스트 21개가 통과했습니다. 별도 환경이 필요한 통합 테스트 2개는 기본 검사에서 제외됩니다. [상세 기능과 DB 통합 테스트](docs/REFERENCE.ko.md), [릴리즈 노트](docs/releases/v0.1.0.md)를 참고하세요.
+v0.1.0 기준 단위 테스트 30개, UI 테스트 61개, Rust 테스트 21개가 통과했습니다. 별도 환경이 필요한 통합 테스트 2개는 기본 검사에서 제외됩니다. [상세 기능과 DB 통합 테스트](docs/REFERENCE.ko.md), [릴리즈 노트](docs/releases/v0.1.0.md)를 참고하세요.
 
 ## 라이선스와 크레딧
 
