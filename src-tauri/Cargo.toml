@@ -2,6 +2,7 @@
 name = "woojoo-db"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
