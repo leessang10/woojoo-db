@@ -9,6 +9,10 @@ test('schema list opens searchable table details and returns to existing editabl
   await page.locator('.tree-schema').click({ button: 'right' });
   await page.getByRole('menuitem', { name: '스키마 상세' }).click();
   await expect(page.getByRole('heading', { name: 'public', exact: true })).toBeVisible();
+  await expect(page.locator('.object-subtabs [role=tab]')).toHaveText([/테이블/, '뷰','루틴','트리거']);
+  await page.getByRole('tab',{name:'뷰',exact:true}).click();
+  await expect(page.getByLabel('스키마 내 테이블 검색')).toHaveCount(0);
+  await page.getByRole('tab',{name:/^테이블/}).click();
   await page.getByLabel('스키마 내 테이블 검색').fill('missing');
   await expect(page.locator('.object-table tbody tr')).toHaveCount(0);
   await page.getByLabel('스키마 내 테이블 검색').fill('users');

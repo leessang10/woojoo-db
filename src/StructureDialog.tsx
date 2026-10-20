@@ -9,12 +9,13 @@ import type { ColumnDetail, Engine, Table, TableInfo } from './model';
 import { columnDraft, commonTypes, planStructure, type ColumnDraft, type StructureChange, type StructurePlan } from './structure';
 import * as api from './api';
 
-export type StructureAction = { kind: StructureChange['kind']; table: Table; column?: ColumnDetail; info?: TableInfo };
+export type StructureAction = { kind: StructureChange['kind']; table: Table; column?: ColumnDetail; info?: TableInfo; focus?: 'comment' };
 export function StructureDialog({ action, session, engine, onClose, onApplied }: { action: StructureAction; session: string; engine: Engine; onClose: () => void; onApplied: (plan: StructurePlan) => void }) {
-  const {t}=useLanguage();
+  const {t,language}=useLanguage();
+  const sqlite=engine==='sqlite';
   const pg=engine==='postgres', create=action.kind==='createTable', tableAction=['createTable','alterTable','dropTable'].includes(action.kind), dropping=action.kind.startsWith('drop');
   const titles={createTable:'테이블 추가',alterTable:'테이블 변경',dropTable:'테이블 삭제',addColumn:'컬럼 추가',alterColumn:'컬럼 변경',dropColumn:'컬럼 삭제'};
-  const [name,setName]=useState(create?'':action.table.name),[charset,setCharset]=useState(action.info?.charset??''),[collation,setCollation]=useState(action.info?.collation??''),[comment,setComment]=useState(action.info?.comment??'');
+  const [name,setName]=useState(create?'':action.table.name),[charset,setCharset]=useState(sqlite?'':action.info?.charset??''),[collation,setCollation]=useState(sqlite?'':action.info?.collation??''),[comment,setComment]=useState(sqlite?'':action.info?.comment??'');
   const [columns,setColumns]=useState<ColumnDraft[]>([create?{...columnDraft(),name:'id',dataType:'bigint',nullable:false,primary:true}:columnDraft(action.column)]);
   const [plan,setPlan]=useState<StructurePlan|null>(null),[pending,setPending]=useState(false),[error,setError]=useState(''),[confirmation,setConfirmation]=useState('');
   const ref=useRef<HTMLDivElement>(null), closing=useRef(onClose), busy=useRef(pending);closing.current=onClose;busy.current=pending;
@@ -51,9 +52,9 @@ export function StructureDialog({ action, session, engine, onClose, onApplied }:
     <p className="structure-target">{action.table.schema}{create?'':`.${action.table.name}`}{action.column?`.${action.column.name}`:''}</p>
     <fieldset disabled={pending} onChange={()=>setPlan(null)}>
       {tableAction&&!dropping&&<><label>{t('테이블 이름')}<Input aria-label={t('테이블 이름')} value={name} onChange={e=>setName(e.target.value)}/></label>
-        {!pg&&<div className="form-row"><label>Charset<Input aria-label="Charset" value={charset} onChange={e=>setCharset(e.target.value)} placeholder="utf8mb4"/></label><label>Collation<Input aria-label="Collation" value={collation} onChange={e=>setCollation(e.target.value)} placeholder={t('DB 기본값')}/></label></div>}
-        <label>{t('설명')}<Input aria-label={t('설명')} value={comment} onChange={e=>setComment(e.target.value)}/></label>
-        {!pg&&action.kind==='alterTable'&&<p className="structure-note">{t('기본 charset 변경은 기존 컬럼의 문자셋을 변환하지 않습니다.')}</p>}
+        {!pg&&!sqlite&&<div className="form-row"><label>Charset<Input aria-label="Charset" value={charset} onChange={e=>setCharset(e.target.value)} placeholder="utf8mb4"/></label><label>Collation<Input aria-label="Collation" value={collation} onChange={e=>setCollation(e.target.value)} placeholder={t('DB 기본값')}/></label></div>}
+        {!sqlite&&<label>{t('설명')}<Input autoFocus={action.focus==='comment'} aria-label={t('설명')} value={comment} onChange={e=>setComment(e.target.value)}/></label>}{sqlite&&<p className="structure-note">{language==='ko'?'SQLite는 설명·문자셋 편집을 지원하지 않습니다.':'SQLite does not support editing comments or character sets.'}</p>}
+        {!pg&&!sqlite&&action.kind==='alterTable'&&<p className="structure-note">{t('기본 charset 변경은 기존 컬럼의 문자셋을 변환하지 않습니다.')}</p>}
       </>}
       {!dropping&&(create||!tableAction)&&<><datalist id="column-types">{commonTypes.map(type=><NativeSelectOption key={type} value={type}/>)}</datalist>
         {columns.map((column,index)=><div className="column-draft" key={index}>
@@ -62,17 +63,17 @@ export function StructureDialog({ action, session, engine, onClose, onApplied }:
             <label>{t('자료형')}<Input aria-label={`${t('자료형')} ${index+1}`} list="column-types" value={column.dataType} onChange={e=>changeColumn(index,{dataType:e.target.value})}/></label></div>
           <div className="column-flags"><label className="checkbox-label"><Input type="checkbox" disabled={action.kind==='alterColumn'} checked={column.primary} onChange={e=>changeColumn(index,{primary:e.target.checked,nullable:e.target.checked?false:column.nullable})}/>PK</label>
             <label className="checkbox-label"><Input type="checkbox" disabled={column.primary} checked={column.nullable} onChange={e=>changeColumn(index,{nullable:e.target.checked})}/>{t('NULL 허용')}</label></div>
-          {!pg&&<div className="form-row"><label>Charset<Input aria-label={`Charset ${index+1}`} value={column.charset} onChange={e=>changeColumn(index,{charset:e.target.value})}/></label><label>Collation<Input aria-label={`Collation ${index+1}`} value={column.collation} onChange={e=>changeColumn(index,{collation:e.target.value})}/></label></div>}
+          {!pg&&!sqlite&&<div className="form-row"><label>Charset<Input aria-label={`Charset ${index+1}`} value={column.charset} onChange={e=>changeColumn(index,{charset:e.target.value})}/></label><label>Collation<Input aria-label={`Collation ${index+1}`} value={column.collation} onChange={e=>changeColumn(index,{collation:e.target.value})}/></label></div>}
           <div className="form-row"><label>{t('기본값 방식')}<NativeSelect size="sm" aria-label={`${t('기본값 방식')} ${index+1}`} value={column.defaultMode} onChange={e=>changeColumn(index,{defaultMode:e.target.value as ColumnDraft['defaultMode']})}>
             {action.kind==='alterColumn'&&<NativeSelectOption value="keep">{t('기존 값 유지')}</NativeSelectOption>}<NativeSelectOption value="none">{t('없음')}</NativeSelectOption><NativeSelectOption value="literal">{t('고정 값')}</NativeSelectOption><NativeSelectOption value="expression">{t('표현식')}</NativeSelectOption>
           </NativeSelect></label><label>{t('기본값')}<Input aria-label={`${t('기본값')} ${index+1}`} disabled={['none','keep'].includes(column.defaultMode)} value={column.defaultValue} onChange={e=>changeColumn(index,{defaultValue:e.target.value})}/></label></div>
-          <label>{t('설명')}<Input aria-label={`${t('컬럼 설명')} ${index+1}`} value={column.comment} onChange={e=>changeColumn(index,{comment:e.target.value})}/></label>
+          {!sqlite&&<label>{t('설명')}<Input aria-label={`${t('컬럼 설명')} ${index+1}`} value={column.comment} onChange={e=>changeColumn(index,{comment:e.target.value})}/></label>}
         </div>)}
         {create&&<Button variant="outline" size="sm" className="secondary-button" onClick={()=>{setPlan(null);setColumns(previous=>[...previous,columnDraft()]);}}><Plus size={14}/>{t('컬럼 추가')}</Button>}
       </>}
     </fieldset>
     {dropping&&<p className="structure-warning">{t('삭제하면 데이터가 제거됩니다. 이 작업은 앱에서 되돌릴 수 없습니다.')}</p>}
-    {session==='demo'?<p className="structure-note">{t('데모 구조만 변경되며 앱을 다시 열면 초기화됩니다.')}</p>:!pg&&<p className="structure-note">{t('MySQL/MariaDB 구조 변경은 자동 커밋되며 롤백할 수 없습니다.')}</p>}
+    {session==='demo'?<p className="structure-note">{t('데모 구조만 변경되며 앱을 다시 열면 초기화됩니다.')}</p>:!pg&&!sqlite&&<p className="structure-note">{t('MySQL/MariaDB 구조 변경은 자동 커밋되며 롤백할 수 없습니다.')}</p>}
     {plan&&<><pre className="ddl-preview" aria-label={t('실행 SQL')}>{plan.sqls.join(';\n\n')+';'}</pre>
       {dropping&&<label>{t('삭제 대상 이름 입력')}<Input aria-label={t('삭제 대상 이름 입력')} placeholder={confirmName} value={confirmation} disabled={pending} onChange={e=>setConfirmation(e.target.value)}/></label>}</>}
     {error&&<p role="alert" className="dialog-error">{error}</p>}
