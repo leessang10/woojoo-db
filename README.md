@@ -26,7 +26,7 @@ PostgreSQL, MySQL, MariaDB, SQLite를 한 작업 공간에서 다루는 데스�
 
 ![SQLite 테이블 두 개와 외래 키 관계를 표시한 ERD](docs/images/erd-ko.png)
 
-ERD에서 추가·수정한 관계는 다이어그램에만 반영됩니다. 실제 DB 제약조건은 구조 관리 또는 SQL로 변경합니다.
+ERD에서 테이블·컬럼·인덱스와 물리 FK를 추가한 뒤 `커밋`에서 SQL을 검토하고 실제 DB에 적용할 수 있습니다. 컬럼 연결점을 드래그해 물리 FK 또는 가상 관계를 선택하세요. 가상 관계와 색상·배치 등 시각적 편집은 다이어그램에 저장됩니다. MySQL/MariaDB DDL은 암시적 커밋으로 일부 변경만 적용될 수 있으며 결과에 완료 범위가 표시됩니다.
 
 ## 설치
 
@@ -127,7 +127,7 @@ npm run test:release
 
 빌드 결과는 `src-tauri/target/release/woojoo-db.exe`입니다. 배포에는 Tauri CLI를 사용하세요. 배포 옵션이 빠진 `cargo build --release`는 의도적으로 차단됩니다. UI 테스트는 설치된 Chrome을 사용합니다. `npm run dev`는 브라우저 UI 미리보기용이며 실제 DB 연결은 데스크톱 앱에서 사용합니다.
 
-v0.1.0 기준 단위 테스트 30개, UI 테스트 61개, Rust 테스트 21개가 통과했습니다. 별도 환경이 필요한 통합 테스트 2개는 기본 검사에서 제외됩니다. [상세 기능과 DB 통합 테스트](docs/REFERENCE.ko.md), [릴리즈 노트](docs/releases/v0.1.0.md)를 참고하세요.
+v0.1.0 기준 단위 테스트 32개, UI 테스트 71개, Rust 테스트 26개가 통과했습니다. 별도 환경이 필요한 통합 테스트 2개는 기본 검사에서 제외됩니다. [상세 기능과 DB 통합 테스트](docs/REFERENCE.ko.md), [릴리즈 노트](docs/releases/v0.1.0.md)를 참고하세요.
 
 ## 라이선스와 크레딧
 

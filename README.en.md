@@ -26,7 +26,7 @@ Captured from the actual Windows release using a separate SQLite database and fi
 
 ![An ER diagram showing two SQLite tables and their foreign key relationship](docs/images/erd-en.png)
 
-Editing relationships in the ERD changes the diagram only. Use structure tools or SQL to change actual database constraints.
+Add tables, columns, indexes, and physical foreign keys in the ERD, then use **Commit** to review SQL and apply it to the database. Drag between column handles to choose a physical FK or virtual relationship. Virtual relationships and visual styles remain diagram-only. MySQL/MariaDB DDL can partially apply because of implicit commits; the result reports completed operations.
 
 ## Installation
 
@@ -130,7 +130,7 @@ npm run test:release
 
 The binary is written to `src-tauri/target/release/woojoo-db.exe`. Use the Tauri CLI for distribution builds. A plain `cargo build --release` without the production protocol is deliberately rejected. UI tests use an installed Chrome browser. `npm run dev` is a browser UI preview; real database connections require the desktop app.
 
-For v0.1.0, 30 frontend unit tests, 61 browser UI tests, and 21 Rust tests passed. Two integration tests requiring external environments are excluded by default. Some browser tests mock native database/AWS communication; these checks do not establish compatibility with every server configuration. See the [detailed reference and container test commands (Korean)](docs/REFERENCE.ko.md).
+For v0.1.0, 32 frontend unit tests, 71 browser UI tests, and 26 Rust tests passed. Two integration tests requiring external environments are excluded by default. Some browser tests mock native database/AWS communication; these checks do not establish compatibility with every server configuration. See the [detailed reference and container test commands (Korean)](docs/REFERENCE.ko.md).
 
 ## License and credits
 

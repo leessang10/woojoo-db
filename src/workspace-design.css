@@ -145,7 +145,15 @@
   .connection-picker-footer button { width: 100%; justify-content: flex-start; }
 }
 
-
+@layer components {
+  .tab-item { position:relative; }
+  .tab-item .tab { touch-action:none; user-select:none; }
+  .tab-item.drop-before::before,.tab-item.drop-after::before { content:''; position:absolute; top:5px; bottom:5px; width:2px; background:var(--primary); z-index:2; }
+  .tab-item.drop-before::before { left:0; }
+  .tab-item.drop-after::before { right:0; }
+  .tab-rename-modal { width:min(380px,calc(100vw - 32px)); }
+  .tab-rename-modal label { display:block; margin-bottom:8px; }
+}
 @layer components {
  .modal.structure-tools-modal {width:min(800px,calc(100vw - 48px));padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:calc(100dvh - 64px)}
  .modal.structure-tools-objects {width:min(640px,calc(100vw - 48px))}

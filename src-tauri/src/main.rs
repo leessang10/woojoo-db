@@ -12,6 +12,7 @@ mod maintenance;
 mod plan;
 mod sessions;
 mod structure;
+mod erd_changes;
 
 fn main() {
     tauri::Builder::default()
@@ -36,6 +37,8 @@ fn main() {
             sessions::transaction_finish,
             sessions::execution_state,
             sessions::cancel_query,
+            erd_changes::erd_plan,
+            erd_changes::erd_apply,
             structure::table_ddl,
             structure::object_list,
             structure::object_definition,

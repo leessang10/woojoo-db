@@ -6,6 +6,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 
+async function chooseOption(trigger, value) {
+  await trigger.click();
+  await trigger.page().getByRole('option').and(trigger.page().locator(`[data-value=${JSON.stringify(value)}]`)).click();
+}
+
 const executable = path.resolve(process.argv[2] ?? 'src-tauri/target/release/woojoo-db.exe');
 const port = 9226;
 const listening = port => new Promise(resolve => {
@@ -38,7 +43,7 @@ try {
   await expect(page.locator('.workspace-brand')).toHaveText('Woojoo', {timeout:20000});
   expect(new URL(page.url()).hostname).toBe('tauri.localhost');
   expect(await page.evaluate(() => !!window.__TAURI_INTERNALS__)).toBe(true);
-  await page.getByLabel('언어 / Language').selectOption('ko');
+  await chooseOption(page.getByLabel('언어 / Language'), 'ko');
   await expect(page.locator('.workspace-empty')).toBeVisible();
   await page.getByRole('button',{name:'새 연결',exact:true}).first().click();
   await page.getByRole('button',{name:'SQLite',exact:true}).click();
@@ -61,11 +66,11 @@ try {
   mkdirSync('docs/images',{recursive:true});
   await page.mouse.move(1000,40);
   await page.screenshot({path:'docs/images/workspace-ko.png'});
-  await page.getByLabel('언어 / Language').selectOption('en');
+  await chooseOption(page.getByLabel('언어 / Language'), 'en');
   await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
   await page.waitForTimeout(300);
   await page.screenshot({path:'docs/images/workspace-en.png'});
-  await page.getByLabel('언어 / Language').selectOption('ko');
+  await chooseOption(page.getByLabel('언어 / Language'), 'ko');
   await page.locator('.tree-schema').click({button:'right'});
   await page.getByRole('menuitem',{name:'ERD 열기',exact:true}).click();
   await expect(page.locator('.erd-table-node')).toHaveCount(2);
@@ -73,7 +78,7 @@ try {
   await page.waitForTimeout(500);
   await page.mouse.move(1000,40);
   await page.screenshot({path:'docs/images/erd-ko.png'});
-  await page.getByLabel('언어 / Language').selectOption('en');
+  await chooseOption(page.getByLabel('언어 / Language'), 'en');
   await page.screenshot({path:'docs/images/erd-en.png'});
   expect(errors).toEqual([]);
   expect(await listening(1420)).toBe(false);

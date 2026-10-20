@@ -34,6 +34,11 @@ pub struct ExecutionState {
     read_only: bool,
 }
 impl Session {
+    pub(crate) async fn external_schema_change<T>(&self, action: impl std::future::Future<Output=DbResult<T>>) -> DbResult<T> {
+        let _guard = self.connection.lock().await;
+        if self.manual.load(Ordering::SeqCst) || self.transaction.load(Ordering::SeqCst) || !self.transaction_known.load(Ordering::SeqCst) { return Err("먼저 SQL 세션의 트랜잭션을 완료하고 자동 커밋 모드로 전환하세요.".into()); }
+        action.await
+    }
     pub(crate) fn was_cancelled(&self) -> bool { self.cancelled.load(Ordering::SeqCst) }
     pub(crate) async fn new(pool: &Pool, read_only: bool) -> DbResult<Self> {
         let cancelled = Arc::new(AtomicBool::new(false));

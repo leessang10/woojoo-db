@@ -30,6 +30,9 @@ Pretendard is bundled as a local WOFF2 font; Woojoo’s MIT license does not rep
 | lucide-react | 0.468.0 | ISC | [Full text](docs/licenses/frontend.txt) |
 | radix-ui | 1.8.1 | MIT | [Full text](docs/licenses/frontend.txt) |
 | react | 19.3.1 | MIT | [Full text](docs/licenses/frontend.txt) |
+| react-day-picker | 10.0.2 | MIT | [Full text](docs/licenses/calendar.txt) |
+| date-fns | 4.4.0 | MIT | [Full text](docs/licenses/calendar.txt) |
+| @date-fns/tz | 1.5.0 | MIT | [Full text](docs/licenses/calendar.txt) |
 | react-dom | 19.3.1 | MIT | [Full text](docs/licenses/frontend.txt) |
 | tailwind-merge | 3.7.0 | MIT | [Full text](docs/licenses/frontend.txt) |
 

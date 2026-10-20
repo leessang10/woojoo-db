@@ -35,9 +35,13 @@ await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact:
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(1);
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '탭 닫기: users', exact: true }).click();
+  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(0);
+  await expect(page.locator('.cm-content')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('woojoo-workspace-v1') ?? '{}').tabs?.length)).toBe(0);
+  await page.reload();
+  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(0);
+  await page.locator('.tab-add').click();
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(1);
-  await expect(page.locator('.cm-content')).toHaveText('');
-  await expect(page.locator('.run-button')).toBeDisabled();
 });
 
 test('opening a table preserves staged edits and query text', async ({ page }) => {
@@ -165,4 +169,55 @@ test('connections keep separate tabs while a query completes in the background',
   await page.locator('[data-connection-option]').filter({hasText:'Mock DB'}).click();
   await expect(page.getByText('Mock query result', { exact: true })).toBeVisible();
   await expect(page.locator('.cm-content')).toHaveText('SELECT name FROM widgets');
+});
+
+
+test('sidebar objects leave executed queries for new and existing tabs', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  for (let repeat = 0; repeat < 2; repeat++) {
+    for (const selector of ['.tree-table', '.tree-schema']) {
+      await page.locator('.rail').getByRole('button', {name:'실행한 쿼리',exact:true}).click();
+      await page.locator(selector).first().click();
+      await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toHaveCount(0);
+      await expect(page.locator('.object-page')).toBeVisible();
+    }
+  }
+});
+
+test('tab names and dragged order persist without changing SQL', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  await page.locator('.tab-add').click();
+  await page.locator('.cm-content').fill('SELECT 42;');
+  await page.getByRole('tab',{name:'쿼리 1',exact:true}).dblclick();
+  await page.getByRole('textbox',{name:'탭 이름',exact:true}).fill('분석');
+  await page.getByRole('dialog').getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.getByRole('tab',{name:'분석',exact:true})).toHaveAttribute('aria-selected','true');
+  await page.locator('.tab-add').click();
+  const source = await page.getByRole('tab',{name:'쿼리 2',exact:true}).boundingBox();
+  const target = await page.getByRole('tab',{name:'users',exact:true}).boundingBox();
+  await page.mouse.move(source!.x+source!.width/2,source!.y+source!.height/2);
+  await page.mouse.down();
+  await page.mouse.move(target!.x+4,target!.y+target!.height/2,{steps:12});
+  await page.mouse.up();
+  await expect(page.getByRole('tab')).toHaveText(['쿼리 2','users','분석']);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('woojoo-workspace-v1') ?? '{}').tabs?.map((t:any)=>t.customName||t.number))).toEqual([2,0,'분석']);
+  await page.reload();
+  await expect(page.getByRole('tab')).toHaveText(['쿼리 2','users','분석']);
+  await page.getByRole('tab',{name:'분석',exact:true}).click();
+  await expect(page.locator('.cm-content')).toHaveText('SELECT 42;');
+  await page.getByRole('tab',{name:'분석',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem',{name:'탭 이름 변경',exact:true}).click();
+  await page.getByRole('textbox',{name:'탭 이름',exact:true}).fill('취소할 이름');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tab',{name:'분석',exact:true})).toBeVisible();
+  await page.getByRole('tab',{name:'분석',exact:true}).press('F2');
+  await page.getByRole('textbox',{name:'탭 이름',exact:true}).fill('   ');
+  await expect(page.getByRole('dialog').getByRole('button',{name:'저장',exact:true})).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.getByRole('tab',{name:'분석',exact:true}).press('Alt+ArrowLeft');
+  await expect(page.getByRole('tab')).toHaveText(['쿼리 2','분석','users']);
+  await expect(page.locator('.cm-content')).toHaveText('SELECT 42;');
+  await page.screenshot({path:'test-results/workspace-tabs.png'});
 });

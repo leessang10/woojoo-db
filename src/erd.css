@@ -17,7 +17,7 @@
 .erd-table-node .react-flow__handle{width:9px;height:9px;border:2px solid var(--surface);background:var(--brand)}
 .erd-columns{padding:5px 0}.erd-column{height:28px;display:flex;align-items:center;gap:6px;padding:0 10px}
 .erd-column .erd-key{width:36px;flex-shrink:0;font-size:9px;color:var(--brand);font-weight:600}
-.erd-column>span:nth-child(2){flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.erd-column code{max-width:95px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--muted-foreground)}
+.erd-column>span[title]{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.erd-column code{max-width:95px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--muted-foreground)}
 .erd-no-columns{font-size:11px;color:var(--muted-foreground);margin:8px 12px}
 .erd-inspector{width:230px;flex-shrink:0;overflow:auto;border-left:1px solid var(--line);background:var(--surface);padding:18px 16px;font-size:12px}
 .erd-inspector h3{margin:0 0 18px;font-size:13px;font-weight:600}.erd-inspector label{display:flex;flex-direction:column;gap:7px;margin-bottom:16px;color:var(--muted-foreground)}
@@ -32,4 +32,12 @@
 .erd-exporting .erd-canvas{pointer-events:none}.erd-exporting .erd-table-node.is-selected{outline:0}
 @media(max-width:1100px){.erd-inspector{width:200px;padding:14px 12px}.erd-toolbar{padding:8px;gap:4px}.erd-toolbar strong{margin-right:4px}.erd-canvas .react-flow__minimap{display:none}}
 
+}
+@layer components {
+ .erd-column {position:relative}.erd-column .react-flow__handle {width:8px;height:8px;opacity:0;transition:opacity .15s}.erd-table-node:hover .erd-column .react-flow__handle,.erd-table-node.is-selected .erd-column .react-flow__handle {opacity:1}.erd-column .react-flow__handle-left {left:-5px}.erd-column .react-flow__handle-right {right:-5px}
+ .erd-node-toolbar,.erd-edge-toolbar {display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--border);border-radius:8px;background:var(--popover);box-shadow:0 4px 12px #0003;color:var(--foreground)}
+ .erd-node-toolbar input[type=color],.erd-edge-toolbar input[type=color] {width:28px;height:28px;border:0;padding:2px;background:transparent;cursor:pointer}.erd-edge-toolbar {position:absolute;left:12px;top:12px;z-index:6}.erd-edge-toolbar>span {max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+ .erd-pending-badge {margin-left:8px;border:1px solid currentColor;border-radius:4px;padding:0 4px;font-size:10px}.erd-pending-list {border-top:1px solid var(--border);padding-top:12px;margin-top:16px;font-size:11px}.erd-pending-list h4 {margin:0 0 8px}.erd-pending-list>div {padding:5px 0;overflow-wrap:anywhere}.erd-pending-list button {margin-top:8px}
+ .erd-change-modal {width:min(640px,calc(100vw - 48px))}.erd-change-modal label {display:grid;gap:7px;margin-bottom:14px}.erd-change-grid {display:grid;grid-template-columns:1fr 1fr;gap:16px}.erd-change-modal .erd-checkbox {display:flex;align-items:center;gap:6px}.erd-column-drafts {max-height:40vh;overflow:auto}.erd-column-draft {display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:10px;align-items:center;border-bottom:1px solid var(--border);padding:10px 0}.erd-column-draft input {margin:0}.erd-column-draft label {margin:0}.erd-commit-modal {width:min(820px,calc(100vw - 48px))}.erd-commit-modal .ddl-preview {max-height:50vh}
+ .erd-table-node .react-flow__resize-control.handle {background:var(--popover);color:var(--foreground);width:16px;height:22px;border:1px solid var(--border);border-radius:4px;display:grid;place-items:center}
 }

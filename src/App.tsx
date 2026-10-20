@@ -96,6 +96,29 @@ export default function App() {
   const [showCommonSql, setShowCommonSql] = useState(false);
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
   const [showExecutions,setShowExecutions]=useState(false);
+  const [renaming, setRenaming] = useState<{id:string;name:string}|null>(null);
+  const [tabDrop, setTabDrop] = useState<{id:string;after:boolean}|null>(null);
+  const tabDrag = useRef<{id:string;x:number;y:number;moving:boolean;target?:{id:string;after:boolean}}|null>(null);
+  const suppressTabClick = useRef(false);
+  function dragTab(event: React.PointerEvent<HTMLElement>) {
+    const drag = tabDrag.current;
+    if (!drag) return;
+    if (!drag.moving && Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<6) return;
+    drag.moving=true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const list=event.currentTarget.closest('.tab-list');
+    if (list) {const rect=list.getBoundingClientRect();if(event.clientX<rect.left+28)list.scrollLeft-=16;else if(event.clientX>rect.right-28)list.scrollLeft+=16;}
+    const element=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>('[data-workspace-tab]');
+    const id=element?.dataset.workspaceTab;
+    const target=element&&id&&id!==drag.id?{id,after:event.clientX>element.getBoundingClientRect().left+element.getBoundingClientRect().width/2}:undefined;
+    drag.target=target;setTabDrop(target??null);
+  }
+  function finishTabDrag(event: React.PointerEvent<HTMLElement>,cancel=false) {
+    const drag=tabDrag.current;
+    if (drag?.moving) {suppressTabClick.current=true;if(!cancel&&drag.target)workspace.reorder(drag.id,drag.target.id,drag.target.after);}
+    tabDrag.current=null;setTabDrop(null);
+    if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+  }
   useEffect(()=>{if(!api.desktop)return;const subscription=listen<string>("execution-log-error",event=>setNotice(event.payload)).catch(()=>()=>{});return()=>{void subscription.then(unlisten=>unlisten()).catch(()=>{});};},[]);
   const [scroll, setScroll] = workspace.field('scroll');
   const [sort, setSort] = workspace.field('sort');
@@ -105,7 +128,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('woojoo-sidebar', sidebarOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [sidebarOpen]);
   const [databaseOpen, setDatabaseOpen] = useState(true);
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
-  const hasDialog = confirming || showMaintenance || showConnect || showReview || showHelp || showSettings || showCommonSql || !!editing;
+  const hasDialog = !!renaming || confirming || showMaintenance || showConnect || showReview || showHelp || showSettings || showCommonSql || !!editing;
   useEffect(() => { setShowCommonSql(false); }, [active]);
   useEffect(() => { setContextMenu(null); }, [tab.id, active, busy, result, language, hasDialog]);
   function menuFor(items: MenuItem[] | (() => MenuItem[])) {
@@ -199,13 +222,22 @@ export default function App() {
   }
   const perform = (action: () => Promise<void>) => performFor(tab.id, action);
   function tabName(item: WorkspaceTab) {
+    if(item.customName) return item.customName;
     if(item.kind==='query'&&item.file) return item.file.name;
     if (item.kind === 'erd') return `${item.objectSchema} · ERD`;
     if (item.kind === 'schema') return item.objectSchema;
     if (item.kind === 'details') return `${item.selected?.name} · ${t('구조')}`;
     return item.kind === 'table' ? item.selected?.name ?? t('탐색기') : t('쿼리 번호', {number:item.number});
   }
-  async function activateTab(id: string) { if(id!==tab.id&&!await leaveData())return; editorSelection.current = ''; setEditing(null); setShowReview(false); workspace.activate(id); return true; }
+  function tabMenu(item: WorkspaceTab): MenuItem[] {
+    return [
+      {label:t('새 쿼리'),action:()=>addQuery()},
+      {label:t('SQL 복제'),action:()=>addQuery(item.editorSql),disabled:!item.editorSql},
+      {label:tr('탭 이름 변경','Rename tab'),action:()=>setRenaming({id:item.id,name:tabName(item)})},
+      {label:t('탭 닫기'),action:()=>closeTab(item),disabled:item.busy,divider:true},
+    ];
+  }
+  async function activateTab(id: string) { if(id!==tab.id&&!await leaveData())return; editorSelection.current = ''; setEditing(null); setShowReview(false); workspace.activate(id); setShowExecutions(false); return true; }
   async function navigateTabs(event: React.KeyboardEvent<HTMLButtonElement>, id: string) {
     const items = workspace.connectionTabs, index = items.findIndex(item => item.id === id);
     let next: number;
@@ -217,7 +249,7 @@ export default function App() {
     event.preventDefault(); if (!await activateTab(items[next].id)) return; document.getElementById(`tab-${items[next].id}`)?.focus();
   }
   useEffect(() => { document.getElementById(`tab-${tab.id}`)?.scrollIntoView({block:'nearest', inline:'nearest'}); }, [tab.id]);
-  async function addQuery(sql = '') { if(emptyWorkspace)return;if(!await leaveData())return;editorSelection.current = ''; workspace.add(null, sql); }
+  async function addQuery(sql = '') { if(emptyWorkspace)return;if(!await leaveData())return;editorSelection.current = ''; workspace.add(null, sql); setShowExecutions(false); }
   async function closeTab(item: WorkspaceTab) {
     if (item.busy || pending.current.has(item.id)) return;
     if ((isDirty(item)||dataDirty[item.id]) && !await requestConfirm(t('탭 닫기 확인'))) return;
@@ -228,6 +260,7 @@ export default function App() {
     if (!refresh && existing) { activateTab(existing.id); return; }
     if (refresh && !await askDiscard()) return;
     if(!refresh&&!await leaveData())return;
+    setShowExecutions(false);
     const target = refresh ? tab : workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name));
     await performFor(target.id, async () => {
       const data = await api.readTable(active, table);
@@ -261,6 +294,7 @@ export default function App() {
     const existing = workspace.connectionTabs.find(item => item.kind === 'schema' && item.objectSchema === schema);
     if (existing) { activateTab(existing.id); return; }
     if(!await leaveData())return;
+    setShowExecutions(false);
     const next = workspace.add();
     workspace.patch(next.id, { kind: 'schema', objectSchema: schema, loaded: true });
   }
@@ -268,6 +302,7 @@ export default function App() {
     const existing = workspace.connectionTabs.find(item => item.kind === 'erd' && item.objectSchema === schema);
     if (existing) { activateTab(existing.id); return; }
     if (!await leaveData()) return;
+    setShowExecutions(false);
     const next = workspace.add();
     workspace.patch(next.id, { kind: 'erd', objectSchema: schema, loaded: true });
   }
@@ -275,6 +310,7 @@ export default function App() {
     const existing = workspace.connectionTabs.find(item => item.kind === 'details' && item.selected?.schema === table.schema && item.selected.name === table.name);
     if (existing && !refresh) { activateTab(existing.id); return; }
     if(!existing&&!await leaveData())return;
+    setShowExecutions(false);
     const next = existing ?? workspace.add(table);
     if(existing && !await activateTab(next.id))return;
     workspace.patch(next.id, { kind: 'details', objectSchema: table.schema });
@@ -313,7 +349,7 @@ export default function App() {
   useEffect(()=>{if(connected&&tab.kind==='details'&&tab.selected&&!tab.loaded&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{details:await api.describeTable(active,tab.selected!),loaded:true});});}},[active,tab.id,tab.loaded]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (confirming) return;
+      if (confirming || renaming) return;
       if (showSettings) {
         if ((event.ctrlKey || event.metaKey) && (event.key === 'Enter' || event.key === ',')) event.preventDefault();
         if (event.key === 'Escape') setShowSettings(false);
@@ -334,7 +370,7 @@ export default function App() {
     const leave = (event: BeforeUnloadEvent) => { if (allTabsRef.current.some(isDirty)||Object.values(dataDirty).some(Boolean)) event.preventDefault(); };
     window.addEventListener('keydown', key); window.addEventListener('beforeunload', leave);
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('beforeunload', leave); };
-  }, [confirming, showConnect, showReview, showHelp, showSettings, editing,showExecutions,dataDirty]);
+  }, [confirming, renaming, showConnect, showReview, showHelp, showSettings, editing,showExecutions,dataDirty]);
   useEffect(() => {
     if (gridRef.current) gridRef.current.scrollTop = scroll;
   }, [tab.id, scroll]);
@@ -356,7 +392,7 @@ export default function App() {
       setResult(data); setSource('query'); setDraft({}); setFilter(''); setSort(null); setScroll(0);
     });
   };
-  const run = () => { if (tab.kind === 'table' || tab.kind === 'query') executeQuery(editorSelection.current.trim() || editorSql.trim()); };
+  const run = () => { if (workspace.connectionTabs.length && (tab.kind === 'table' || tab.kind === 'query')) executeQuery(editorSelection.current.trim() || editorSql.trim()); };
   runRef.current = run;
   async function applyChanges() {
     const target=source==='query'?tab.queryTable:selected;
@@ -444,20 +480,24 @@ export default function App() {
       <div style={{display:showExecutions?"none":"contents"}}>
       {emptyWorkspace?<div className="workspace-empty"><Database size={28}/><h1>{tr("연결을 선택하세요","Select a connection")}</h1><div className="empty-connection-actions">{!connections.some(c=>c.session!=='demo')&&<Button size="sm" disabled={creatingLocal||!api.desktop} title={!api.desktop?tr('데스크톱 앱에서 사용할 수 있습니다.','Available in the desktop app.'):undefined} onClick={()=>void createLocalDatabase()}>{creatingLocal?<Loader2 size={14} className="spin"/>:<Database size={14}/>} {tr('로컬 SQLite 만들기','Create local SQLite')}</Button>}<Button variant="outline" size="sm" disabled={creatingLocal} onClick={()=>{setEditProfile(undefined);setShowConnect(true);}}><Plus size={14}/>{t("새 연결")}</Button></div>{localError&&<p className="local-connection-error" role="alert">{localError}</p>}</div>:<>
       <div className="tabs" {...menuFor([{label:t("새 쿼리"),action:()=>addQuery()}])}><div className="tab-list" role="tablist" aria-label={t('쿼리 탭')}>
-        {workspace.connectionTabs.map(item => <div key={item.id} className={`tab-item ${tab.id === item.id ? 'active' : ''}`}>
-          <Button variant="ghost" size="bare" role="tab" id={`tab-${item.id}`} aria-controls="query-panel" aria-selected={tab.id === item.id} tabIndex={tab.id === item.id ? 0 : -1} onContextMenu={menuFor([
-            {label:t('새 쿼리'),action:()=>addQuery()},
-            {label:t('SQL 복제'),action:()=>addQuery(item.editorSql),disabled:!item.editorSql},
-            {label:t('탭 닫기'),action:()=>closeTab(item),disabled:item.busy,divider:true},
-          ]).onContextMenu} onKeyDown={event => {
-            if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') menuFor([{label:t('새 쿼리'),action:()=>addQuery()},{label:t('SQL 복제'),action:()=>addQuery(item.editorSql),disabled:!item.editorSql},{label:t('탭 닫기'),action:()=>closeTab(item),disabled:item.busy}]).onKeyDown(event);
+        {workspace.connectionTabs.map(item => <div key={item.id} className={`tab-item ${tab.id === item.id ? 'active' : ''} ${tabDrop?.id===item.id?(tabDrop.after?'drop-after':'drop-before'):''}`} data-workspace-tab={item.id}>
+          <Button variant="ghost" size="bare" role="tab" id={`tab-${item.id}`} onPointerDown={event=>{if(event.button===0){suppressTabClick.current=false;tabDrag.current={id:item.id,x:event.clientX,y:event.clientY,moving:false};}}}
+          onPointerMove={dragTab} onPointerUp={event=>finishTabDrag(event)} onPointerCancel={event=>finishTabDrag(event,true)}
+          onDoubleClick={()=>setRenaming({id:item.id,name:tabName(item)})}
+          aria-controls="query-panel" aria-selected={tab.id === item.id} tabIndex={tab.id === item.id ? 0 : -1} onContextMenu={menuFor(tabMenu(item)).onContextMenu} onKeyDown={event => {
+            if(event.key==='F2'){event.preventDefault();setRenaming({id:item.id,name:tabName(item)});}
+            else if(event.altKey&&(event.key==='ArrowLeft'||event.key==='ArrowRight')){event.preventDefault();const index=workspace.connectionTabs.findIndex(tab=>tab.id===item.id);const next=workspace.connectionTabs[index+(event.key==='ArrowRight'?1:-1)];if(next)workspace.reorder(item.id,next.id,event.key==='ArrowRight');}
+            else if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') menuFor(tabMenu(item)).onKeyDown(event);
             else navigateTabs(event,item.id);
-          }} className="tab" onClick={() => activateTab(item.id)}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
+          }} className="tab" title={tabName(item)} onClick={() => {if(suppressTabClick.current){suppressTabClick.current=false;return;}void activateTab(item.id);}}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
           <Button variant="ghost" size="bare" className="tab-close" aria-label={t('탭 닫기 이름', {name:tabName(item)})} title={t('탭 닫기')} disabled={item.busy} onClick={() => closeTab(item)}><X size={13}/></Button>
         </div>)}
       </div><Button variant="ghost" size="bare" className="tab-add" title={t('새 쿼리')} onClick={() => addQuery()}><Plus size={17}/></Button><Button variant="ghost" size="sm" disabled={!connected || busy} onClick={() => setShowCommonSql(true)}><ScrollText size={14}/>{tr('자주 쓰는 SQL', 'Common SQL')}</Button></div>
       {showCommonSql && <CommonSqlDialog key={active} engine={connection.profile.engine} onClose={() => setShowCommonSql(false)} onSelect={sql => { setShowCommonSql(false); void addQuery(sql); }}/>}
-      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button onClick={()=>{setEditProfile(connection.profile);setShowConnect(true);}}>{tr('다시 연결','Reconnect')}</Button></div>:tab.kind === 'erd' ? <Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd}
+      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button onClick={()=>{setEditProfile(connection.profile);setShowConnect(true);}}>{tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'erd' ? <Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
+        onBusyChange={value=>workspace.patch(tab.id,{busy:value})}
+        canApply={()=>!allTabsRef.current.some(item=>item.session===active&&item.id!==tab.id&&(item.busy||Object.keys(item.draft).length||dataDirtyRef.current[item.id]))}
+        onApplied={()=>{for(const item of allTabsRef.current.filter(item=>item.session===active&&item.id!==tab.id)){if(item.kind==='details'||item.kind==='table')workspace.patch(item.id,{loaded:false});if(item.kind==='erd')workspace.patch(item.id,{erd:null});}setCatalogVersion(v=>v+1);refreshTables();}}
         storageKey={'woojoo-erd-v1:' + JSON.stringify([connection.profile.engine,connection.profile.host,connection.profile.port,connection.profile.database,connection.profile.username,tab.objectSchema])}
         onChange={erd => workspace.patch(tab.id,{erd})}/></Suspense> : tab.kind === 'schema' || tab.kind === 'details' ? <ObjectPage key={tab.id} session={active} engine={connection.profile.engine} revision={catalogVersion} onSql={addQuery} readOnly={connection.profile.readOnly} onChanged={structureChanged} changeBlocked={table=>!!connection.profile.readOnly||changeBlocked(table)} tab={tab} database={connection.profile.database} tables={tableList} onFilter={setFilter}
         onRefresh={() => tab.kind === 'schema' ? refreshTables() : tab.selected && void openDetails(tab.selected,true)}
@@ -510,6 +550,11 @@ export default function App() {
       </>}
       </div>
     </main>
+    {renaming&&<ModalSurface title={tr('탭 이름 변경','Rename tab')} onClose={()=>setRenaming(null)}><form className="modal tab-rename-modal" role="dialog" aria-label={tr('탭 이름 변경','Rename tab')} onSubmit={event=>{event.preventDefault();if(!renaming.name.trim())return;workspace.patch(renaming.id,{customName:renaming.name.trim()});setRenaming(null);}}>
+      <div className="modal-heading"><h2>{tr('탭 이름 변경','Rename tab')}</h2></div>
+      <label htmlFor="tab-name">{tr('탭 이름','Tab name')}</label><Input id="tab-name" autoFocus maxLength={100} value={renaming.name} onFocus={event=>event.target.select()} onChange={event=>setRenaming({...renaming,name:event.target.value})}/>
+      <div className="modal-actions"><Button type="button" variant="outline" size="sm" onClick={()=>setRenaming(null)}>{t('취소')}</Button><Button type="submit" size="sm" disabled={!renaming.name.trim()}>{tr('저장','Save')}</Button></div>
+    </form></ModalSurface>}
     {showMaintenance&&<MaintenanceDialog session={active} engine={connection.profile.engine} profile={connection.profile} onClose={()=>setShowMaintenance(false)} onRestored={()=>{setCatalogVersion(v=>v+1);refreshTables();}}/>}
     {contextMenu && <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)}/> }
     {notice && <div role="status" className="toast"><Check size={16}/>{notice}</div>}

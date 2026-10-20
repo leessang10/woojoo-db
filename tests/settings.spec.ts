@@ -1,3 +1,4 @@
+import { chooseOption } from './select-control';
 import { test, expect } from './fixtures';
 
 test('settings apply immediately and persist without replacing the current query', async ({ page }) => {
@@ -6,11 +7,11 @@ test('settings apply immediately and persist without replacing the current query
   const sql = await page.locator('.cm-content').innerText();
   await page.getByRole('button', { name: '설정', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '설정', exact: true });
-  await dialog.getByLabel('테마', { exact: true }).selectOption('light');
+  await chooseOption(dialog.getByLabel('테마', { exact: true }), 'light');
   await dialog.getByLabel('사이드바 표시').uncheck();
-  await dialog.getByLabel('언어', { exact: true }).selectOption('en');
+  await chooseOption(dialog.getByLabel('언어', { exact: true }), 'en');
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
-  await expect(settings.getByLabel('Theme', { exact: true })).toHaveValue('light');
+  await expect(settings.getByLabel('Theme', { exact: true })).toHaveAttribute('data-value', 'light');
   await page.keyboard.press('Control+Enter');
   // Radix hides the background from assistive technology while the modal is open.
   await expect(page.locator('.tab-list [role=tab]')).toHaveText('users');
@@ -21,8 +22,8 @@ test('settings apply immediately and persist without replacing the current query
   await page.reload();
   await page.keyboard.press('Control+,');
   await expect(settings).toBeVisible();
-  await expect(settings.getByLabel('Theme', { exact: true })).toHaveValue('light');
-  await expect(settings.getByLabel('Language', { exact: true })).toHaveValue('en');
+  await expect(settings.getByLabel('Theme', { exact: true })).toHaveAttribute('data-value', 'light');
+  await expect(settings.getByLabel('Language', { exact: true })).toHaveAttribute('data-value', 'en');
   await expect(settings.getByLabel('Show sidebar')).not.toBeChecked();
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
 });

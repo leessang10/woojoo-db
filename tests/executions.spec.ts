@@ -1,3 +1,4 @@
+import { chooseOption } from './select-control';
 import { test, expect } from '@playwright/test';
 
 test('execution page filters, paginates, reads full SQL and reopens in the original profile', async ({page})=>{
@@ -38,11 +39,11 @@ test('execution page filters, paginates, reads full SQL and reopens in the origi
   expect((await page.getByLabel('종료일',{exact:true}).boundingBox())!.width).toBeLessThanOrEqual(150);
   await page.getByRole('button',{name:'다음 페이지',exact:true}).click();
   await expect(pageRegion.locator('tbody tr')).toHaveCount(3);
-  await page.getByLabel('실행 상태',{exact:true}).selectOption('failed');
+  await chooseOption(page.getByLabel('실행 상태',{exact:true}), 'failed');
   await expect(pageRegion.locator('tbody tr')).toHaveCount(1);
   await pageRegion.locator('tbody button').click();
   await expect(page.locator('.execution-error')).toHaveText('syntax error');
-  await page.getByLabel('실행 상태',{exact:true}).selectOption('');
+  await chooseOption(page.getByLabel('실행 상태',{exact:true}), '');
   await page.getByLabel('SQL·오류 검색').fill('한글');
   await expect(pageRegion.locator('tbody tr')).toHaveCount(1);
   await pageRegion.locator('tbody button').click();

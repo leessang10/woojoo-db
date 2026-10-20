@@ -1,8 +1,12 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { DatePicker } from "./date-picker"
+import { RangeInput } from "./slider"
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
-  if (["checkbox", "radio", "range", "color"].includes(type ?? "")) return <input type={type} data-slot="native-control" className={cn("accent-primary focus-visible:outline-2 focus-visible:outline-ring", className)} {...props} />
+  if (type === "date") return <DatePicker className={className} {...props}/>
+  if (type === "range") return <RangeInput className={className} {...props}/>
+  if (["checkbox", "radio", "color"].includes(type ?? "")) return <input type={type} data-slot="native-control" className={cn("accent-primary focus-visible:outline-2 focus-visible:outline-ring", className)} {...props} />
   return (
     <input
       type={type}

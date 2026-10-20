@@ -1,3 +1,4 @@
+import type { ErdChange } from './erd-changes';
 import dagre from '@dagrejs/dagre';
 import type { Column, Table } from './model';
 
@@ -12,7 +13,7 @@ export type Relation = {
   arrow: 'end' | 'start' | 'both' | 'none'; dashed: boolean; custom: boolean; labelOffset?: number;
 };
 export type ErdDocument = {
-  version: 1; schema: ErdSchema; mode: ColumnMode; styles: Record<string, TableStyle>;
+  version: 1; schema: ErdSchema; baseSchema?: ErdSchema; pending?: ErdChange[]; mode: ColumnMode; styles: Record<string, TableStyle>;
   relations: Relation[]; hiddenRelations: string[];
 };
 export const tableId = (table: Table) => JSON.stringify([table.schema, table.name]);

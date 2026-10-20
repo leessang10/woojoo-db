@@ -1,3 +1,4 @@
+import { chooseOption } from './select-control';
 import {test,expect} from './fixtures';
 
 test('profiles retain SQLite environment settings but never credentials, and can be edited/deleted',async({page})=>{
@@ -7,7 +8,7 @@ test('profiles retain SQLite environment settings but never credentials, and can
   await page.getByLabel('연결 이름',{exact:true}).fill('Local inventory');
   await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('C:\\data\\inventory.sqlite');
   await page.getByLabel('그룹',{exact:true}).fill('Personal');
-  await page.getByLabel('환경',{exact:true}).selectOption('staging');
+  await chooseOption(page.getByLabel('환경',{exact:true}), 'staging');
   await page.getByLabel('읽기 전용 연결').check();
   await page.getByRole('button',{name:'프로필 저장'}).click();
   await expect(page.getByRole('button',{name:'다시 연결',exact:true})).toBeVisible();

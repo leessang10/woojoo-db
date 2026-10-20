@@ -1,3 +1,4 @@
+import { chooseOption } from './select-control';
 import { test, expect } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
@@ -41,7 +42,7 @@ test('typed parameters execute and searchable history survives reload without pa
   await page.locator('.query-tools').getByRole('button', { name: '스크립트 실행', exact: true }).click();
   const parameters = page.getByRole('dialog', { name: 'SQL 매개변수', exact: true });
   await expect(parameters).toBeVisible();
-  await parameters.getByLabel('limit 타입').selectOption('number');
+  await chooseOption(parameters.getByLabel('limit 타입'), 'number');
   await parameters.getByLabel('limit 값').fill('2');
   await parameters.getByRole('button', { name: '실행', exact: true }).click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
