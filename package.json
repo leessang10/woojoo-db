@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:ui": "playwright test",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "test:db": "cargo test --manifest-path src-tauri/Cargo.toml -- --ignored --nocapture"
+    "test:db": "cargo test --manifest-path src-tauri/Cargo.toml -- --ignored --nocapture",
+    "test:release": "node scripts/release-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",

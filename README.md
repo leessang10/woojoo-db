@@ -96,7 +96,11 @@ npm test
 npm run test:ui
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri -- build --no-bundle
+# 개발 서버(1420)를 종료한 뒤 실제 EXE 검증
+npm run test:release
 ```
+
+릴리즈는 Tauri CLI로 빌드해야 합니다. 배포용 custom-protocol 없이 `cargo build --release`를 실행하면 개발 서버를 참조하는 EXE 생성을 막기 위해 실패합니다. `test:release`는 임시 WebView 프로필과 테스트용 디버깅 포트를 사용하여 개발 서버 없이 EXE의 시작·새로고침·연결 창을 검증하고 테스트 프로세스를 종료합니다.
 
 UI 테스트는 설치된 Chrome을 사용합니다. `playwright.config.ts`의 channel을 환경에 맞게 바꿀 수 있습니다.
 

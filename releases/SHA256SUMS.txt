@@ -1,1 +1,1 @@
-10270bd91eed5852af443565f58f171018a6043b932cb9a7dd21a43a96646fe1  Woojoo-0.1.0-windows-x64.exe
+96bfff63699b60405b64e7effc54c0bda5b3befe8fc92ffaeb4e0e8379324f82  Woojoo-0.1.0-windows-x64.exe
