@@ -1,0 +1,7 @@
+.common-sql-dialog { width: min(680px, calc(100vw - 32px)); max-height: 85vh; display: flex; flex-direction: column; gap: 12px; }
+.common-sql-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.common-sql-dialog h2, .common-sql-dialog p { margin: 0; }
+.common-sql-dialog p { color: var(--muted-foreground); font-size: 13px; }
+.common-sql-list { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.common-sql-entry { height: auto; flex-shrink: 0; align-items: flex-start; flex-direction: column; white-space: normal; text-align: left; padding: 12px; gap: 4px; }
+.common-sql-entry span, .common-sql-entry small { color: var(--muted-foreground); font-weight: normal; }

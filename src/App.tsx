@@ -1,4 +1,5 @@
 import { ConnectionSwitcher } from './ConnectionSwitcher';
+import { CommonSqlDialog } from './CommonSqlDialog';
 import { useConfirm } from './components/ConfirmProvider';
 import { ExecutionsPage, type ExecutionEntry } from './ExecutionsPage';
 import { listen } from '@tauri-apps/api/event';
@@ -92,6 +93,7 @@ export default function App() {
   const [showReview, setShowReview] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCommonSql, setShowCommonSql] = useState(false);
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
   const [showExecutions,setShowExecutions]=useState(false);
   useEffect(()=>{if(!api.desktop)return;const subscription=listen<string>("execution-log-error",event=>setNotice(event.payload)).catch(()=>()=>{});return()=>{void subscription.then(unlisten=>unlisten()).catch(()=>{});};},[]);
@@ -103,7 +105,8 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('woojoo-sidebar', sidebarOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [sidebarOpen]);
   const [databaseOpen, setDatabaseOpen] = useState(true);
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
-  const hasDialog = confirming || showMaintenance || showConnect || showReview || showHelp || showSettings || !!editing;
+  const hasDialog = confirming || showMaintenance || showConnect || showReview || showHelp || showSettings || showCommonSql || !!editing;
+  useEffect(() => { setShowCommonSql(false); }, [active]);
   useEffect(() => { setContextMenu(null); }, [tab.id, active, busy, result, language, hasDialog]);
   function menuFor(items: MenuItem[] | (() => MenuItem[])) {
     const open = (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
@@ -452,7 +455,8 @@ export default function App() {
           }} className="tab" onClick={() => activateTab(item.id)}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
           <Button variant="ghost" size="bare" className="tab-close" aria-label={t('탭 닫기 이름', {name:tabName(item)})} title={t('탭 닫기')} disabled={item.busy} onClick={() => closeTab(item)}><X size={13}/></Button>
         </div>)}
-      </div><Button variant="ghost" size="bare" className="tab-add" title={t('새 쿼리')} onClick={() => addQuery()}><Plus size={17}/></Button></div>
+      </div><Button variant="ghost" size="bare" className="tab-add" title={t('새 쿼리')} onClick={() => addQuery()}><Plus size={17}/></Button><Button variant="ghost" size="sm" disabled={!connected || busy} onClick={() => setShowCommonSql(true)}><ScrollText size={14}/>{tr('자주 쓰는 SQL', 'Common SQL')}</Button></div>
+      {showCommonSql && <CommonSqlDialog key={active} engine={connection.profile.engine} onClose={() => setShowCommonSql(false)} onSelect={sql => { setShowCommonSql(false); void addQuery(sql); }}/>}
       {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button onClick={()=>{setEditProfile(connection.profile);setShowConnect(true);}}>{tr('다시 연결','Reconnect')}</Button></div>:tab.kind === 'erd' ? <Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd}
         storageKey={'woojoo-erd-v1:' + JSON.stringify([connection.profile.engine,connection.profile.host,connection.profile.port,connection.profile.database,connection.profile.username,tab.objectSchema])}
         onChange={erd => workspace.patch(tab.id,{erd})}/></Suspense> : tab.kind === 'schema' || tab.kind === 'details' ? <ObjectPage key={tab.id} session={active} engine={connection.profile.engine} revision={catalogVersion} onSql={addQuery} readOnly={connection.profile.readOnly} onChanged={structureChanged} changeBlocked={table=>!!connection.profile.readOnly||changeBlocked(table)} tab={tab} database={connection.profile.database} tables={tableList} onFilter={setFilter}
