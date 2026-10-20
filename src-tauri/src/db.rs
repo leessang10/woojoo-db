@@ -16,7 +16,7 @@ use tokio::sync::Mutex;
 type Row = Map<String, Value>;
 type DbResult<T> = Result<T, String>;
 #[derive(Clone)]
-enum Pool {
+pub(crate) enum Pool {
     Pg(PgPool),
     My(MySqlPool),
 }
@@ -36,8 +36,8 @@ pub struct Profile {
 }
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Table {
-    schema: String,
-    name: String,
+    pub(crate) schema: String,
+    pub(crate) name: String,
 }
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +46,27 @@ pub struct Column {
     data_type: String,
     primary: bool,
     editable: bool,
+}
+#[derive(Serialize)]
+pub struct ErdTable {
+    table: Table,
+    columns: Vec<Column>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKey {
+    id: String,
+    name: String,
+    source: Table,
+    target: Table,
+    source_columns: Vec<String>,
+    target_columns: Vec<String>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErdSchema {
+    tables: Vec<ErdTable>,
+    foreign_keys: Vec<ForeignKey>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,7 +86,7 @@ pub struct Edit {
 fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
-async fn pool(state: &State, id: &str) -> DbResult<Pool> {
+pub(crate) async fn pool(state: &State, id: &str) -> DbResult<Pool> {
     state
         .pools
         .lock()
@@ -246,6 +267,100 @@ async fn metadata(pool: &Pool, table: &Table) -> DbResult<Vec<Column>> {
         return Err("테이블이 없거나 메타데이터를 읽을 권한이 없습니다.".into());
     }
     Ok(columns)
+}
+#[tauri::command]
+pub async fn read_erd(
+    state: tauri::State<'_, State>,
+    id: String,
+    schema: String,
+) -> DbResult<ErdSchema> {
+    let p = pool(&state, &id).await?;
+    let rows: Vec<(String, String, String, String, String, String, String)> = match &p {
+        Pool::Pg(p) => sqlx::query(
+            "SELECT con.conname, ns.nspname, src.relname, sa.attname, nt.nspname, dst.relname, ta.attname
+             FROM pg_catalog.pg_constraint con
+             JOIN pg_catalog.pg_class src ON src.oid=con.conrelid
+             JOIN pg_catalog.pg_namespace ns ON ns.oid=src.relnamespace
+             JOIN pg_catalog.pg_class dst ON dst.oid=con.confrelid
+             JOIN pg_catalog.pg_namespace nt ON nt.oid=dst.relnamespace
+             JOIN LATERAL unnest(con.conkey) WITH ORDINALITY sk(attnum, ord) ON true
+             JOIN LATERAL unnest(con.confkey) WITH ORDINALITY tk(attnum, ord) ON sk.ord=tk.ord
+             JOIN pg_catalog.pg_attribute sa ON sa.attrelid=src.oid AND sa.attnum=sk.attnum
+             JOIN pg_catalog.pg_attribute ta ON ta.attrelid=dst.oid AND ta.attnum=tk.attnum
+             WHERE con.contype='f' AND ns.nspname=$1
+             ORDER BY ns.nspname,src.relname,con.conname,sk.ord")
+            .bind(&schema).fetch_all(p).await.map_err(error)?
+            .into_iter().map(|r| Ok((r.try_get(0).map_err(error)?,r.try_get(1).map_err(error)?,r.try_get(2).map_err(error)?,r.try_get(3).map_err(error)?,r.try_get(4).map_err(error)?,r.try_get(5).map_err(error)?,r.try_get(6).map_err(error)?))).collect::<DbResult<_>>()?,
+        Pool::My(p) => sqlx::query(
+            "SELECT CONSTRAINT_NAME,TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_SCHEMA,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME
+             FROM information_schema.KEY_COLUMN_USAGE
+             WHERE TABLE_SCHEMA=? AND REFERENCED_TABLE_NAME IS NOT NULL
+             ORDER BY TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,ORDINAL_POSITION")
+            .bind(&schema).fetch_all(p).await.map_err(error)?
+            .into_iter().map(|r| Ok((r.try_get_unchecked(0).map_err(error)?,r.try_get_unchecked(1).map_err(error)?,r.try_get_unchecked(2).map_err(error)?,r.try_get_unchecked(3).map_err(error)?,r.try_get_unchecked(4).map_err(error)?,r.try_get_unchecked(5).map_err(error)?,r.try_get_unchecked(6).map_err(error)?))).collect::<DbResult<_>>()?,
+    };
+    let mut foreign_keys: Vec<ForeignKey> = vec![];
+    for (name, ss, st, sc, ts, tt, tc) in rows {
+        let key = serde_json::to_string(&(&ss, &st, &name)).map_err(error)?;
+        if let Some(fk) = foreign_keys.iter_mut().find(|fk| fk.id == key) {
+            fk.source_columns.push(sc);
+            fk.target_columns.push(tc);
+        } else {
+            foreign_keys.push(ForeignKey {
+                id: key,
+                name,
+                source: Table {
+                    schema: ss,
+                    name: st,
+                },
+                target: Table {
+                    schema: ts,
+                    name: tt,
+                },
+                source_columns: vec![sc],
+                target_columns: vec![tc],
+            });
+        }
+    }
+    let mut selected: Vec<Table> = tables(&state, id)
+        .await?
+        .into_iter()
+        .filter(|table| table.schema == schema)
+        .collect();
+    for fk in &foreign_keys {
+        if !selected
+            .iter()
+            .any(|table| table.schema == fk.target.schema && table.name == fk.target.name)
+        {
+            selected.push(fk.target.clone());
+        }
+    }
+    use futures_util::StreamExt;
+    let tables = futures_util::stream::iter(selected)
+        .map(|table| {
+            let p = p.clone();
+            async move {
+                Ok::<ErdTable, String>(ErdTable {
+                    columns: metadata(&p, &table).await?,
+                    table,
+                })
+            }
+        })
+        .buffered(3)
+        .try_collect::<Vec<_>>()
+        .await?;
+    Ok(ErdSchema {
+        tables,
+        foreign_keys,
+    })
+}
+#[tauri::command]
+pub async fn describe_table(
+    state: tauri::State<'_, State>,
+    id: String,
+    table: Table,
+) -> DbResult<Vec<Value>> {
+    crate::structure::columns(&pool(&state, &id).await?, &table).await
 }
 #[tauri::command]
 pub async fn read_table(
