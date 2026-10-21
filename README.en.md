@@ -52,6 +52,7 @@ To update, close the app and replace the executable. Profiles and local data are
 - **SQLite file:** Choose `Add connection → SQLite` to select or create a file.
 - **First connection:** With no connections, choose the local SQLite creation action. It creates empty `user` and `board` tables with a one-to-many relationship through `board.user_id → user.id`. Existing files are reused without resetting them.
 - **AWS RDS:** Authenticate with your local AWS CLI first, then choose `Add connection → AWS RDS` and select a profile, region, and instance. You still need database credentials and network access to private instances.
+- **RDS TLS:** RDS hosts in commercial AWS regions automatically use the official CA bundle embedded in the app, including direct connections. Keep TLS and server certificate verification enabled. See the [CA notes](src-tauri/certs/README.md) for certificate updates and connection verification.
 
 Right-click a connection to edit or delete its profile, disconnect, or access backup and restore. Deleting a profile does not delete its SQLite file.
 

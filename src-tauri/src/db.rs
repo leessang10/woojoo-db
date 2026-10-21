@@ -96,6 +96,17 @@ pub struct Edit {
 pub(crate) fn error(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
+
+fn rds_ca(host: &str, tls: bool) -> Option<&'static [u8]> {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    // This bundle covers commercial regions only. Keep default trust roots for
+    // other endpoints; never weaken certificate or hostname verification.
+    (tls
+        && host.ends_with(".rds.amazonaws.com")
+        && !host.ends_with(".us-gov-east-1.rds.amazonaws.com")
+        && !host.ends_with(".us-gov-west-1.rds.amazonaws.com"))
+    .then_some(include_bytes!("../certs/aws-rds-global-bundle.pem").as_slice())
+}
 pub(crate) async fn pool(state: &State, id: &str) -> DbResult<Pool> {
     state
         .pools
@@ -143,6 +154,10 @@ async fn connect(state: &State, profile: Profile) -> DbResult<String> {
                         PgSslMode::Disable
                     })
                     .options([("statement_timeout", "30000")]);
+                let options = match rds_ca(&profile.host, profile.tls) {
+                    Some(ca) => options.ssl_root_cert_from_pem(ca.to_vec()),
+                    None => options,
+                };
                 PgPoolOptions::new()
                     .max_connections(3)
                     .acquire_timeout(Duration::from_secs(10))
@@ -163,6 +178,10 @@ async fn connect(state: &State, profile: Profile) -> DbResult<String> {
                     } else {
                         MySqlSslMode::Disabled
                     });
+                let options = match rds_ca(&profile.host, profile.tls) {
+                    Some(ca) => options.ssl_ca_from_pem(ca.to_vec()),
+                    None => options,
+                };
                 MySqlPoolOptions::new()
                     .max_connections(3)
                     .acquire_timeout(Duration::from_secs(10))
@@ -1079,4 +1098,61 @@ pub(crate) async fn validate_connection_profile(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod rds_tls_tests {
+    use super::*;
+
+    #[test]
+    fn rds_bundle_is_scoped_to_tls_and_commercial_rds_hosts() {
+        for host in [
+            "db.example.ap-northeast-2.rds.amazonaws.com",
+            "DB.EXAMPLE.US-EAST-1.RDS.AMAZONAWS.COM.",
+        ] {
+            assert!(rds_ca(host, true).is_some());
+            assert!(rds_ca(host, false).is_none());
+        }
+        for host in [
+            "localhost",
+            "db.example.com",
+            "db.rds.amazonaws.com.attacker.example",
+            "notrds.amazonaws.com",
+            "db.example.cn-north-1.rds.amazonaws.com.cn",
+            "db.example.us-gov-west-1.rds.amazonaws.com",
+            "db.example.us-gov-east-1.rds.amazonaws.com",
+        ] {
+            assert!(rds_ca(host, true).is_none(), "unexpected RDS trust for {host}");
+        }
+    }
+
+    // Opt-in, read-only smoke test. Supply a Profile JSON on stdin so credentials
+    // never appear in source, command arguments, environment dumps, or test logs.
+    #[tokio::test]
+    #[ignore = "requires an authorized RDS Profile JSON on stdin"]
+    async fn rds_verified_tls_connection() {
+        let input: Value = serde_json::from_reader(std::io::stdin()).expect("Profile JSON on stdin");
+        for engine in ["mysql", "mariadb"] {
+            let mut profile: Profile = serde_json::from_value(input.clone()).expect("valid Profile");
+            assert!(profile.tls, "TLS verification must be enabled");
+            assert!(profile.read_only, "Smoke test requires read-only mode");
+            profile.engine = engine.into();
+            let state = State::default();
+            let id = connect(&state, profile).await.expect("verified RDS connection");
+            let result = crate::sessions::execute(&state, &id, "SELECT 1 AS ok".into())
+                .await.unwrap();
+            assert_eq!(result.rows[0]["ok"], "1");
+            if let Pool::My(p) = pool(&state, &id).await.unwrap() {
+                let row = sqlx::query("SHOW SESSION STATUS LIKE 'Ssl_cipher'")
+                    .fetch_one(&p).await.unwrap();
+                let cipher: String = row.try_get_unchecked(1).unwrap();
+                assert!(!cipher.is_empty(), "Connection must be encrypted");
+                println!("{engine}: verified TLS, SELECT 1 passed, cipher={cipher}");
+                state.sessions.lock().await.clear();
+                p.close().await;
+            } else {
+                panic!("Expected MySQL/MariaDB pool");
+            }
+        }
+    }
 }
