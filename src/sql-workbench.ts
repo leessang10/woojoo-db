@@ -119,7 +119,7 @@ export async function executeScript(sql: string, engine: Engine, execute: (sql: 
   }
   return results;
 }
-export type QueryHistory = { id: string; sql: string; engine: Engine; at: string; success: boolean; count: number; duration?: number; connection?: string; connectionName?: string };
+export type QueryHistory = { id: string; sql: string; engine: Engine; at: string; success: boolean; count: number; duration?: number; durationScope?: 'db' | 'total'; connection?: string; connectionName?: string };
 export const HISTORY_KEY = 'woojoo-query-history-v1';
 export function readQueryHistory(connection?: string): QueryHistory[] {
   try {

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import CodeMirror from '@uiw/react-codemirror';
@@ -12,9 +13,9 @@ import { objectIdentifier } from './StructureTools';
 import type { Engine, Table } from './model';
 
 type DbObject = { schema:string; name:string; kind:string; identity?:string };
-type Props = { session:string; engine:Engine; schema:string; table:Table|null; section:string; onSql:(text:string)=>void };
+type Props = { actionTarget?:HTMLElement|null; session:string; engine:Engine; schema:string; table:Table|null; section:string; onSql:(text:string)=>void };
 
-export function ObjectDefinitions({session,engine,schema,table,section,onSql}:Props) {
+export function ObjectDefinitions({actionTarget,session,engine,schema,table,section,onSql}:Props) {
   const {language}=useLanguage(),tr=(ko:string,en:string)=>language==='ko'?ko:en;
   const [items,setItems]=useState<DbObject[]>([]),[definition,setDefinition]=useState('');
   const [busy,setBusy]=useState(true),[error,setError]=useState(''),[filter,setFilter]=useState('');
@@ -39,12 +40,12 @@ export function ObjectDefinitions({session,engine,schema,table,section,onSql}:Pr
     {error&&<div className="error-banner" role="alert">{error}</div>}
     {!available?<div className="object-empty">{tr('실제 데이터베이스에 연결하면 조회할 수 있습니다.','Connect to a database to view this information.')}</div>:<>
       {section==='ddl'?<>
-        <div className="object-definition-toolbar"><Button size="sm" disabled={busy||!definition} onClick={()=>onSql(definition)}>{tr('SQL 편집기로 열기','Open in SQL editor')}</Button></div>
+        {actionTarget&&createPortal(<Button variant="outline" size="sm" disabled={busy||!definition} onClick={()=>onSql(definition)}>{tr('SQL 편집기로 열기','Open in SQL editor')}</Button>,actionTarget)}
         {definition&&<CodeMirror value={definition} height="420px" theme={readTheme()==='dark'?oneDark:'light'} editable={false} readOnly extensions={[sql({dialect:engine==='postgres'?PostgreSQL:engine==='sqlite'?SQLite:MySQL})]} basicSetup={{lineNumbers:true,foldGutter:false,highlightActiveLine:false,highlightActiveLineGutter:false}}/>}
       </>:<>
         <div className="object-definition-toolbar">
           <p className="structure-note">{tr('스키마 전체 객체','Objects in schema')}: {schema}</p>
-          {section==='views'&&<Button size="sm" onClick={()=>onSql(`CREATE VIEW ${objectIdentifier(engine,schema)}.${objectIdentifier(engine,'new_view')} AS\nSELECT ...;`)}>{tr('새 뷰 SQL','New view SQL')}</Button>}
+          {section==='views'&&actionTarget&&createPortal(<Button variant="outline" size="sm" onClick={()=>onSql(`CREATE VIEW ${objectIdentifier(engine,schema)}.${objectIdentifier(engine,'new_view')} AS\nSELECT ...;`)}>{tr('새 뷰 SQL','New view SQL')}</Button>,actionTarget)}
         </div>
         <Input className="object-definition-search" aria-label={tr('객체 검색','Search objects')} placeholder={tr('검색','Search')} value={filter} onChange={event=>setFilter(event.target.value)}/>
         <table className="object-table"><thead><tr><th>{tr('이름','Name')}</th><th>{tr('종류','Type')}</th><th>{tr('정의','Definition')}</th></tr></thead>

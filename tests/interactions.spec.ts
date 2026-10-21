@@ -30,7 +30,7 @@ test('query refresh never silently replaces SQL results with table data', async 
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.locator('.run-button').click();
   await expect(page.getByText('쿼리 결과 · 편집 가능')).toBeVisible();
-  await page.getByLabel('테이블 새로고침').click();
+  await page.getByLabel('마지막 쿼리 다시 실행').click();
   await expect(page.locator('.run-button')).toBeEnabled();
   await expect(page.getByText('쿼리 결과 · 편집 가능')).toBeVisible();
 });

@@ -40,14 +40,15 @@ export function ConnectionDialog({onClose,onConnected,initialProfile,onSave,onPa
   setProfile(p=>({...p,name:`${instance.id} (${region})`,engine,host:instance.host,port:instance.port,database:instance.database||(engine==='postgres'?'postgres':''),username:instance.username,password:'',tls:true}));
  }
  async function submit(test:boolean){
-  if(loading||mode==='aws'&&!rdsSelected)return;
+  if(!api.desktop||loading||mode==='aws'&&!rdsSelected)return;
   if(!profile.name.trim()||!profile.database.trim()||(profile.engine!=='sqlite'&&(!profile.host.trim()||!profile.username.trim()||!Number.isInteger(profile.port)||profile.port<1||profile.port>65535))){setMessage(t('연결 이름, 호스트, DB, 사용자와 유효한 포트를 입력하세요.'));return;}
   setLoading(true);setMessage('');
   try{const id=await api.connect(profile);setProfile(p=>({...p,password:''}));if(test){await api.disconnect(id);setCredential(await api.credentialStatus(profile));setMessage(t('연결에 성공했습니다.'));}else await onConnected({...profile,password:''},id);}
   catch(reason){setMessage(String(reason));}finally{setLoading(false);}
  }
- const unavailable=loading||mode==='aws'&&!rdsSelected;
- return <ModalSurface title={t('새 연결')} onClose={onClose} locked={loading}><form role="dialog" aria-modal="true" aria-label={t('새 연결')} className={`modal connection-modal ${mode==='aws'&&rdsSelected?'aws-connection-modal':''}`} onSubmit={event=>{event.preventDefault();void submit(false);}}>
+ const unavailable=!api.desktop||loading||mode==='aws'&&!rdsSelected;
+ return <ModalSurface title={t('새 연결')} onClose={onClose} locked={loading}><form role="dialog" aria-modal="true" aria-label={t('새 연결')} className={`modal connection-modal ${mode==='aws'?'aws-connection-modal':''}`} onSubmit={event=>{event.preventDefault();void submit(false);}}>
+  <div className="connection-scroll">
   <div className="modal-heading"><div className="modal-symbol"><Database size={22}/></div><Button type="button" variant="ghost" size="icon-sm" disabled={loading} onClick={onClose} aria-label={t('닫기')}><X size={20}/></Button></div>
   <h2>{t('새 연결')}</h2>
   {!api.desktop&&<p className="connection-availability">{tr('데이터베이스 연결은 데스크톱 앱에서 사용할 수 있습니다.','Database connections are available in the desktop app.')}</p>}
@@ -68,12 +69,13 @@ export function ConnectionDialog({onClose,onConnected,initialProfile,onSave,onPa
     <label className="checkbox-label"><Input type="checkbox" checked={profile.rememberPassword??false} disabled={!credential.supported&&!profile.rememberPassword} onChange={e=>field('rememberPassword',e.target.checked)}/>{tr('이 PC에 비밀번호 기억','Remember password on this PC')}</label>
     {credential.saved&&<p className="credential-note">{tr('비밀번호 저장됨 · 다음 실행 시 마지막 연결에 자동 접속합니다.','Password saved · Reconnects to the last connection on startup.')}</p>}
     {(credential.saved||credential.available||profile.rememberPassword)&&<Button type="button" variant="outline" size="sm" onClick={()=>void forget()}>{tr('저장된 비밀번호 삭제','Delete saved password')}</Button>}
-    <p className="credential-note"><LockKeyhole size={13}/>{tr('선택 시 연결에 성공한 비밀번호를 Windows 자격 증명 관리자에 암호화하여 저장합니다.','When selected, successfully authenticated passwords are encrypted in Windows Credential Manager.')}</p></>}
+    <p className="credential-note"><LockKeyhole size={13}/><span>{tr('선택 시 연결에 성공한 비밀번호를 Windows 자격 증명 관리자에 암호화하여 저장합니다.','When selected, successfully authenticated passwords are encrypted in Windows Credential Manager.')}</span></p></>}
     <div className="form-row"><label>{tr('그룹','Group')}<Input value={profile.group??''} onChange={e=>field('group',e.target.value)}/></label><label>{tr('환경','Environment')}<NativeSelect aria-label={tr('환경','Environment')} value={profile.environment??'development'} onChange={e=>field('environment',e.target.value)}><NativeSelectOption value="development">Development</NativeSelectOption><NativeSelectOption value="staging">Staging</NativeSelectOption><NativeSelectOption value="production">Production</NativeSelectOption></NativeSelect></label></div><label className="checkbox-label"><Input type="checkbox" checked={profile.readOnly??false} onChange={e=>field('readOnly',e.target.checked)}/>{tr('읽기 전용 연결','Read-only connection')}</label>
    </>}
   </fieldset>
   </div>
   {message&&<p role="status" className="dialog-message">{message}</p>}
-  <div className="modal-actions">{onSave&&<Button type="button" variant="outline" size="sm" disabled={loading||saveDisabled||!profile.name.trim()||!profile.database.trim()} title={saveDisabled?tr('연결 중인 프로필은 다시 연결하여 변경 내용을 적용하세요.','Reconnect to apply changes to an active profile.'):undefined} onClick={()=>void save()}>{tr('프로필 저장','Save profile')}</Button>}<Button type="button" variant="outline" size="sm" disabled={unavailable} onClick={()=>void submit(true)}>{t('연결 테스트')}</Button><Button type="submit" variant="default" size="sm" disabled={unavailable}>{loading?<Loader2 size={15} className="spin"/>:<Play size={15}/>} {t('연결하기')}</Button></div>
+  </div>
+  <div className="modal-actions">{onSave&&<Button type="button" variant="outline" size="sm" disabled={(!api.desktop&&!!profile.rememberPassword)||loading||saveDisabled||!profile.name.trim()||!profile.database.trim()} title={saveDisabled?tr('연결 중인 프로필은 다시 연결하여 변경 내용을 적용하세요.','Reconnect to apply changes to an active profile.'):undefined} onClick={()=>void save()}>{tr('프로필 저장','Save profile')}</Button>}<Button type="button" variant="outline" size="sm" disabled={unavailable} onClick={()=>void submit(true)}>{t('연결 테스트')}</Button><Button type="submit" variant="default" size="sm" disabled={unavailable}>{loading?<Loader2 size={15} className="spin"/>:<Play size={15}/>} {t('연결하기')}</Button></div>
  </form></ModalSurface>;
 }

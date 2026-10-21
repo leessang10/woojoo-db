@@ -23,6 +23,7 @@ const size = (bytes?: number|null) => bytes == null ? '—' : bytes >= 1048576 ?
 export function ObjectPage({ onSql, readOnly, tab, database, session, engine, revision, tables, onFilter, onRefresh, onSchema, onErd, onDetails, onData, onQuery, onChanged, changeBlocked, tableMenu, menuFor }: Props) {
   const {t,language}=useLanguage(),schema=tab.kind==='schema';
   const [metadata,setMetadata]=useState<SchemaInfo|null>(null),[objects,setObjects]=useState<TableObjects|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
+  const [actionTarget,setActionTarget]=useState<HTMLDivElement|null>(null);
   const [version,setVersion]=useState(0),[section,setSection]=useState(schema?'tables':'columns'),[action,setAction]=useState<StructureAction|null>(null);
   useEffect(()=>{
     let cancelled=false;setLoading(true);setError('');setMetadata(null);setObjects(null);
@@ -55,9 +56,10 @@ export function ObjectPage({ onSql, readOnly, tab, database, session, engine, re
       <div className="object-title"><div>{schema?<Layers3 size={24}/>:<Table2 size={24}/>}<h1>{schema?tab.objectSchema:tab.selected?.name}</h1><span>{t(schema?'스키마':'테이블')}</span></div>
         <div className="object-actions">
           {!schema&&<Button variant="outline" size="sm" aria-label={t('테이블 변경')} disabled={busy||!tableMeta||readOnly} onClick={()=>tableMeta&&alterTable(tableMeta)}><Pencil size={14}/>{language==='ko'?'수정':'Edit'}</Button>}
-          <Button variant="outline" size="sm" className="secondary-button" onClick={()=>onErd(tab.objectSchema)}>{t('ERD 열기')}</Button>
-          {!schema&&tab.selected&&<><Button variant="outline" size="sm" className="secondary-button" onClick={()=>onQuery(tab.selected!)}>{t('SELECT 쿼리 열기')}</Button><Button variant="default" size="sm" className="primary-button" onClick={()=>onData(tab.selected!)}>{t('데이터 보기')}</Button></>}
-          <Button variant="ghost" size="bare" className="icon-button" aria-label={t('상세 새로고침')} disabled={busy} onClick={()=>{setVersion(value=>value+1);onRefresh();}}><RefreshCw size={16} className={busy?'spin':''}/></Button>
+          <Button variant="outline" size="sm" onClick={()=>onErd(tab.objectSchema)}>{t('ERD 열기')}</Button>
+          {!schema&&tab.selected&&<><Button variant="outline" size="sm" onClick={()=>onQuery(tab.selected!)}>{t('SELECT 쿼리 열기')}</Button><Button variant="default" size="sm" onClick={()=>onData(tab.selected!)}>{t('데이터 보기')}</Button></>}
+          {!schema&&<Button variant="outline" size="sm" className="danger-text" disabled={busy||!tableMeta||readOnly} onClick={()=>tableMeta&&dropTable(tableMeta)}><Trash2 size={14}/>{t('테이블 삭제')}</Button>}
+          <Button variant="outline" size="icon-sm" aria-label={t('상세 새로고침')} disabled={busy} onClick={()=>{setVersion(value=>value+1);onRefresh();}}><RefreshCw size={16} className={busy?'spin':''}/></Button>
         </div>
       </div>
       <dl className="object-properties">
@@ -76,16 +78,17 @@ export function ObjectPage({ onSql, readOnly, tab, database, session, engine, re
           return <Button variant="ghost" size="bare" key={value} id={'object-tab-'+tab.id+'-'+value} role="tab" aria-controls={'object-content-'+tab.id} aria-selected={section===value} onClick={()=>setSection(value)}>{labels[value][language==='ko'?0:1]}{count!==undefined&&<span>{count}</span>}</Button>;
         })}
       </div>
-      <div className="object-actions">
-        {schema?section==='tables'&&<Button variant="default" size="sm" className="primary-button" disabled={busy||!metadata} onClick={()=>openAction({kind:'createTable',table:{schema:tab.objectSchema,name:''}})}><Plus size={14}/>{t('테이블 추가')}</Button>
-          :<><Button variant="outline" size="sm" className="secondary-button danger-text" disabled={busy||!tableMeta} onClick={()=>tableMeta&&dropTable(tableMeta)}>{t('테이블 삭제')}</Button>
-            {section==='columns'&&<Button variant="default" size="sm" className="primary-button" disabled={busy||!tab.loaded} onClick={()=>tab.selected&&openAction({kind:'addColumn',table:tab.selected})}><Plus size={14}/>{t('컬럼 추가')}</Button>}{(section==='indexes'||section==='constraints')&&<StructureTools constraintsOnly session={session} engine={engine} schema={tab.objectSchema} table={tab.selected} objects={objects} readOnly={readOnly} onSql={onSql} onChanged={()=>{setVersion(v=>v+1);onRefresh();}}/>}</>}
+      <div className="object-actions object-section-actions">
+        <div className="object-definition-actions" ref={setActionTarget}/>
+        {schema?section==='tables'&&<Button variant="default" size="sm" disabled={busy||!metadata} onClick={()=>openAction({kind:'createTable',table:{schema:tab.objectSchema,name:''}})}><Plus size={14}/>{t('테이블 추가')}</Button>
+          :<>
+            {section==='columns'&&<Button variant="default" size="sm" disabled={busy||!tab.loaded} onClick={()=>tab.selected&&openAction({kind:'addColumn',table:tab.selected})}><Plus size={14}/>{t('컬럼 추가')}</Button>}{(section==='indexes'||section==='constraints')&&<StructureTools constraintsOnly session={session} engine={engine} schema={tab.objectSchema} table={tab.selected} objects={objects} readOnly={readOnly} onSql={onSql} onChanged={()=>{setVersion(v=>v+1);onRefresh();}}/>}</>}
       </div>
     </div>
     {(section==='tables'||section==='columns')&&<div className="object-search-row"><label className="search-field"><Search size={14}/><Input aria-label={t(schema?'스키마 내 테이블 검색':'컬럼 검색')} placeholder={t('검색')} value={tab.filter} onChange={e=>onFilter(e.target.value)}/></label></div>}
     {(error||tab.error)&&<div className="error-banner" role="alert">{error||tab.error}</div>}
     <div className="object-table-scroll" role="tabpanel" id={'object-content-'+tab.id} aria-labelledby={'object-tab-'+tab.id+'-'+section}>
-      {['views','routines','triggers','ddl'].includes(section)?<ObjectDefinitions key={tab.id+section+version+':'+revision} session={session} engine={engine} schema={tab.objectSchema} table={tab.selected} section={section} onSql={onSql}/>:<>
+      {['views','routines','triggers','ddl'].includes(section)?<ObjectDefinitions key={tab.id+section+version+':'+revision} session={session} engine={engine} schema={tab.objectSchema} table={tab.selected} section={section} actionTarget={actionTarget} onSql={onSql}/>:<>
       {schema?<table className="object-table"><thead><tr>{['이름','엔진','Charset','Collation','추정 행 수','크기','설명',''].map((label,i)=><th key={i}>{t(label)}</th>)}</tr></thead>
         <tbody>{shown.map(table=><tr key={table.name} onDoubleClick={()=>onDetails(table)} {...menuFor([...tableMenu(table),{label:t('테이블 변경'),action:()=>alterTable(table),disabled:busy||!metadata,divider:true},{label:t('테이블 삭제'),action:()=>dropTable(table),disabled:busy||!metadata}])}>
           <td><Button variant="ghost" size="bare" className="object-name" onClick={()=>onDetails(table)}><Table2 size={15}/>{table.name}</Button></td>

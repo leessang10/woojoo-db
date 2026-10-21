@@ -21,6 +21,8 @@ export type WorkspaceTab = {
   sort: { name: string; desc: boolean } | null;
   scroll: number;
   error: string;
+  resultStale?: boolean;
+  editorCollapsed?: boolean;
   lastQuery: string;
   busy: boolean;
   loaded: boolean;
@@ -118,10 +120,18 @@ export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {
     return next;
   }
   function close(id: string) {
-    const index = connectionTabs.findIndex(item => item.id === id);
-    const remaining = connectionTabs.filter(item => item.id !== id);
-    setTabs(previous => previous.filter(item => item.id !== id));
-    if (tab.id === id) activate(remaining[Math.min(index, remaining.length - 1)]?.id ?? '');
+    closeMany([id]);
+  }
+  function closeMany(ids: string[]) {
+    const closing = new Set(ids);
+    const index = connectionTabs.findIndex(item => item.id === tab.id);
+    const remaining = connectionTabs.filter(item => !closing.has(item.id));
+    setTabs(previous => previous.filter(item => !closing.has(item.id)));
+    if (closing.has(tab.id)) {
+      const next = connectionTabs.slice(index + 1).find(item => !closing.has(item.id))
+        ?? remaining.at(-1);
+      activate(next?.id ?? '');
+    }
   }
   function reorder(id: string, targetId: string, after = false) {
     setTabs(previous => {
@@ -139,5 +149,5 @@ export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {
     setSelectedIds(previous=>({...previous,[to]:previous[from]}));
   }
   function removeSession(id:string) { setTabs(previous=>previous.filter(item=>item.session!==id)); }
-  return { tabs, tab, connectionTabs, field, patch, add, activate, close, reorder, markQuery, remapSession, removeSession };
+  return { tabs, tab, connectionTabs, field, patch, add, activate, close, closeMany, reorder, markQuery, remapSession, removeSession };
 }

@@ -31,8 +31,8 @@ test('SQL history replacement confirmation stays above its parent dialog', async
   await page.locator('.query-tools').getByRole('button', {name:'스크립트 실행',exact:true}).click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(1);
   await page.locator('.cm-content').fill('SELECT 42;');
-  await page.locator('.query-tools').getByRole('button', {name:'저장된 기록',exact:true}).click();
-  const history = page.getByRole('dialog', {name:'쿼리 기록',exact:true});
+  await page.locator('.query-tools').getByRole('button', {name:'SQL 기록',exact:true}).click();
+  const history = page.getByRole('dialog', {name:'SQL 기록',exact:true});
   await history.getByRole('button', {name:'불러오기',exact:true}).first().click();
   await page.getByRole('alertdialog').getByRole('button', {name:'취소',exact:true}).click();
   await expect(history).toBeVisible();

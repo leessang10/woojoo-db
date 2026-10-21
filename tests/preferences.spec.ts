@@ -25,8 +25,8 @@ test('English covers workspace, dialogs, errors and persists without changing SQ
   await expect(page.locator('.cm-content')).toHaveText(sql, { useInnerText: true });
   await page.getByRole('button', { name: 'New connection', exact: true }).click();
   await expect(page.getByLabel('Host', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Test connection', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('desktop');
+  await expect(page.getByRole('button', { name: 'Test connection', exact: true })).toBeDisabled();
+  await expect(page.locator('.connection-availability')).toContainText('desktop');
   await page.keyboard.press('Escape');
   await page.getByText('Alex Morgan', { exact: true }).dblclick();
   await expect(page.getByRole('heading', { name: 'Edit cell' })).toBeVisible();
@@ -45,11 +45,11 @@ test('connection dialog keeps keyboard focus inside until closed', async ({ page
   await page.goto('/');
   await page.getByLabel('새 연결').click();
   const modal = page.locator('.connection-modal');
-  await modal.getByRole('button', { name: '연결하기', exact: true }).focus();
+  await modal.locator('button:enabled').last().focus();
   await page.keyboard.press('Tab');
   await expect(modal.getByRole('button', { name: '닫기', exact: true })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(modal.getByRole('button', { name: '연결하기', exact: true })).toBeFocused();
+  await expect(modal.locator('button:enabled').last()).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByLabel('새 연결')).toBeFocused();
 });

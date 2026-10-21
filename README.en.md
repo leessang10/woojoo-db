@@ -4,7 +4,7 @@
 
 A desktop database client for PostgreSQL, MySQL, MariaDB, and SQLite. Write SQL, edit data, inspect schemas, and export ER diagrams in one workspace.
 
-[Download for Windows](https://github.com/leessang10/woojoo-db/releases/latest) · [Release notes](https://github.com/leessang10/woojoo-db/releases/tag/v0.1.0) · [Report an issue](https://github.com/leessang10/woojoo-db/issues) · [MIT license](LICENSE)
+[Download for Windows](https://github.com/leessang10/woojoo-db/releases/latest) · [Release notes](https://github.com/leessang10/woojoo-db/releases/tag/v0.1.1) · [Report an issue](https://github.com/leessang10/woojoo-db/issues) · [MIT license](LICENSE)
 
 ![Woojoo SQL editor and query results in English, light mode](docs/images/workspace-en.png)
 
@@ -32,14 +32,14 @@ Add tables, columns, indexes, and physical foreign keys in the ERD, then use **C
 
 The current binary release targets **Windows x64**. macOS and Linux binaries are not provided.
 
-1. Download `Woojoo-0.1.0-windows-x64.exe` from the [latest release](https://github.com/leessang10/woojoo-db/releases/latest).
+1. Download `Woojoo-0.1.1-windows-x64.exe` from the [latest release](https://github.com/leessang10/woojoo-db/releases/latest).
 2. If needed, install the WebView2 Runtime from [Microsoft](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
 3. Run the EXE. No installer, Node.js, Rust, or development server is required.
 
 The executable is not code-signed yet, so Windows may display a publisher warning. Compare its hash with the release's `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash .\Woojoo-0.1.0-windows-x64.exe -Algorithm SHA256
+Get-FileHash .\Woojoo-0.1.1-windows-x64.exe -Algorithm SHA256
 ```
 
 To update, close the app and replace the executable. Profiles and local data are stored in the application's user data directories, not beside the EXE. If the original v0.1.0 download shows a localhost connection error, download the corrected executable again.
@@ -132,7 +132,7 @@ npm run test:release
 
 The binary is written to `src-tauri/target/release/woojoo-db.exe`. Use the Tauri CLI for distribution builds. A plain `cargo build --release` without the production protocol is deliberately rejected. UI tests use an installed Chrome browser. `npm run dev` is a browser UI preview; real database connections require the desktop app.
 
-For v0.1.0, 32 frontend unit tests, 71 browser UI tests, and 26 Rust tests passed. Two integration tests requiring external environments are excluded by default. Some browser tests mock native database/AWS communication; these checks do not establish compatibility with every server configuration. See the [detailed reference and container test commands (Korean)](docs/REFERENCE.ko.md).
+For v0.1.1, 33 frontend unit tests, 81 browser UI tests (including corrected expectations and reruns), and 29 Rust tests passed. Four integration tests requiring external environments are excluded by default. Some browser tests mock native database/AWS communication; these checks do not establish compatibility with every server configuration. See the [detailed reference and container test commands (Korean)](docs/REFERENCE.ko.md).
 
 ## License and credits
 

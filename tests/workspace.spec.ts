@@ -38,6 +38,6 @@ test('NULL editing is explicit and connection form supports all engines', async 
   await page.getByLabel('새 연결').click();
   await page.getByRole('button',{name:'MariaDB',exact:true}).click();
   await expect(page.getByLabel('포트',{exact:true})).toHaveValue('3306');
-  await page.getByRole('button',{name:'연결 테스트',exact:true}).click();
-  await expect(page.getByRole('status')).toContainText('데스크톱 앱');
+  await expect(page.getByRole('button',{name:'연결 테스트',exact:true})).toBeDisabled();
+  await expect(page.locator('.connection-availability')).toContainText('데스크톱 앱');
 });

@@ -48,8 +48,8 @@ test('typed parameters execute and searchable history survives reload without pa
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.reload();
   await expect(page.locator('.query-tools')).toBeVisible();
-  await page.locator('.query-tools').getByRole('button', { name: '저장된 기록', exact: true }).click();
-  const history = page.getByRole('dialog', { name: '쿼리 기록', exact: true });
+  await page.locator('.query-tools').getByRole('button', { name: 'SQL 기록', exact: true }).click();
+  const history = page.getByRole('dialog', { name: 'SQL 기록', exact: true });
   await history.getByLabel('기록 검색').fill(':limit');
   await expect(history.locator('pre')).toHaveText('SELECT * FROM users LIMIT :limit;');
   await history.getByLabel('기록 검색').fill('does-not-exist');

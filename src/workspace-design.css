@@ -213,3 +213,94 @@
 .query-tool-status{display:flex;align-items:center;gap:16px;padding:5px 16px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted-foreground);overflow-wrap:anywhere}
 .query-tool-status>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .query-tools>p{margin:0;padding:6px 16px}
+
+/* Audit fixes: preserve result context and make compact actions easy to reach. */
+.query-toolbar{height:44px;gap:10px}
+.query-tool-group button{height:28px;min-height:28px;font-size:12px;padding:0 9px}
+.query-primary-action{gap:6px}
+.query-primary-action button{min-height:28px;font-size:12px}
+.query-toolbar-scroll{padding:3px 0}
+/* Explicit modal rhythm: text resets do not provide paragraph spacing. */
+.modal{font-size:13px;line-height:1.6;max-width:calc(100vw - 32px)}
+.modal-heading{gap:16px;margin-bottom:20px}
+.modal-heading h2{line-height:1.4}
+.modal-heading>button{flex-shrink:0;min-width:32px;min-height:32px;width:auto;padding:0 8px}
+.help-modal{width:560px}
+.help-content{display:flex;flex-direction:column;gap:18px;margin:0 0 24px;font-size:13px;line-height:1.75;word-break:keep-all;overflow-wrap:anywhere}
+.help-content p{margin:0}
+.help-content strong{display:block;margin-bottom:5px;font-size:13px;font-weight:600}
+.help-content kbd{display:inline-block;margin-right:8px}
+.sql-history-modal{display:flex;flex-direction:column;width:720px;max-height:calc(100dvh - 48px);overflow:hidden;gap:16px}
+.sql-history-modal .modal-heading,.sql-history-modal .modal-description{margin:0;flex-shrink:0}
+.sql-history-modal .modal-description{font-size:13px;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
+.sql-history-search{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.sql-history-search input{min-width:0;flex:1}
+.sql-history-search button,.sql-history-meta button{height:30px;padding:0 10px;font-size:12px;flex-shrink:0}
+.sql-history-list{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.sql-history-entry{border:1px solid var(--line);border-radius:8px;padding:14px;flex-shrink:0}
+.sql-history-meta{display:flex;align-items:center;gap:12px}
+.sql-history-meta small{color:var(--muted-foreground);font-size:12px;line-height:1.6;overflow-wrap:anywhere;min-width:0}
+.sql-history-entry pre{margin:12px 0 0;padding:12px;background:var(--surface);border-radius:4px;font:12px/1.75 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
+.connection-modal .connection-scroll>.modal-heading{margin-bottom:12px}
+.connection-modal .connection-scroll>h2{margin:0 0 20px}
+.connection-modal .connection-fields .checkbox-label{min-height:28px;gap:8px;margin:4px 0;line-height:1.6}
+.connection-modal .credential-note{align-items:flex-start;gap:8px;line-height:1.7;font-size:12px;word-break:keep-all;overflow-wrap:anywhere}
+.connection-modal .credential-note svg{flex-shrink:0;margin-top:4px}
+.connection-modal .credential-note span{min-width:0}
+.tab-list,.query-toolbar-scroll{scrollbar-width:none;-ms-overflow-style:none}
+.tab-list::-webkit-scrollbar,.query-toolbar-scroll::-webkit-scrollbar{display:none}
+.sql-editor{height:184px;min-height:80px;max-height:45vh;resize:vertical;overflow:hidden;border-bottom:1px solid var(--line)}
+.sql-editor[hidden]{display:none}
+.sql-editor>.cm-theme{height:100%}
+.sql-editor .cm-editor,.sql-editor .cm-scroller{height:100%;max-height:none}
+.result-meta[data-stale=true]{color:var(--destructive)}
+.result-meta[data-stale=true]>svg{color:var(--destructive)}
+.stale-result-label{border:1px solid var(--line);border-radius:4px;padding:3px 7px;color:var(--text);background:var(--surface)}
+.result-meta{flex-wrap:wrap;row-gap:4px}
+.result-tabs{min-height:42px;height:auto;padding-top:5px;padding-bottom:5px}
+.connection-modal{display:flex;flex-direction:column;padding:0;overflow:hidden;max-height:calc(100dvh - 48px)}
+.connection-scroll{min-height:0;overflow-y:auto;padding:24px}
+.connection-modal>.modal-actions{flex-shrink:0;margin:0;padding:12px 24px;background:var(--surface);border-top:1px solid var(--line)}
+.connection-modal .credential-note{margin:10px 0}
+.connection-modal .engine-options{margin:16px 0}
+.dw-filter-toolbar>input{width:auto;flex:1 1 160px;min-width:100px;max-width:360px}
+.dw-filter-toolbar>.dw-muted{font-size:11px}
+.data-workbench .dw-toolbar{flex-shrink:0}
+.executions-description{margin:0;padding:0 24px 16px;color:var(--muted-foreground);font-size:12px;line-height:1.6}
+@media(max-height:760px){.sql-editor{height:140px}.connection-scroll{padding:16px 24px}.connection-modal>.modal-actions{padding:10px 24px}}
+/* Shared action sizes. Bare controls retain their navigation/list geometry. */
+[data-slot=button]:not([data-size=bare]){border-radius:6px;font-size:12px;font-weight:500;gap:6px;box-shadow:none;line-height:1;}
+[data-slot=button][data-size=sm]{height:32px;min-height:32px;padding:0 12px;}
+[data-slot=button][data-size=xs]{height:28px;min-height:28px;padding:0 10px;}
+[data-slot=button][data-size=icon-sm]{width:32px;height:32px;min-height:32px;padding:0;}
+[data-slot=button][data-variant=outline]{border:1px solid var(--line);background:var(--background);color:var(--text);}
+[data-slot=button][data-variant=outline]:hover:not(:disabled){background:var(--hover);}
+.object-page .object-actions{display:flex;align-items:center;gap:8px;}
+.object-page .object-section-actions{margin-left:auto;min-height:32px;}
+.object-definition-actions{display:flex;align-items:center;gap:8px;}
+.object-definition-actions:empty{display:none;}
+.object-page .object-row-actions button{height:32px;min-height:32px;font-size:12px;padding:0 12px;background:var(--background);}
+.object-page .object-comment-edit{margin-left:8px;vertical-align:middle;}
+.object-page .object-definition-toolbar{margin-bottom:12px;}
+.object-page .object-definition-toolbar .structure-note{margin:0;}
+/* RDS discovery keeps account, region and results in stable sections. */
+.aws-selection-fields{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.aws-profile-field,.aws-region-field{min-width:0;}
+.modal .aws-selection-fields label{margin-bottom:0;}
+.aws-account-slot{min-height:28px;padding-top:8px;font-size:12px;color:var(--muted-foreground);}
+.aws-account-slot .aws-account,.aws-account-slot .aws-status{margin:0;}
+.aws-region-row{margin:0;}
+.aws-instance-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);min-height:116px;}
+.aws-instance-section h3{font-size:13px;font-weight:600;margin:0 0 12px;}
+.aws-instance-placeholder,.aws-instance-section>p{font-size:12px;line-height:1.7;color:var(--muted-foreground);margin:0;}
+.aws-instance-list{display:flex;flex-direction:column;gap:8px;max-height:240px;overflow:auto;}
+.modal .aws-instance-choice{display:flex;flex-direction:row;align-items:center;flex:none;gap:12px;padding:12px;border:1px solid var(--line);border-radius:6px;margin:0;cursor:pointer;}
+.modal .aws-instance-choice[data-selected=true]{border-color:var(--brand);background:var(--selection);}
+.modal .aws-instance-choice:has(input:disabled){opacity:.5;cursor:default;}
+.modal .aws-instance-choice input{width:16px;height:16px;padding:0;flex-shrink:0;accent-color:var(--primary);}
+.aws-instance-choice span{min-width:0;display:flex;flex-direction:column;gap:4px;overflow-wrap:anywhere;}
+.aws-instance-choice small{font-size:12px;color:var(--muted-foreground);}
+.aws-connection-grid{grid-template-columns:1fr!important;}
+@media(max-width:600px){.aws-selection-fields{grid-template-columns:1fr;gap:16px;}}
+.aws-instance-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.aws-instance-heading h3{margin:0;}

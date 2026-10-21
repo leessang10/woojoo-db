@@ -58,7 +58,7 @@ export function ExecutionsPage({onClose,onOpen,profileIds}:{onClose:()=>void;onO
   async function copy(){if(!detail)return;try{await navigator.clipboard.writeText(detail.sql);setCopied(true);}catch{setDetailError(tr('복사하지 못했습니다.','Could not copy SQL.'));}}
   const date=(value:number)=>new Date(value).toLocaleString(language==='ko'?'ko-KR':'en-US');
   return <section className="executions-page" aria-label={tr('실행한 쿼리','Executed queries')}>
-    <header className="executions-heading"><div><Button variant="ghost" size="icon-sm" aria-label={tr('작업 공간으로 돌아가기','Back to workspace')} onClick={onClose}><ArrowLeft/></Button><h1>{tr('실행한 쿼리','Executed queries')}</h1></div><Button variant="outline" size="sm" disabled={!native||busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw/>{tr('새로고침','Refresh')}</Button></header>
+    <header className="executions-heading"><div><Button variant="ghost" size="icon-sm" aria-label={tr('작업 공간으로 돌아가기','Back to workspace')} onClick={onClose}><ArrowLeft/></Button><h1>{tr('실행한 쿼리','Executed queries')}</h1></div><Button variant="outline" size="sm" disabled={!native||busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw/>{tr('새로고침','Refresh')}</Button></header><p className="executions-description">{tr('실행 상태·오류·소요 시간을 확인합니다. SQL을 다시 불러오려면 편집기의 SQL 기록을 이용하세요.','Inspect execution status, errors and duration. Use SQL history in the editor to reuse SQL.')}</p>
     {!native?<div className="workspace-empty">{tr('실행 내역은 데스크톱 앱에서 확인할 수 있습니다.','Execution records are available in the desktop app.')}</div>:<>
       <div className="executions-filters">
         <Input aria-label={tr('SQL·오류 검색','Search SQL or errors')} placeholder={tr('SQL·오류 검색','Search SQL or errors')} value={search} onChange={e=>filter(()=>setSearch(e.target.value))}/>

@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": new URL("./src", import.meta.url).pathname.replace(/^\/(\w:)/, "$1") } },
-  server: { port: 1420, strictPort: true },
+  server: { port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/target/**', '**/releases/**'] } },
   clearScreen: false,
   build: { rollupOptions: { output: { manualChunks: { editor: ['@uiw/react-codemirror', '@codemirror/lang-sql', '@codemirror/theme-one-dark'] } } } },
 });

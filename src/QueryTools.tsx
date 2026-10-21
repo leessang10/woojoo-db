@@ -13,6 +13,8 @@ export type SqlFileMetadata = { path: string | null; name: string; savedSql: str
 type NativeFile = { path: string; name: string; sql: string };
 export type QueryToolsProps = {
   primaryAction?: ReactNode;
+  onOpenCommonSql?: () => void;
+  commonSqlDisabled?: boolean;
   engine: Engine; session: string | null; sql: string; disabled?: boolean;
   onSqlChange: (sql: string) => void;
   onExecute: (sql: string) => Promise<Result>;
@@ -25,7 +27,7 @@ export type QueryToolsProps = {
   beforeExecute?: () => boolean | Promise<boolean>;
 };
 
-export function QueryTools({ primaryAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute }: QueryToolsProps) {
+export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute }: QueryToolsProps) {
   const { language } = useLanguage();
   const { requestConfirm } = useConfirm();
   const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
@@ -98,7 +100,7 @@ export function QueryTools({ primaryAction, engine, session, sql, disabled, onSq
       if (failure) setError(`${tr('문장', 'Statement')} ${failure.index}: ${failure.error}`);
       setSummary(`${results.length} ${tr('문장 실행', 'statements executed')}`);
       if (results.length) {
-        const persisted = appendQueryHistory({ id: crypto.randomUUID(), sql: source, engine, at: new Date().toISOString(), success: !failure, count: results.length, duration: results.reduce((sum, entry) => sum + (entry.result?.elapsedMs ?? 0), 0), connection: historyKey, connectionName });
+        const persisted = appendQueryHistory({ id: crypto.randomUUID(), sql: source, engine, at: new Date().toISOString(), success: !failure, count: results.length, durationScope: 'db', duration: results.reduce((sum, entry) => sum + (entry.result?.elapsedMs ?? 0), 0), connection: historyKey, connectionName });
         setHistory(readQueryHistory(historyKey));
         if (!persisted) setError(tr('쿼리는 실행했지만 로컬 기록을 저장할 수 없습니다.', 'Query executed, but local history could not be saved.'));
       }
@@ -108,7 +110,7 @@ export function QueryTools({ primaryAction, engine, session, sql, disabled, onSq
   const buttonDisabled = busy || disabled;
   return <div className="query-tools">
     <div className="query-toolbar">
-      <div className="query-toolbar-scroll">
+      <div className="query-toolbar-scroll" onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
       <div className="query-tool-group" role="group" aria-label={tr('SQL 파일', 'SQL files')}>
       <Button variant="outline" size="xs" disabled={buttonDisabled} onClick={() => void open()}>{tr('SQL 열기', 'Open SQL')}</Button>
       <Button variant="outline" size="xs" disabled={buttonDisabled} onClick={() => void save(false)}>{isTauri() ? tr('저장', 'Save') : tr('다운로드', 'Download')}</Button>
@@ -118,8 +120,9 @@ export function QueryTools({ primaryAction, engine, session, sql, disabled, onSq
       <Button variant="outline" size="xs" disabled={buttonDisabled || !sql.trim()} onClick={() => { try { onSqlChange(formatSql(sql, engine)); setError(''); } catch (e) { setError(String(e)); } }}>{tr('SQL 정렬', 'Format SQL')}</Button>
       <Button variant="outline" size="xs" disabled={buttonDisabled || !session || !sql.trim()} onClick={() => void execute(sql)}>{tr('스크립트 실행', 'Run script')}</Button>
       <Button variant="outline" size="xs" disabled={buttonDisabled || !session || !sql.trim()} onClick={() => { try { void execute(explainSql(sql, engine)); } catch (e) { setError(String(e)); } }}>EXPLAIN</Button>
-      <Button variant="outline" size="xs" onClick={() => { setHistory(readQueryHistory(historyKey)); setHistoryOpen(value => !value); }}>{tr('저장된 기록', 'Saved history')}</Button>
+      <Button variant="outline" size="xs" onClick={() => { setHistory(readQueryHistory(historyKey)); setHistoryOpen(value => !value); }}>{tr('SQL 기록', 'SQL history')}</Button>
       </div>
+      {onOpenCommonSql && <div className="query-tool-group" role="group" aria-label={tr('SQL 템플릿', 'SQL templates')}><Button variant="outline" size="xs" disabled={commonSqlDisabled || buttonDisabled} onClick={onOpenCommonSql}>{tr('자주 쓰는 SQL', 'Common SQL')}</Button></div>}
       {nativeSession && <div className="query-tool-group" role="group" aria-label={tr('트랜잭션', 'Transactions')}>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || execution.readOnly || execution.inTransaction && execution.manual} onClick={() => void control('transaction_mode', { manual: !execution.manual })}>{execution.manual ? tr('수동 커밋', 'Manual commit') : tr('자동 커밋', 'Auto commit')}</Button>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || !execution.inTransaction} onClick={() => void control('transaction_finish', { commit: true })}>COMMIT</Button>
@@ -157,19 +160,20 @@ export function QueryTools({ primaryAction, engine, session, sql, disabled, onSq
       <Button variant="outline" size="xs" onClick={() => void execute(pending.sql, parameters)}>{tr('실행', 'Run')}</Button>{' '}
       <Button variant="outline" size="xs" onClick={() => setPending(null)}>{tr('취소', 'Cancel')}</Button>
     </section></ModalSurface>}
-    {historyOpen && <ModalSurface title={tr('쿼리 기록', 'Query history')} onClose={() => setHistoryOpen(false)}><section className="modal" aria-label={tr('쿼리 기록', 'Query history')} style={{ maxHeight: '75vh', overflow: 'auto', width: 650 }}>
-      <div className="modal-heading"><h2>{tr('쿼리 기록', 'Query history')}</h2><Button variant="ghost" size="sm" onClick={() => setHistoryOpen(false)}>{tr('닫기', 'Close')}</Button></div>
-      <p>{tr('최근 200개 SQL을 이 기기에 저장합니다. SQL에 직접 쓴 값도 저장됩니다.', 'The last 200 SQL entries are stored on this device, including values written directly in SQL.')}</p>
-      <Input aria-label={tr('기록 검색', 'Search history')} placeholder={tr('SQL 검색', 'Search SQL')} value={search} onChange={event => setSearch(event.target.value)} />
-      <Button variant="outline" size="xs" onClick={() => { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(historyKey ? readQueryHistory().filter(entry => entry.connection !== historyKey) : [])); setHistory([]); } catch (e) { setError(String(e)); } }}>{tr('기록 지우기', 'Clear history')}</Button>
-      {history.filter(entry => entry.sql.toLowerCase().includes(search.toLowerCase())).map(entry => <div key={entry.id} style={{ borderBottom: '1px solid var(--border)', padding: 6 }}>
+    {historyOpen && <ModalSurface title={tr('SQL 기록', 'SQL history')} onClose={() => setHistoryOpen(false)}><section className="modal sql-history-modal" aria-label={tr('SQL 기록', 'SQL history')}>
+      <div className="modal-heading"><h2>{tr('SQL 기록', 'SQL history')}</h2><Button variant="ghost" size="sm" onClick={() => setHistoryOpen(false)}>{tr('닫기', 'Close')}</Button></div>
+      <p className="modal-description">{tr('다시 사용할 SQL을 찾는 기록입니다. 최근 200개를 이 기기에 저장하며, SQL에 직접 쓴 값도 포함됩니다. 실행 상태와 상세 정보는 왼쪽 ‘실행한 쿼리’에서 확인하세요.', 'Find SQL to reuse here. The last 200 entries are stored on this device, including literal values. Use Executed queries in the sidebar for execution status and details.')}</p>
+      <div className="sql-history-search"><Input aria-label={tr('기록 검색', 'Search history')} placeholder={tr('SQL 검색', 'Search SQL')} value={search} onChange={event => setSearch(event.target.value)} />
+      <Button variant="outline" size="xs" onClick={() => { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(historyKey ? readQueryHistory().filter(entry => entry.connection !== historyKey) : [])); setHistory([]); } catch (e) { setError(String(e)); } }}>{tr('기록 지우기', 'Clear history')}</Button></div><div className="sql-history-list">
+      {history.filter(entry => entry.sql.toLowerCase().includes(search.toLowerCase())).map(entry => <article key={entry.id} className="sql-history-entry"><div className="sql-history-meta">
         <Button variant="outline" size="xs" disabled={buttonDisabled} onClick={async () => {
           if (dirty && !await requestConfirm(tr('저장하지 않은 SQL을 바꾸시겠습니까?', 'Replace the unsaved SQL?'))) return;
           onSqlChange(entry.sql); setHistoryOpen(false);
-        }}>{tr('불러오기', 'Load')}</Button> <small>{new Date(entry.at).toLocaleString()} · {entry.engine} · {entry.connectionName ?? connectionName ?? entry.connection ?? '—'} · {entry.duration ?? '—'} ms · {entry.success ? '✓' : '✕'}</small>
-        <pre style={{ whiteSpace: 'pre-wrap', margin: '4px 0' }}>{entry.sql}</pre>
-      </div>)}
+        }}>{tr('불러오기', 'Load')}</Button> <small>{new Date(entry.at).toLocaleString()} · {entry.engine} · {entry.connectionName ?? connectionName ?? entry.connection ?? '—'} · {entry.durationScope==='db'?tr('DB 처리','DB time'):entry.durationScope==='total'?tr('전체 소요','Total time'):tr('소요 시간 (이전 기록)','Duration (legacy)')} {entry.duration===undefined?'—':Math.round(entry.duration)} ms · {entry.success ? '✓' : '✕'}</small></div>
+        <pre>{entry.sql}</pre>
+      </article>)}
       {!history.length && <p>{tr('실행 기록이 없습니다.', 'No query history yet.')}</p>}
+      </div>
     </section></ModalSurface>}
   </div>;
 }
