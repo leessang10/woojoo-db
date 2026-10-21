@@ -1,5 +1,5 @@
 import { useConfirm } from './components/ConfirmProvider';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ModalSurface } from './components/ModalSurface';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -12,6 +12,7 @@ import { appendQueryHistory, bindParameters, executeScript, explainSql, formatSq
 export type SqlFileMetadata = { path: string | null; name: string; savedSql: string };
 type NativeFile = { path: string; name: string; sql: string };
 export type QueryToolsProps = {
+  primaryAction?: ReactNode;
   engine: Engine; session: string | null; sql: string; disabled?: boolean;
   onSqlChange: (sql: string) => void;
   onExecute: (sql: string) => Promise<Result>;
@@ -24,7 +25,7 @@ export type QueryToolsProps = {
   beforeExecute?: () => boolean | Promise<boolean>;
 };
 
-export function QueryTools({ engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute }: QueryToolsProps) {
+export function QueryTools({ primaryAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute }: QueryToolsProps) {
   const { language } = useLanguage();
   const { requestConfirm } = useConfirm();
   const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
@@ -105,24 +106,33 @@ export function QueryTools({ engine, session, sql, disabled, onSqlChange, onExec
     finally { if (started) { setBusy(false); onBusyChange?.(false); } }
   }
   const buttonDisabled = busy || disabled;
-  return <div className="query-tools" style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+  return <div className="query-tools">
+    <div className="query-toolbar">
+      <div className="query-toolbar-scroll">
+      <div className="query-tool-group" role="group" aria-label={tr('SQL 파일', 'SQL files')}>
       <Button variant="outline" size="xs" disabled={buttonDisabled} onClick={() => void open()}>{tr('SQL 열기', 'Open SQL')}</Button>
       <Button variant="outline" size="xs" disabled={buttonDisabled} onClick={() => void save(false)}>{isTauri() ? tr('저장', 'Save') : tr('다운로드', 'Download')}</Button>
       {isTauri() && <Button variant="outline" size="xs" disabled={buttonDisabled} onClick={() => void save(true)}>{tr('다른 이름으로 저장', 'Save as')}</Button>}
+      </div>
+      <div className="query-tool-group" role="group" aria-label={tr('SQL 도구', 'SQL tools')}>
       <Button variant="outline" size="xs" disabled={buttonDisabled || !sql.trim()} onClick={() => { try { onSqlChange(formatSql(sql, engine)); setError(''); } catch (e) { setError(String(e)); } }}>{tr('SQL 정렬', 'Format SQL')}</Button>
       <Button variant="outline" size="xs" disabled={buttonDisabled || !session || !sql.trim()} onClick={() => void execute(sql)}>{tr('스크립트 실행', 'Run script')}</Button>
       <Button variant="outline" size="xs" disabled={buttonDisabled || !session || !sql.trim()} onClick={() => { try { void execute(explainSql(sql, engine)); } catch (e) { setError(String(e)); } }}>EXPLAIN</Button>
       <Button variant="outline" size="xs" onClick={() => { setHistory(readQueryHistory(historyKey)); setHistoryOpen(value => !value); }}>{tr('저장된 기록', 'Saved history')}</Button>
-      {nativeSession && <>
+      </div>
+      {nativeSession && <div className="query-tool-group" role="group" aria-label={tr('트랜잭션', 'Transactions')}>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || execution.readOnly || execution.inTransaction && execution.manual} onClick={() => void control('transaction_mode', { manual: !execution.manual })}>{execution.manual ? tr('수동 커밋', 'Manual commit') : tr('자동 커밋', 'Auto commit')}</Button>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || !execution.inTransaction} onClick={() => void control('transaction_finish', { commit: true })}>COMMIT</Button>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || !execution.inTransaction} onClick={() => void control('transaction_finish', { commit: false })}>ROLLBACK</Button>
         <Button variant="outline" size="xs" disabled={!execution.running && !busy && !disabled} onClick={() => { cancelled.current = true; void control('cancel_query'); }}>{tr('실행 취소', 'Cancel query')}</Button>
-      </>}
+      </div>}
+      </div>
+      {primaryAction && <div className="query-primary-action">{primaryAction}</div>}
+    </div>
+    {(file || summary) && <div className="query-tool-status">
       {file && <span title={file.path ?? file.name}>{file.name}{dirty ? ' •' : ''}</span>}
       {summary && <span role="status">{summary}</span>}
-    </div>
+    </div>}
     {execution.transactionStateKnown===false&&<p role="status">{tr('서버 스크립트 실행 후 트랜잭션 상태를 확인할 수 없습니다. COMMIT 또는 ROLLBACK으로 종료하세요.','Transaction state is unknown after the server script. Finish with COMMIT or ROLLBACK.')}</p>}
     <Input ref={browserFile} type="file" accept=".sql,text/plain" hidden onChange={async event => {
       const selected = event.target.files?.[0]; event.target.value = '';

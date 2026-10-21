@@ -32,6 +32,14 @@ export async function connect(profile: Profile): Promise<string> {
   return invoke('connect_db', { profile });
 }
 export async function disconnect(id: string) { if (id !== 'demo') await invoke('disconnect_db', { id }); }
+export type CredentialStatus = {supported:boolean;saved:boolean;available:boolean};
+export async function credentialStatus(profile:Profile):Promise<CredentialStatus> {
+  if(!desktop||profile.engine==='sqlite')return {supported:false,saved:false,available:false};
+  return invoke('credential_status',{profile:{...profile,password:''}});
+}
+export async function forgetPassword(profileId:string) {
+  if(desktop)await invoke('forget_password',{profileId});
+}
 export async function tables(id: string): Promise<Table[]> {
   if (id === 'demo') return [...demoCatalog.keys()].map(name=>({schema:'public',name}));
   return invoke('list_tables', { id });

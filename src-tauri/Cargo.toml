@@ -23,6 +23,10 @@ bigdecimal = "0.4"
 rfd = "0.17.2"
 
 libsqlite3-sys = "0.30"
+zeroize = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
 [profile.release]
 strip = true

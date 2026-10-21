@@ -5,6 +5,7 @@ async function mock(page:Page,scenario='normal'){
   (window as any).calls=[];
   Object.defineProperty(window,'isTauri',{value:true});Object.defineProperty(window,'__TAURI_INTERNALS__',{value:{invoke:async(command:string,args:any)=>{
    (window as any).calls.push({command,args});
+   if(command==='credential_status')return {supported:true,saved:false,available:false};
    if(command==='aws_cli_info')return {installed:scenario!=='missing',version:'aws-cli/2.0',profiles:scenario==='emptyProfiles'?[]:['default','prod']};
    if(command==='aws_environment'){if(scenario==='expired')throw 'AWS_AUTH_REQUIRED';return {account:'123456789012',arn:'arn:aws:iam::123456789012:user/test',region:'ap-northeast-2',regions:['ap-northeast-2','us-east-1'],regionsWarning:scenario==='regionDenied'?'AWS_ACCESS_DENIED':null};}
    if(command==='aws_rds_instances'){if(scenario==='denied')throw 'AWS_ACCESS_DENIED';if(args.region==='us-east-1')return [];return [{id:'app-db',engine:'aurora-postgresql',version:'17.4',status:'available',host:'app.example.rds.amazonaws.com',port:5432,database:'app',username:'admin',public:false,supported:true},{id:'unsupported',engine:'oracle-ee',version:'19',status:'available',host:'other.example',port:1521,database:'app',username:'admin',public:true,supported:false}];}

@@ -86,6 +86,8 @@ export default function App() {
   const [error, setError] = workspace.field('error');
   const [notice, setNotice] = useState('');
   const [showConnect, setShowConnect] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const connectDialogRef = useRef(showConnect); connectDialogRef.current = showConnect;
   const [creatingLocal,setCreatingLocal]=useState(false);
   const [localError,setLocalError]=useState('');
   const localCreation=useRef(false);
@@ -173,7 +175,7 @@ export default function App() {
     if(allTabsRef.current.some(tab=>tab.session===c.session&&tab.busy))return;
     if(!await requestConfirm(tr('연결 프로필과 저장된 SQL 탭을 삭제할까요?','Delete this connection profile and its saved SQL tabs?')))return;
     if(!await confirmDisconnect(c.session))return;
-    try{if(!c.session.startsWith('saved:'))await api.disconnect(c.session);workspace.removeSession(c.session);setConnections(list=>list.filter(item=>item!==c));if(active===c.session)setActive('demo');}catch(e){announce(String(e));}
+    try{if(!c.session.startsWith('saved:'))await api.disconnect(c.session);await api.forgetPassword(c.profile.id);workspace.removeSession(c.session);setConnections(list=>list.filter(item=>item!==c));if(active===c.session)setActive('demo');}catch(e){announce(String(e));}
   }
   async function leaveData(){if(advanced[tab.id]&&tab.busy)return false;if(!dataDirtyRef.current[tab.id])return true;if(!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?')))return false;return true;}
   async function selectConnection(id:string){if(id!==active&&!await leaveData())return;setActive(id);setShowExecutions(false);}
@@ -182,6 +184,7 @@ export default function App() {
     if(!await leaveData())return;
     const old=connections.find(c=>c.profile.id===profile.id);
     if(old&&!old.session.startsWith('saved:')){announce(tr('연결 중인 프로필은 먼저 연결을 끊은 후 수정하세요.','Disconnect before editing an active profile.'));return;}
+    if(!profile.rememberPassword&&old?.profile.rememberPassword)await api.forgetPassword(profile.id);
     const entry={profile:{...profile,password:''},session:'saved:'+profile.id};
     setConnections(list=>old?list.map(c=>c===old?entry:c):[...list,entry]);setActive(entry.session);setShowConnect(false);setEditProfile(undefined);
   }
@@ -209,6 +212,40 @@ export default function App() {
       setConnections(list=>[...list.filter(c=>c.profile.id!==profile.id),{profile:{...profile,password:''},session}]);setActive(session);setShowConnect(false);setEditProfile(undefined);
     }catch(e){await api.disconnect(session).catch(()=>{});throw e;}
   }
+  function passwordForgotten(id:string){
+    setConnections(list=>list.map(c=>c.profile.id===id?{...c,profile:{...c.profile,password:'',rememberPassword:false}}:c));
+  }
+  async function reconnectProfile(profile:Profile){
+    if(reconnecting)return;
+    setReconnecting(true);
+    try{
+      const status=await api.credentialStatus(profile);
+      if(status?.available){const session=await api.connect({...profile,password:''});await acceptConnection(profile,session);}
+      else{setEditProfile(profile);setShowConnect(true);}
+    }catch(e){announce(tr('다시 연결하지 못했습니다. 비밀번호를 확인하세요. ','Could not reconnect. Check your password. ')+String(e));setEditProfile(profile);setShowConnect(true);}
+    finally{setReconnecting(false);}
+  }
+  useEffect(()=>{
+    // Restore only the initially selected saved profile, once per mount. Cleanup
+    // prevents StrictMode or navigation from accepting an obsolete connection.
+    if(!api.desktop||!active.startsWith('saved:')||!connection.profile.rememberPassword||connection.profile.engine==='sqlite')return;
+    let cancelled=false;
+    const profile=connection.profile, savedSession=active;
+    const current=()=>!cancelled&&activeSessionRef.current===savedSession&&!connectDialogRef.current;
+    setReconnecting(true);
+    void (async()=>{
+      try{
+        const status=await api.credentialStatus(profile);
+        if(!current())return;
+        if(!status?.saved)throw new Error(tr('저장된 비밀번호가 없습니다.','No saved password is available.'));
+        const session=await api.connect({...profile,password:''});
+        if(!current()){await api.disconnect(session);return;}
+        await acceptConnection(profile,session);
+      }catch(e){if(current()){announce(tr('자동 연결하지 못했습니다. 비밀번호를 확인하고 다시 연결하세요. ','Automatic connection failed. Check your password and reconnect. ')+String(e));setEditProfile(profile);setShowConnect(true);}}
+      finally{if(!cancelled)setReconnecting(false);}
+    })();
+    return()=>{cancelled=true;};
+  },[]);
   function announce(text: string) { setNotice(text); window.setTimeout(() => setNotice(''), 4500); }
   async function copyText(text: string) {
     try { await navigator.clipboard.writeText(text); announce(t('복사됨')); }
@@ -494,7 +531,7 @@ export default function App() {
         </div>)}
       </div><Button variant="ghost" size="bare" className="tab-add" title={t('새 쿼리')} onClick={() => addQuery()}><Plus size={17}/></Button><Button variant="ghost" size="sm" disabled={!connected || busy} onClick={() => setShowCommonSql(true)}><ScrollText size={14}/>{tr('자주 쓰는 SQL', 'Common SQL')}</Button></div>
       {showCommonSql && <CommonSqlDialog key={active} engine={connection.profile.engine} onClose={() => setShowCommonSql(false)} onSelect={sql => { setShowCommonSql(false); void addQuery(sql); }}/>}
-      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button onClick={()=>{setEditProfile(connection.profile);setShowConnect(true);}}>{tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'erd' ? <Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
+      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button disabled={reconnecting} onClick={()=>void reconnectProfile(connection.profile)}>{reconnecting?tr('연결 중…','Connecting…'):tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'erd' ? <Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
         onBusyChange={value=>workspace.patch(tab.id,{busy:value})}
         canApply={()=>!allTabsRef.current.some(item=>item.session===active&&item.id!==tab.id&&(item.busy||Object.keys(item.draft).length||dataDirtyRef.current[item.id]))}
         onApplied={()=>{for(const item of allTabsRef.current.filter(item=>item.session===active&&item.id!==tab.id)){if(item.kind==='details'||item.kind==='table')workspace.patch(item.id,{loaded:false});if(item.kind==='erd')workspace.patch(item.id,{erd:null});}setCatalogVersion(v=>v+1);refreshTables();}}
@@ -509,8 +546,7 @@ export default function App() {
         {label:t('전체 SQL 복사'),action:()=>void copyText(editorSql),disabled:!editorSql},
         {label:t('새 쿼리'),action:()=>addQuery(),divider:true},
       ])} className="editor-pane" id="query-panel" role="tabpanel" aria-labelledby={`tab-${tab.id}`}>
-        <div className="editor-toolbar"><div><span className="language-badge">SQL</span></div><div><Button variant="default" size="sm" className="run-button" title={tr("선택한 SQL 또는 전체 구문 실행 · Ctrl/Cmd + Enter","Run selected SQL or the editor · Ctrl/Cmd + Enter")} disabled={!connected || busy || !editorSql.trim()} onClick={run}>{busy ? <Loader2 size={14} className="spin"/> : <Play size={14}/>} {t("실행")} </Button></div></div>
-        <QueryTools key={`tools-${tab.id}`} engine={connection.profile.engine} session={active} beforeExecute={async()=>await askDiscard()&&await leaveData()} connectionName={connection.profile.name} historyKey={connection.profile.id} initialFile={tab.file} sql={editorSql} disabled={busy} onSqlChange={setEditorSql} onFileChange={file=>{workspace.markQuery(tab.id);workspace.patch(tab.id,{file,initialSql:file.savedSql});}} onBusyChange={value=>{if(value)pending.current.add(tab.id);else pending.current.delete(tab.id);workspace.patch(tab.id,{busy:value});}} onExecute={text=>api.query(active,text)} onResults={results=>{setScriptResults(previous=>({...previous,[tab.id]:results}));const last=results.at(-1);workspace.markQuery(tab.id);if(last?.result)workspace.patch(tab.id,{result:last.result,source:'query',draft:{},queryTable:null,lastQuery:last.sql,error:''});if(last?.error)workspace.patch(tab.id,{error:last.error});}}/>
+        <QueryTools primaryAction={<Button variant="default" size="sm" className="run-button" title={tr("선택한 SQL 또는 전체 구문 실행 · Ctrl/Cmd + Enter","Run selected SQL or the editor · Ctrl/Cmd + Enter")} disabled={!connected || busy || !editorSql.trim()} onClick={run}>{busy ? <Loader2 size={14} className="spin"/> : <Play size={14}/>} {t("실행")} </Button>} key={`tools-${tab.id}`} engine={connection.profile.engine} session={active} beforeExecute={async()=>await askDiscard()&&await leaveData()} connectionName={connection.profile.name} historyKey={connection.profile.id} initialFile={tab.file} sql={editorSql} disabled={busy} onSqlChange={setEditorSql} onFileChange={file=>{workspace.markQuery(tab.id);workspace.patch(tab.id,{file,initialSql:file.savedSql});}} onBusyChange={value=>{if(value)pending.current.add(tab.id);else pending.current.delete(tab.id);workspace.patch(tab.id,{busy:value});}} onExecute={text=>api.query(active,text)} onResults={results=>{setScriptResults(previous=>({...previous,[tab.id]:results}));const last=results.at(-1);workspace.markQuery(tab.id);if(last?.result)workspace.patch(tab.id,{result:last.result,source:'query',draft:{},queryTable:null,lastQuery:last.sql,error:''});if(last?.error)workspace.patch(tab.id,{error:last.error});}}/>
         <CodeMirror key={tab.id} value={editorSql} height="184px" theme={theme === 'dark' ? oneDark : 'light'} editable={!busy} extensions={[sqlLanguage({dialect: connection.profile.engine === 'sqlite'?SQLite:connection.profile.engine === 'postgres' ? PostgreSQL : MySQL, schema: completionSchema})]} onChange={setEditorSql} onCreateEditor={view => { const saved = editorStates.current.get(tab.id); if (saved && saved.doc.toString() === editorSql) { view.setState(saved); editorSelection.current = saved.sliceDoc(saved.selection.main.from, saved.selection.main.to); } }} onUpdate={u => { editorStates.current.set(tab.id, u.state); editorSelection.current = u.state.sliceDoc(u.state.selection.main.from, u.state.selection.main.to); }} basicSetup={{lineNumbers: true, foldGutter:false, highlightActiveLine:true, autocompletion:true}}/>
       </section>
       {selected&&source==='table'&&<div className="data-tool-switch"><Button variant="outline" size="sm" onClick={async()=>{if((dataDirty[tab.id]||edits.length)&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?')))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:!previous[tab.id]}));}}>{advanced[tab.id]?tr('간단한 보기','Simple view'):tr('데이터 도구','Data tools')}</Button><span>{advanced[tab.id]?tr('필터 · 페이징 · 행 편집 · 가져오기 · 내보내기','Filter · paging · row editing · import · export'):''}</span></div>}
@@ -558,10 +594,10 @@ export default function App() {
     {showMaintenance&&<MaintenanceDialog session={active} engine={connection.profile.engine} profile={connection.profile} onClose={()=>setShowMaintenance(false)} onRestored={()=>{setCatalogVersion(v=>v+1);refreshTables();}}/>}
     {contextMenu && <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)}/> }
     {notice && <div role="status" className="toast"><Check size={16}/>{notice}</div>}
-    {showConnect && <ConnectionDialog initialProfile={editProfile} onClose={() => {setShowConnect(false);setEditProfile(undefined);}} onSave={saveProfile} onConnected={acceptConnection}/>}
+    {showConnect && <ConnectionDialog initialProfile={editProfile} onClose={() => {setShowConnect(false);setEditProfile(undefined);}} onSave={saveProfile} saveDisabled={!!editProfile&&connections.some(c=>c.profile.id===editProfile.id&&!c.session.startsWith('saved:'))} onPasswordForgotten={passwordForgotten} onConnected={acceptConnection}/>}
     {editing && <ModalSurface title={t("셀 편집")} onClose={() => setEditing(null)} locked={false}><div className="modal cell-modal" role="dialog" aria-modal="true" aria-label={t("셀 편집")}><div className="modal-heading"><h2> {t("셀 편집")} </h2><Button variant="ghost" size="bare" onClick={() => setEditing(null)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{selected?.name} / <strong>{editing.col}</strong> {t("· 행")} {editing.index + 1}</p><Textarea aria-label={t("셀 값")} autoFocus value={editing.value} disabled={editing.isNull} onChange={e => setEditing({...editing,value:e.target.value})}/><label className="checkbox-label"><Input type="checkbox" checked={editing.isNull} onChange={e => setEditing({...editing,isNull:e.target.checked})}/> {t("NULL로 설정")} </label><div className="modal-actions"><Button variant="outline" size="sm" className="secondary-button" onClick={() => setEditing(null)}> {t("취소")} </Button><Button variant="default" size="sm" className="primary-button" onClick={() => {setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value}));setEditing(null);}}> {t("변경 대기열에 추가")} </Button></div></div></ModalSurface>}
     {showReview && <ModalSurface title={t("변경 사항 검토")} onClose={() => setShowReview(false)} locked={busy}><div className="modal review-modal" role="dialog" aria-modal="true" aria-label={t("변경 사항 검토")}><div className="modal-heading"><h2> {t("변경 사항 검토")} </h2><Button variant="ghost" size="bare" disabled={busy} onClick={() => setShowReview(false)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{t('검토 설명', {table: `${selected?.schema}.${selected?.name}`, count: edits.length})} {active === 'demo' ? t("데모 데이터에만 반영됩니다.") : t("모든 변경을 하나의 트랜잭션으로 적용합니다.")}</p><div className="review-list">{edits.map((edit,i) => <div className="review-row" key={i}><small>{result.columns.filter(c => c.primary).map(c => `${c.name} = ${edit.original[c.name]}`).join(', ')}</small>{Object.entries(edit.changes).map(([col,val]) => <div key={col}><strong>{col}</strong><del>{edit.original[col] ?? 'NULL'}</del><ArrowRight size={14}/><ins>{val ?? 'NULL'}</ins></div>)}</div>)}</div>{error && <p className="dialog-error">{error}</p>}<div className="modal-actions"><Button variant="outline" size="sm" disabled={busy} className="secondary-button" onClick={() => setShowReview(false)}> {t("돌아가기")} </Button><Button variant="default" size="sm" disabled={busy} className="primary-button" onClick={() => void applyChanges()}>{busy ? t("적용 중...") : t('행 적용', {count: edits.length})}</Button></div></div></ModalSurface>}
     {showSettings && <SettingsDialog theme={theme} onThemeChange={next => { saveTheme(next); setTheme(next); }} sidebarOpen={sidebarOpen} onSidebarChange={setSidebarOpen} onClose={() => setShowSettings(false)}/> }
-    {showHelp && <ModalSurface title={t("도움말")} onClose={() => setShowHelp(false)} locked={false}><div className="modal" role="dialog" aria-modal="true" aria-label={t("도움말")}><div className="modal-heading"><h2> {t("도움말")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHelp(false)} aria-label={t("닫기")}><X size={20}/></Button></div><div className="help-content"><p><kbd>Ctrl + Enter</kbd> {t("선택한 구문 또는 편집기의 SQL 실행")} </p><p><strong> {t("결과 편집")} </strong> {t("테이블 보기에서 셀 더블클릭 → 변경 검토 → 적용. 기본키와 생성 열은 수정할 수 없습니다.")} </p><p><strong> {t("연결")} </strong> {tr("PostgreSQL·MySQL·MariaDB·SQLite에 연결합니다. 프로필과 SQL 탭은 저장되며 비밀번호는 저장하지 않습니다.","Connect to PostgreSQL, MySQL, MariaDB or SQLite. Profiles and SQL tabs are saved; passwords are not.")} </p><p><strong> {t("쿼리 실행")} </strong> {tr("스크립트 실행·매개변수·수동 커밋을 지원합니다. 테이블의 데이터 도구에서 페이징과 가져오기·내보내기를 사용할 수 있습니다.","Scripts, parameters and manual commit are available. Open Data tools for paging, import and export.")} </p></div><Button variant="default" size="sm" className="primary-button full" onClick={() => setShowHelp(false)}> {t("확인")} </Button></div></ModalSurface>}
+    {showHelp && <ModalSurface title={t("도움말")} onClose={() => setShowHelp(false)} locked={false}><div className="modal" role="dialog" aria-modal="true" aria-label={t("도움말")}><div className="modal-heading"><h2> {t("도움말")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHelp(false)} aria-label={t("닫기")}><X size={20}/></Button></div><div className="help-content"><p><kbd>Ctrl + Enter</kbd> {t("선택한 구문 또는 편집기의 SQL 실행")} </p><p><strong> {t("결과 편집")} </strong> {t("테이블 보기에서 셀 더블클릭 → 변경 검토 → 적용. 기본키와 생성 열은 수정할 수 없습니다.")} </p><p><strong> {t("연결")} </strong> {tr("PostgreSQL·MySQL·MariaDB·SQLite에 연결합니다. 프로필과 SQL 탭을 저장합니다. 비밀번호는 선택 시 Windows 자격 증명 관리자에 암호화하여 저장하며, 다음 실행 시 마지막 연결에 자동 접속합니다.","Connect to PostgreSQL, MySQL, MariaDB or SQLite. Profiles and SQL tabs are saved. Passwords can be encrypted in Windows Credential Manager to reconnect to the last connection on startup.")} </p><p><strong> {t("쿼리 실행")} </strong> {tr("스크립트 실행·매개변수·수동 커밋을 지원합니다. 테이블의 데이터 도구에서 페이징과 가져오기·내보내기를 사용할 수 있습니다.","Scripts, parameters and manual commit are available. Open Data tools for paging, import and export.")} </p></div><Button variant="default" size="sm" className="primary-button full" onClick={() => setShowHelp(false)}> {t("확인")} </Button></div></ModalSurface>}
   </div>;
 }

@@ -2,6 +2,7 @@
 
 use tauri::Manager;
 mod journal;
+mod credentials;
 mod local_database;
 mod aws;
 mod data;
@@ -54,6 +55,8 @@ fn main() {
             maintenance::maintenance_backup,
             maintenance::maintenance_restore,
             db::connect_db,
+            db::credential_status,
+            db::forget_password,
             db::disconnect_db,
             db::list_tables,
             db::read_table,

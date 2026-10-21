@@ -7,7 +7,7 @@ export type TableInfo = Table & { owner?: string | null; engine?: string | null;
 export type SchemaInfo = { info: { name: string; owner?: string | null; charset?: string | null; collation?: string | null; comment?: string; version?: string }; tables: TableInfo[] };
 export type TableObjects = { indexes: { name: string; definition: string }[]; constraints: { name: string; definition: string }[] };
 export type Result = { columns: Column[]; rows: Row[]; elapsedMs: number; affected: number; truncated: boolean };
-export type Profile = { id: string; name: string; engine: Engine; host: string; port: number; database: string; username: string; password: string; tls: boolean; group?: string; environment?: 'development' | 'staging' | 'production'; readOnly?: boolean };
+export type Profile = { id: string; name: string; engine: Engine; host: string; port: number; database: string; username: string; password: string; tls: boolean; group?: string; environment?: 'development' | 'staging' | 'production'; readOnly?: boolean; rememberPassword?: boolean };
 export type Edit = { original: Row; changes: Row };
 export function collectEdits(rows: Row[], draft: Record<string, string | null>): Edit[] {
   return rows.flatMap((original, index) => {

@@ -15,6 +15,7 @@ export function safeProfile(value: unknown): Profile | null {
     environment: ['development','staging','production'].includes(String(p.environment))
       ? p.environment as Profile['environment'] : 'development',
     readOnly: p.readOnly === true,
+    rememberPassword: p.engine !== 'sqlite' && p.rememberPassword === true,
   };
 }
 export function readProfiles(): Profile[] {

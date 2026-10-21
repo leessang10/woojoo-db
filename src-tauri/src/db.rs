@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
+use zeroize::Zeroize;
 
 pub(crate) type Row = Map<String, Value>;
 pub(crate) type DbResult<T> = Result<T, String>;
@@ -23,6 +24,7 @@ pub(crate) enum Pool {
 }
 #[derive(Default)]
 pub struct State {
+    credentials: Mutex<crate::credentials::Store>,
     pub(crate) journal_contexts: Mutex<HashMap<String, crate::journal::Context>>,
     pools: Mutex<HashMap<String, Pool>>,
     identities: Mutex<HashMap<String, (String, String, u16, String, String, bool)>>,
@@ -43,6 +45,19 @@ pub struct Profile {
     tls: bool,
     #[serde(default, rename = "readOnly")]
     read_only: bool,
+    #[serde(default, rename = "rememberPassword")]
+    remember_password: bool,
+}
+impl Profile {
+    fn credential_identity(&self) -> crate::credentials::Identity {
+        crate::credentials::Identity {
+            engine: self.engine.clone(), host: self.host.clone(), port: self.port,
+            database: self.database.clone(), username: self.username.clone(), tls: self.tls,
+        }
+    }
+}
+impl Drop for Profile {
+    fn drop(&mut self) { self.password.zeroize(); }
 }
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Table {
@@ -127,7 +142,15 @@ pub(crate) fn qualified(table: &Table, pg: bool) -> String {
 pub async fn connect_db(state: tauri::State<'_, State>, profile: Profile) -> DbResult<String> {
     connect(&state, profile).await
 }
-async fn connect(state: &State, profile: Profile) -> DbResult<String> {
+#[tauri::command]
+pub async fn credential_status(state: tauri::State<'_, State>, profile: Profile) -> DbResult<crate::credentials::Status> {
+    state.credentials.lock().await.status(&profile.id, &profile.credential_identity())
+}
+#[tauri::command]
+pub async fn forget_password(state: tauri::State<'_, State>, profile_id: String) -> DbResult<()> {
+    state.credentials.lock().await.forget(&profile_id)
+}
+async fn connect(state: &State, mut profile: Profile) -> DbResult<String> {
     if profile.database.trim().is_empty() {
         return Err("데이터베이스 또는 SQLite 파일 경로를 입력하세요.".into());
     }
@@ -139,6 +162,15 @@ async fn connect(state: &State, profile: Profile) -> DbResult<String> {
     {
         return Err("호스트, 데이터베이스, 사용자 및 포트를 확인하세요.".into());
     }
+    let revision = if profile.engine != "sqlite" {
+        let credentials = state.credentials.lock().await;
+        if profile.password.is_empty() {
+            if let Some(password) = credentials.resolve(&profile.id, &profile.credential_identity())? {
+                profile.password = password;
+            }
+        }
+        credentials.revision(&profile.id)
+    } else { 0 };
     let result = tokio::time::timeout(Duration::from_secs(12), async {
         match profile.engine.as_str() {
             "postgres" => {
@@ -209,6 +241,15 @@ async fn connect(state: &State, profile: Profile) -> DbResult<String> {
     .map_err(|_| "연결 제한 시간(12초)을 초과했습니다.".to_string())??;
     let id = uuid::Uuid::new_v4().to_string();
     let session = crate::sessions::Session::new(&result, profile.read_only).await?;
+    if profile.engine != "sqlite" {
+        if let Err(e) = state.credentials.lock().await.remember(
+            &profile.id, profile.credential_identity(), &profile.password, profile.remember_password, revision,
+        ) {
+            drop(session);
+            match &result { Pool::Pg(p) => p.close().await, Pool::My(p) => p.close().await, Pool::Sqlite(p) => p.close().await }
+            return Err(format!("비밀번호 저장 설정을 적용하지 못했습니다. 연결을 닫았습니다: {e}"));
+        }
+    }
     state
         .sessions
         .lock()
@@ -862,6 +903,7 @@ mod integration_tests {
                     password: "woojoo-local-test".into(),
                     tls: false,
                     read_only: false,
+                    remember_password: false,
                 },
             )
             .await
@@ -1001,6 +1043,7 @@ mod sqlite_tests {
             password: "".into(),
             tls: false,
             read_only,
+            remember_password: false,
         };
         let id = connect(&state, profile(false)).await.unwrap();
         crate::sessions::execute(
@@ -1103,6 +1146,34 @@ pub(crate) async fn validate_connection_profile(
 #[cfg(test)]
 mod rds_tls_tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires an authorized RDS Profile JSON on stdin and Windows Credential Manager"]
+    async fn remembered_password_survives_new_state() {
+        let mut input: Value = serde_json::from_reader(std::io::stdin()).expect("Profile JSON on stdin");
+        input["id"] = Value::String(format!("credential-smoke-{}", uuid::Uuid::new_v4()));
+        input["rememberPassword"] = Value::Bool(true);
+        struct Cleanup(String);
+        impl Drop for Cleanup {
+            fn drop(&mut self) { let _ = crate::credentials::Store::default().forget(&self.0); }
+        }
+        let _cleanup = Cleanup(input["id"].as_str().unwrap().into());
+        let first = State::default();
+        let profile: Profile = serde_json::from_value(input.clone()).unwrap();
+        assert!(profile.read_only && profile.tls);
+        let id = connect(&first, profile).await.expect("initial authenticated connection");
+        first.sessions.lock().await.clear();
+        if let Pool::My(p) = pool(&first, &id).await.unwrap() { p.close().await; }
+        drop(first);
+        input["password"] = Value::String(String::new());
+        let restarted = State::default();
+        let id = connect(&restarted, serde_json::from_value(input).unwrap())
+            .await.expect("reconnect without entering a password after restart");
+        let result = crate::sessions::execute(&restarted, &id, "SELECT 1 AS ok".into()).await.unwrap();
+        assert_eq!(result.rows[0]["ok"], "1");
+        restarted.sessions.lock().await.clear();
+        if let Pool::My(p) = pool(&restarted, &id).await.unwrap() { p.close().await; }
+    }
 
     #[test]
     fn rds_bundle_is_scoped_to_tls_and_commercial_rds_hosts() {

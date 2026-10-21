@@ -52,6 +52,7 @@ To update, close the app and replace the executable. Profiles and local data are
 - **SQLite file:** Choose `Add connection → SQLite` to select or create a file.
 - **First connection:** With no connections, choose the local SQLite creation action. It creates empty `user` and `board` tables with a one-to-many relationship through `board.user_id → user.id`. Existing files are reused without resetting them.
 - **AWS RDS:** Authenticate with your local AWS CLI first, then choose `Add connection → AWS RDS` and select a profile, region, and instance. You still need database credentials and network access to private instances.
+- **Remember passwords:** Select `Remember password on this PC` to save a password after successful authentication and automatically reconnect to the last connection on startup. `Delete saved password` removes it. Changes to host, port, user, database, engine, or TLS settings require entering the password again.
 - **RDS TLS:** RDS hosts in commercial AWS regions automatically use the official CA bundle embedded in the app, including direct connections. Keep TLS and server certificate verification enabled. See the [CA notes](src-tauri/certs/README.md) for certificate updates and connection verification.
 
 Right-click a connection to edit or delete its profile, disconnect, or access backup and restore. Deleting a profile does not delete its SQLite file.
@@ -97,7 +98,7 @@ Change the language in the top bar. Theme and settings controls are at the botto
 
 ## Local storage and limitations
 
-- Connection passwords and result rows are not persisted. Profiles, connection addresses, SQL files/tabs, executed SQL, and errors are stored locally. **Literal values written into SQL are included in execution logs.**
+- Connection passwords can be encrypted in Windows Credential Manager and are never included in profile files. Without this opt-in, passwords are remembered only until the app exits. Result rows are not persisted. Profiles, connection addresses, SQL files/tabs, executed SQL, and errors are stored locally. **Literal values written into SQL are included in execution logs.**
 - Execution logs are not automatically deleted. The journal records editor/script execution, EXPLAIN, object SQL, explicit transaction completion, and structure changes; it does not collect every internal grid or metadata query. Logging started with this feature and does not reconstruct older history.
 - Basic table reads and free-form SQL results are capped at **500 rows**. Use data tools for larger tables. CSV imports are limited to 10,000 rows and table data copies to 100,000 rows.
 - Editing requires row identity such as a primary key. Join results are read-only. MySQL/MariaDB DDL can implicitly commit changes.
