@@ -304,3 +304,18 @@
 @media(max-width:600px){.aws-selection-fields{grid-template-columns:1fr;gap:16px;}}
 .aws-instance-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .aws-instance-heading h3{margin:0;}
+.schema-picker-actions{display:flex;gap:8px;margin:16px 0;}
+.schema-picker-list{max-height:45vh;overflow:auto;display:flex;flex-direction:column;gap:4px;}
+.schema-picker-list .checkbox-label{padding:10px;border:1px solid var(--line);border-radius:6px;gap:10px;}
+.schema-picker-list small{margin-left:auto;color:var(--muted-foreground);}
+.schema-picker-list input{width:16px;height:16px;}
+
+.sidebar-section-actions{display:flex;align-items:center;gap:4px;margin-left:auto;}
+
+.compact-object-page .object-heading{padding:12px 24px;}
+.compact-object-page .object-title{margin:0;min-height:32px;}
+.compact-object-page .object-title h1{font-size:18px;line-height:24px;}
+.compact-object-page .object-title>div>svg{width:20px;height:20px;}
+.compact-object-page .object-table-scroll>.object-properties{margin:0;padding:20px 0;}
+
+.compact-object-page .object-table-scroll>.object-path{margin:20px 0 0;}

@@ -130,3 +130,8 @@ export async function save(id: string, table: Table, edits: Edit[]) {
   }
   return invoke<number>('apply_edits', { id, table, edits });
 }
+
+export async function schemas(id:string):Promise<string[]> {
+  if(id==='demo')return ['public'];
+  return invoke('list_schemas',{id});
+}

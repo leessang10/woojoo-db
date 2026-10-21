@@ -74,6 +74,14 @@ export default function App() {
   const [scriptResults,setScriptResults]=useState<Record<string,ScriptResult[]>>({});
   const [catalogVersion, setCatalogVersion] = useState(0);
   const [completionSchema,setCompletionSchema]=useState<Record<string,string[]>>({});
+  const [schemaCatalog,setSchemaCatalog]=useState<string[]>([]);
+  const [schemaError,setSchemaError]=useState('');
+  const [schemaLoading,setSchemaLoading]=useState(false);
+  const [showSchemas,setShowSchemas]=useState(false);
+  const [schemaFilters,setSchemaFilters]=useState<Record<string,string[]>>(()=>{try{const value=JSON.parse(localStorage.getItem('woojoo-schema-filters-v1')??'{}');return Object.fromEntries(Object.entries(value).filter((entry):entry is [string,string[]]=>Array.isArray(entry[1])&&entry[1].every(x=>typeof x==='string')));}catch{return {};}});
+  useEffect(()=>{try{localStorage.setItem('woojoo-schema-filters-v1',JSON.stringify(schemaFilters));}catch{/* Keep session preferences. */}},[schemaFilters]);
+  useEffect(()=>{setShowSchemas(false);},[active]);
+  useEffect(()=>{let cancelled=false;setSchemaCatalog([]);setSchemaError('');if(!connected){setSchemaLoading(false);return;}setSchemaLoading(true);api.schemas(active).then(value=>{if(!cancelled)setSchemaCatalog(value);}).catch(e=>{if(!cancelled)setSchemaError(String(e));}).finally(()=>{if(!cancelled)setSchemaLoading(false);});return()=>{cancelled=true;};},[active,connected,catalogVersion]);
   const [tableList, setTableList] = useState<Table[]>([]);
   const [selected, setSelected] = workspace.field('selected');
   const [editorSql, setEditorSql] = workspace.field('editorSql');
@@ -130,9 +138,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem('woojoo-sidebar') !== 'closed'; } catch { return true; } });
   function toggleSidebar() { setSidebarOpen(open => !open); }
   useEffect(() => { try { localStorage.setItem('woojoo-sidebar', sidebarOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [sidebarOpen]);
-  const [databaseOpen, setDatabaseOpen] = useState(true);
+
   const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
-  const hasDialog = !!renaming || confirming || showMaintenance || showConnect || showReview || showHelp || showSettings || showCommonSql || !!editing;
+  const hasDialog = showSchemas || !!renaming || confirming || showMaintenance || showConnect || showReview || showHelp || showSettings || showCommonSql || !!editing;
   useEffect(() => { setShowCommonSql(false); }, [active]);
   useEffect(() => { setContextMenu(null); }, [tab.id, active, busy, result, language, hasDialog]);
   function menuFor(items: MenuItem[] | (() => MenuItem[])) {
@@ -390,7 +398,7 @@ export default function App() {
   }
   useEffect(() => {
     const token = ++op.current;
-    setDatabaseOpen(true); setCollapsedSchemas(new Set()); setSearch('');
+    setCollapsedSchemas(new Set()); setSearch('');
     editorSelection.current = '';
     if(!connected){setTableList([]);setBusy(false);return;}
     busyRef.current = true; setBusy(true);
@@ -497,8 +505,11 @@ export default function App() {
   const start = Math.max(0, Math.floor(scroll / 39) - 6);
   const visible = filtered.slice(start, start + 40);
   useEffect(()=>{let cancelled=false;setCompletionSchema({});if(!connected)return;let cursor=0;const fields:Record<string,string[]>={};const worker=async()=>{while(!cancelled&&cursor<tableList.length){const table=tableList[cursor++];try{const cols=await api.describeTable(active,table);if(cancelled)return;fields[table.schema+'.'+table.name]=cols.map(c=>c.name);if(tableList.filter(t=>t.name===table.name).length===1)fields[table.name]=cols.map(c=>c.name);setCompletionSchema({...fields});}catch{/* A metadata failure must not prevent SQL editing. */}}};void Promise.all(Array.from({length:Math.min(3,tableList.length)},worker));return()=>{cancelled=true;};},[active,tableList,catalogVersion]);
-  const visibleTables = tableList.filter(t => `${t.schema}.${t.name}`.toLowerCase().includes(search.toLowerCase()));
-  const schemas = [...new Set(visibleTables.map(t => t.schema))];
+  const allSchemas = [...new Set([...schemaCatalog,...tableList.map(t=>t.schema)])].sort();
+  const chosenSchemas = schemaFilters[connection.profile.id];
+  const shownTables = tableList.filter(t=>!chosenSchemas||chosenSchemas.includes(t.schema));
+  const visibleTables = shownTables.filter(t => `${t.schema}.${t.name}`.toLowerCase().includes(search.toLowerCase()));
+  const schemas = allSchemas.filter(schema=>(!chosenSchemas||chosenSchemas.includes(schema))&&(!search||schema.toLowerCase().includes(search.toLowerCase())||visibleTables.some(t=>t.schema===schema)));
   const selectableConnections = connections.filter(c=>fixtureMode||c.session!=='demo').sort((a,b)=>(a.profile.group??'').localeCompare(b.profile.group??'')||a.profile.name.localeCompare(b.profile.name));
   const currentConnection = selectableConnections.find(c=>c.session===active);
   return <div className="app">
@@ -524,18 +535,17 @@ export default function App() {
         <span className="connection-name"><span className="connection-title" title={c.profile.name}>{c.profile.name}</span>{(c.profile.group||c.profile.environment||c.profile.readOnly)&&<small>{[c.profile.group,c.profile.environment,c.profile.readOnly?'RO':null].filter(Boolean).join(' · ')}</small>}<small>{c.profile.engine === 'sqlite' ? 'SQLite' : c.profile.engine === 'postgres' ? 'PostgreSQL' : c.profile.engine === 'mariadb' ? 'MariaDB' : 'MySQL'} {c.profile.engine!=='sqlite'&&<span>· {c.session === 'demo' ? 'Demo' : c.profile.host}</span>}</small></span><span className={`live-dot ${c.session.startsWith('saved:')?'offline':''}`} data-environment={c.session.startsWith('saved:')?undefined:c.profile.environment}/>
       <ChevronDown size={14}/></Button>;})() : <Button variant="ghost" size="bare" className="connection connection-placeholder" aria-label={tr('연결 전환','Switch connection')}><Database size={18}/><span>{t('연결 선택')}</span><ChevronDown size={14}/></Button>}</ConnectionSwitcher>}</div>
       {!emptyWorkspace&&<><Separator className="divider"/>
-      <div className="section-label"> {t("테이블")} <Button variant="ghost" size="bare" title={t("목록 새로고침")} disabled={busy} onClick={() => void perform(async () => { const list = await api.tables(active); if (activeSessionRef.current === active) setTableList(list); })}><RefreshCw size={14}/></Button></div>
+      <div className="section-label"><span>{tr("스키마 · 테이블","Schemas · tables")}</span><div className="sidebar-section-actions"><Button variant="ghost" size="bare" title={tr("스키마 선택","Select schemas")} aria-label={tr("스키마 선택","Select schemas")} onClick={()=>setShowSchemas(true)}><Filter size={14}/></Button><Button variant="ghost" size="bare" title={t("목록 새로고침")} disabled={busy} onClick={() => void perform(async () => { const list = await api.tables(active); if (activeSessionRef.current === active) setTableList(list); })}><RefreshCw size={14}/></Button></div></div>
       <label className="search-field"><Search size={14}/><Input aria-label={t("테이블 검색")} placeholder={t("테이블 검색")} value={search} onChange={e => setSearch(e.target.value)}/></label>
       <div className="tree">
-        <Button variant="ghost" size="bare" className="tree-db" aria-expanded={databaseOpen || !!search} onClick={() => {setSearch('');setDatabaseOpen(v => !v);}}>{databaseOpen || search ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}<Database size={15}/><span>{connection.profile.database}</span><span className="count">{tableList.length}</span></Button>
-        {(databaseOpen || !!search) && schemas.map(schema => <div key={schema}><div className="schema-tree-row"><Button variant="ghost" size="bare" className="schema-expander icon-button" aria-label={t('스키마 펼치기/접기') + ': ' + schema} aria-expanded={!collapsedSchemas.has(schema) || !!search} onClick={() => {setSearch('');setCollapsedSchemas(previous => {const next=new Set(previous);if(next.has(schema))next.delete(schema);else next.add(schema);return next;});}}>{!collapsedSchemas.has(schema)||search?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</Button><Button variant="ghost" size="bare" className="tree-schema" {...menuFor([{label:t("스키마 상세"),action:()=>openSchema(schema)},{label:t("ERD 열기"),action:()=>openErd(schema)},{label:t("이름 복사"),action:()=>void copyText(schema)},{label:t("목록 새로고침"),action:refreshTables,disabled:busy}])} onClick={() => openSchema(schema)}><Layers3 size={14}/>{schema}</Button><Button variant="ghost" size="bare" className="schema-open icon-button" aria-label={t("스키마 상세 이름", {name:schema})} title={t("스키마 상세")} onClick={() => openSchema(schema)}><ArrowRight size={13}/></Button></div>
+        {schemas.map(schema => <div key={schema}><div className="schema-tree-row"><Button variant="ghost" size="bare" className="schema-expander icon-button" aria-label={t('스키마 펼치기/접기') + ': ' + schema} aria-expanded={!collapsedSchemas.has(schema) || !!search} onClick={() => {setSearch('');setCollapsedSchemas(previous => {const next=new Set(previous);if(next.has(schema))next.delete(schema);else next.add(schema);return next;});}}>{!collapsedSchemas.has(schema)||search?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</Button><Button variant="ghost" size="bare" className="tree-schema" {...menuFor([{label:t("스키마 상세"),action:()=>openSchema(schema)},{label:t("ERD 열기"),action:()=>openErd(schema)},{label:t("이름 복사"),action:()=>void copyText(schema)},{label:t("목록 새로고침"),action:refreshTables,disabled:busy}])} onClick={() => openSchema(schema)}><Layers3 size={14}/>{schema}</Button><Button variant="ghost" size="bare" className="schema-open icon-button" aria-label={t("스키마 상세 이름", {name:schema})} title={t("스키마 상세")} onClick={() => openSchema(schema)}><ArrowRight size={13}/></Button></div>
           {(!collapsedSchemas.has(schema) || !!search) && visibleTables.filter(t => t.schema === schema).map(t => <Button variant="ghost" size="bare" key={`${t.schema}.${t.name}`} {...menuFor(tableMenu(t))} disabled={busy} className={`tree-table ${selected?.name === t.name && selected.schema === t.schema ? 'active' : ''}`} onClick={() => void openDetails(t)}><Table2 size={14}/><span>{t.name}</span>{selected?.name === t.name && <span className="table-dot"/>}</Button>)}
         </div>)}
         {!visibleTables.length && <p className="empty-tree"> {t("표시할 테이블이 없습니다.")} </p>}
       </div></>}
     </aside>}
     <main className="main">
-      <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" className="icon-button sidebar-toggle" aria-label={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기')} title={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기') + ' · Ctrl/Cmd+B'} aria-expanded={sidebarOpen} aria-controls="database-sidebar" onClick={toggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>{!emptyWorkspace&&<><Database size={14}/><span>{connection.profile.database}</span><ChevronRight size={13}/><strong>{tab.kind === 'schema' || tab.kind === 'erd' ? tab.objectSchema : selected?.schema ?? 'SQL'}</strong></>}</div><div className="topbar-right"><NativeSelect size="sm" className="language-select" aria-label="언어 / Language" value={language} onChange={event => setLanguage(event.target.value as 'ko' | 'en')}><NativeSelectOption value="ko">한국어</NativeSelectOption><NativeSelectOption value="en">English</NativeSelectOption></NativeSelect>{!emptyWorkspace&&<Badge variant="secondary" className="mode-tag" title={active === 'demo' ? t("샘플 데이터 · 앱을 다시 열면 초기화됩니다") : connection.profile.tls ? t("TLS 인증서 검증 사용") : t("TLS 사용 안 함")}>{active === 'demo' ? t("데모") : !connected?tr('연결 끊김','Disconnected'):t("연결됨")}</Badge>}<Button variant="ghost" size="bare" className="subtle-button" onClick={() => setShowConnect(true)}><Plus size={14}/> {t("연결 추가")} </Button></div></header>
+      <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" className="icon-button sidebar-toggle" aria-label={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기')} title={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기') + ' · Ctrl/Cmd+B'} aria-expanded={sidebarOpen} aria-controls="database-sidebar" onClick={toggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>{!emptyWorkspace&&<><Database size={14}/><span>{connection.profile.database||connection.profile.host||connection.profile.name}</span><ChevronRight size={13}/><strong>{tab.kind === 'schema' || tab.kind === 'erd' ? tab.objectSchema : selected?.schema ?? 'SQL'}</strong></>}</div><div className="topbar-right"><NativeSelect size="sm" className="language-select" aria-label="언어 / Language" value={language} onChange={event => setLanguage(event.target.value as 'ko' | 'en')}><NativeSelectOption value="ko">한국어</NativeSelectOption><NativeSelectOption value="en">English</NativeSelectOption></NativeSelect>{!emptyWorkspace&&<Badge variant="secondary" className="mode-tag" title={active === 'demo' ? t("샘플 데이터 · 앱을 다시 열면 초기화됩니다") : connection.profile.tls ? t("TLS 인증서 검증 사용") : t("TLS 사용 안 함")}>{active === 'demo' ? t("데모") : !connected?tr('연결 끊김','Disconnected'):t("연결됨")}</Badge>}<Button variant="ghost" size="bare" className="subtle-button" onClick={() => setShowConnect(true)}><Plus size={14}/> {t("연결 추가")} </Button></div></header>
       {showExecutions&&<ExecutionsPage onClose={()=>setShowExecutions(false)} onOpen={openExecution} profileIds={connections.filter(c=>c.session!=="demo").map(c=>c.profile.id)}/>}
       <div style={{display:showExecutions?"none":"contents"}}>
       {emptyWorkspace?<div className="workspace-empty"><Database size={28}/><h1>{tr("첫 데이터베이스를 연결하세요","Connect your first database")}</h1>{!api.desktop&&<p className="connection-availability">{tr("실제 DB 연결은 데스크톱 앱에서 사용할 수 있습니다.","Use the desktop app to connect to a database.")}</p>}<div className="empty-connection-actions">{!connections.some(c=>c.session!=='demo')&&<Button size="sm" disabled={creatingLocal||!api.desktop} title={!api.desktop?tr('데스크톱 앱에서 사용할 수 있습니다.','Available in the desktop app.'):undefined} onClick={()=>void createLocalDatabase()}>{creatingLocal?<Loader2 size={14} className="spin"/>:<Database size={14}/>} {tr('로컬 SQLite 만들기','Create local SQLite')}</Button>}<Button variant="outline" size="sm" disabled={creatingLocal} onClick={()=>{setEditProfile(undefined);setShowConnect(true);}}><Plus size={14}/>{t("새 연결")}</Button></div>{localError&&<p className="local-connection-error" role="alert">{localError}</p>}</div>:<>
@@ -609,6 +619,14 @@ export default function App() {
       </>}
       </div>
     </main>
+    {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
+      <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>
+      <p className="modal-description">{tr('체크한 스키마만 사이드바에 표시합니다. 열린 탭에는 영향을 주지 않습니다.','Only checked schemas appear in the sidebar. Open tabs are preserved.')}</p>
+      <div className="schema-picker-actions"><Button variant="outline" size="sm" onClick={()=>setSchemaFilters(prev=>{const next={...prev};delete next[connection.profile.id];return next;})}>{tr('전체 선택','Select all')}</Button><Button variant="outline" size="sm" onClick={()=>setSchemaFilters(prev=>({...prev,[connection.profile.id]:[]}))}>{tr('전체 해제','Clear all')}</Button><Button variant="outline" size="sm" onClick={()=>setCatalogVersion(v=>v+1)}>{t('새로고침')}</Button></div>
+      {schemaLoading&&<p role="status">{tr('스키마 조회 중…','Loading schemas…')}</p>}{schemaError&&<p role="alert" className="dialog-error">{schemaError}</p>}
+      <div className="schema-picker-list">{allSchemas.map(schema=><label className="checkbox-label" key={schema}><input type="checkbox" checked={!chosenSchemas||chosenSchemas.includes(schema)} onChange={event=>{const checked=event.target.checked;setSchemaFilters(prev=>{const current=prev[connection.profile.id]??allSchemas;return {...prev,[connection.profile.id]:checked?[...new Set([...current,schema])]:current.filter(value=>value!==schema)};});}}/><span>{schema}</span><small>{tableList.filter(t=>t.schema===schema).length}</small></label>)}</div>
+      <div className="modal-actions"><Button size="sm" onClick={()=>setShowSchemas(false)}>{t('확인')}</Button></div>
+    </section></ModalSurface>}
     {renaming&&<ModalSurface title={tr('탭 이름 변경','Rename tab')} onClose={()=>setRenaming(null)}><form className="modal tab-rename-modal" role="dialog" aria-label={tr('탭 이름 변경','Rename tab')} onSubmit={event=>{event.preventDefault();if(!renaming.name.trim())return;workspace.patch(renaming.id,{customName:renaming.name.trim()});setRenaming(null);}}>
       <div className="modal-heading"><h2>{tr('탭 이름 변경','Rename tab')}</h2></div>
       <label htmlFor="tab-name">{tr('탭 이름','Tab name')}</label><Input id="tab-name" autoFocus maxLength={100} value={renaming.name} onFocus={event=>event.target.select()} onChange={event=>setRenaming({...renaming,name:event.target.value})}/>

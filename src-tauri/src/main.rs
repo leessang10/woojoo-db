@@ -59,6 +59,7 @@ fn main() {
             db::forget_password,
             db::disconnect_db,
             db::list_tables,
+            db::list_schemas,
             db::read_table,
             db::describe_table,
             structure::schema_info,

@@ -1,15 +1,13 @@
 import { test, expect } from './fixtures';
 
-test('database and schema expanders actually collapse their children', async ({ page }) => {
+test('schema expanders collapse their children without a redundant connection row', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.tree-table')).toBeVisible();
   await page.locator('.schema-expander').click();
   await expect(page.locator('.tree-table')).not.toBeVisible();
   await page.locator('.schema-expander').click();
   await expect(page.locator('.tree-table')).toBeVisible();
-  await page.locator('.tree-db').click();
-  await expect(page.locator('.tree-schema')).not.toBeVisible();
-  await page.locator('.tree-db').click();
+  await expect(page.locator('.tree-db')).toHaveCount(0);
   await expect(page.locator('.tree-table')).toBeVisible();
 });
 

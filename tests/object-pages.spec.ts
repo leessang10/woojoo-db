@@ -10,7 +10,13 @@ test('schema list opens searchable table details and returns to existing editabl
   await page.locator('.tree-schema').click({ button: 'right' });
   await page.getByRole('menuitem', { name: '스키마 상세' }).click();
   await expect(page.getByRole('heading', { name: 'public', exact: true })).toBeVisible();
-  await expect(page.locator('.object-subtabs [role=tab]')).toHaveText([/테이블/, '뷰','루틴','트리거']);
+  await expect(page.locator('.object-subtabs [role=tab]')).toHaveText(['상세',/테이블/, '뷰','루틴','트리거']);
+  await expect(page.locator('.object-heading .object-properties')).toHaveCount(0);
+  await expect(page.locator('.object-heading .object-path')).toHaveCount(0);
+  await page.getByRole('tab',{name:'상세',exact:true}).click();
+  await expect(page.locator('.object-table-scroll .object-properties')).toContainText('소유자');
+  await expect(page.locator('.object-table')).toHaveCount(0);
+  await page.screenshot({path:'test-results/schema-details-compact.png'});
   await page.getByRole('tab',{name:'뷰',exact:true}).click();
   await expect(page.getByLabel('스키마 내 테이블 검색')).toHaveCount(0);
   await page.getByRole('tab',{name:/^테이블/}).click();
@@ -27,6 +33,11 @@ test('schema list opens searchable table details and returns to existing editabl
   await expect(page.getByText('Keep pending', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '테이블 상세', exact: true }).click();
   await expect(page.getByLabel('컬럼 검색')).toHaveValue('email');
+  await page.getByRole('tab',{name:'상세',exact:true}).click();
+  await expect(page.locator('.object-heading .object-properties')).toHaveCount(0);
+  await expect(page.locator('.object-heading .object-path')).toHaveCount(0);
+  await expect(page.locator('.object-table-scroll .object-properties')).toContainText('추정 행 수');
+  await page.screenshot({path:'test-results/table-details-compact.png'});
   await page.getByRole('tabpanel').getByRole('button', { name: 'public', exact: true }).click();
   await expect(page.getByLabel('스키마 내 테이블 검색')).toHaveValue('users');
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(3);

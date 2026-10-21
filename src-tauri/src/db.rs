@@ -151,16 +151,15 @@ pub async fn forget_password(state: tauri::State<'_, State>, profile_id: String)
     state.credentials.lock().await.forget(&profile_id)
 }
 async fn connect(state: &State, mut profile: Profile) -> DbResult<String> {
-    if profile.database.trim().is_empty() {
+    if profile.engine == "sqlite" && profile.database.trim().is_empty() {
         return Err("데이터베이스 또는 SQLite 파일 경로를 입력하세요.".into());
     }
     if profile.engine != "sqlite"
         && (profile.host.trim().is_empty()
-            || profile.database.trim().is_empty()
             || profile.username.trim().is_empty()
             || profile.port == 0)
     {
-        return Err("호스트, 데이터베이스, 사용자 및 포트를 확인하세요.".into());
+        return Err("호스트, 사용자 및 포트를 확인하세요.".into());
     }
     let revision = if profile.engine != "sqlite" {
         let credentials = state.credentials.lock().await;
@@ -177,7 +176,7 @@ async fn connect(state: &State, mut profile: Profile) -> DbResult<String> {
                 let options = PgConnectOptions::new()
                     .host(&profile.host)
                     .port(profile.port)
-                    .database(&profile.database)
+                    .database(if profile.database.trim().is_empty() { "postgres" } else { &profile.database })
                     .username(&profile.username)
                     .password(&profile.password)
                     .ssl_mode(if profile.tls {
@@ -202,7 +201,6 @@ async fn connect(state: &State, mut profile: Profile) -> DbResult<String> {
                 let options = MySqlConnectOptions::new()
                     .host(&profile.host)
                     .port(profile.port)
-                    .database(&profile.database)
                     .username(&profile.username)
                     .password(&profile.password)
                     .ssl_mode(if profile.tls {
@@ -210,6 +208,7 @@ async fn connect(state: &State, mut profile: Profile) -> DbResult<String> {
                     } else {
                         MySqlSslMode::Disabled
                     });
+                let options = if profile.database.trim().is_empty() { options } else { options.database(&profile.database) };
                 let options = match rds_ca(&profile.host, profile.tls) {
                     Some(ca) => options.ssl_ca_from_pem(ca.to_vec()),
                     None => options,
@@ -287,6 +286,14 @@ pub async fn disconnect_db(state: tauri::State<'_, State>, id: String) -> DbResu
     Ok(())
 }
 #[tauri::command]
+pub async fn list_schemas(state: tauri::State<'_, State>, id: String) -> DbResult<Vec<String>> {
+    match pool(&state, &id).await? {
+        Pool::Sqlite(_) => Ok(vec!["main".into()]),
+        Pool::Pg(p) => sqlx::query_scalar("SELECT nspname::text FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema') AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp%' AND has_schema_privilege(oid, 'USAGE') ORDER BY nspname").fetch_all(&p).await.map_err(error),
+        Pool::My(p) => sqlx::query("SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys') ORDER BY SCHEMA_NAME").fetch_all(&p).await.map_err(error)?.into_iter().map(|row| row.try_get_unchecked(0).map_err(error)).collect(),
+    }
+}
+#[tauri::command]
 pub async fn list_tables(state: tauri::State<'_, State>, id: String) -> DbResult<Vec<Table>> {
     tables(&state, id).await
 }
@@ -295,7 +302,7 @@ async fn tables(state: &State, id: String) -> DbResult<Vec<Table>> {
         Pool::Sqlite(p) => sqlx::query("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetch_all(&p).await.map_err(error)?.into_iter().map(|r| Ok(Table {schema:"main".into(),name:r.try_get(0).map_err(error)?})).collect(),
         Pool::Pg(p) => sqlx::query("SELECT table_schema, table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_schema,table_name")
             .fetch_all(&p).await.map_err(error)?.into_iter().map(|r| Ok(Table {schema:r.try_get(0).map_err(error)?,name:r.try_get(1).map_err(error)?})).collect(),
-        Pool::My(p) => sqlx::query("SELECT table_schema, table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema=DATABASE() ORDER BY table_name")
+        Pool::My(p) => sqlx::query("SELECT table_schema, table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('information_schema','mysql','performance_schema','sys') ORDER BY table_schema,table_name")
             .fetch_all(&p).await.map_err(error)?.into_iter().map(|r| Ok(Table {schema:r.try_get_unchecked(0).map_err(error)?,name:r.try_get_unchecked(1).map_err(error)?})).collect(),
     }
 }
