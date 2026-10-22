@@ -23,7 +23,7 @@ test('profiles retain SQLite environment settings but never credentials, and can
   await expect(page.locator('.connection-name').filter({hasText:'Inventory renamed'})).toBeVisible();
   await page.locator('.connection').filter({hasText:'Inventory renamed'}).click({button:'right'});
   await page.getByRole('menuitem',{name:'프로필 삭제'}).click();
-await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact: true }).click();
+await page.getByRole('alertdialog').getByRole('button', { name: '삭제', exact: true }).click();
   await expect(page.locator('.connection')).toHaveCount(1);
 });
 

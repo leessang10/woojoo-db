@@ -32,7 +32,7 @@ test('script keeps individual results and stops after an error', async ({ page }
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.locator('.cm-content').fill('SELECT * FROM users LIMIT 3; BROKEN; SELECT * FROM users LIMIT 1;');
   await page.locator('.query-tools').getByRole('button', { name: '스크립트 실행', exact: true }).click();
-  await expect(page.locator('.script-result-tabs button').last()).toContainText('Error');
+  await expect(page.locator('.script-result-tabs button').last()).toContainText('오류');
   await expect(page.locator('.script-result-tabs button')).toHaveCount(2);
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(3);
 });

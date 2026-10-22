@@ -69,6 +69,37 @@ export function splitSql(sql: string, engine: Engine): string[] {
   if (meaningful) statements.push(current.trim());
   return statements;
 }
+/** The statement under the cursor; a cursor on a blank gap belongs to the preceding statement. */
+export function statementAt(sql: string, engine: Engine, offset: number): string {
+  const ranges: { from: number; to: number }[] = [];
+  let position = 0, from = 0;
+  for (const token of sqlTokens(sql, engine)) {
+    if (token.kind === 'code') {
+      for (let i = 0; i < token.text.length; i++) if (token.text[i] === ';') { ranges.push({ from, to: position + i + 1 }); from = position + i + 1; }
+    }
+    position += token.text.length;
+  }
+  ranges.push({ from, to: sql.length });
+  const meaningful = ranges.filter(range => splitSql(sql.slice(range.from, range.to), engine).length);
+  if (!meaningful.length) return '';
+  const lineStart = sql.lastIndexOf('\n', offset - 1) + 1, lineEnd = sql.indexOf('\n', offset);
+  const blankLine = !sql.slice(lineStart, lineEnd < 0 ? sql.length : lineEnd).trim();
+  const index = meaningful.findIndex(range => offset >= range.from && offset <= range.to);
+  // Before a statement's first character on a blank line, the user just finished the previous one.
+  const before = index > 0 && blankLine && !sql.slice(meaningful[index].from, offset).trim();
+  const current = index < 0 ? meaningful.find(range => range.from >= offset) ?? meaningful[meaningful.length - 1] : meaningful[before ? index - 1 : index];
+  return sql.slice(current.from, current.to).trim();
+}
+/** Conservative read-only check used for production warnings; anything unknown counts as a change. */
+export function isReadOnlySql(sql: string, engine: Engine): boolean {
+  try {
+    return splitSql(sql, engine).every(statement => {
+      const code = sqlTokens(statement, engine).filter(token => token.kind === 'code').map(token => token.text).join(' ').trim();
+      if (!/^(SELECT|WITH|SHOW|EXPLAIN|DESCRIBE|DESC|VALUES|TABLE|PRAGMA)\b/i.test(code)) return false;
+      return !/\b(INSERT|UPDATE|DELETE|MERGE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|INTO)\b/i.test(code) || /^(EXPLAIN|SHOW|DESCRIBE|DESC)\b/i.test(code) && !/\bANALYZE\b/i.test(code);
+    });
+  } catch { return false; }
+}
 const parameterPattern = /(?<!:):([a-zA-Z_][a-zA-Z_0-9]*)/g;
 export function parameterNames(sql: string, engine: Engine): string[] {
   return [...new Set(sqlTokens(sql, engine).filter(t => t.kind === 'code').flatMap(t => [...t.text.matchAll(parameterPattern)].map(m => m[1])))];

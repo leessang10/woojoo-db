@@ -42,6 +42,6 @@ test('SQLite still requires a file path',async({page})=>{
  await page.addInitScript(()=>{Object.defineProperty(window,'isTauri',{value:true});Object.defineProperty(window,'__TAURI_INTERNALS__',{value:{invoke:async()=>{throw new Error('Unexpected invocation');}}});});
  await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'SQLite',exact:true}).click();
  await page.getByRole('button',{name:'연결하기',exact:true}).click();
- await expect(page.getByRole('status')).toContainText('입력하세요');
+ await expect(page.getByRole('alert')).toContainText('입력하세요');
  await expect(page.getByRole('dialog')).toBeVisible();
 });

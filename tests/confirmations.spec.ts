@@ -10,7 +10,7 @@ test('confirmation traps focus, cancels on Escape, and preserves dirty SQL', asy
   const dialog = page.getByRole('alertdialog');
   await expect(dialog.getByRole('button', {name:'취소',exact:true})).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(dialog.getByRole('button', {name:'확인',exact:true})).toBeFocused();
+  await expect(dialog.getByRole('button', {name:'버리고 닫기',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(close).toBeFocused();
@@ -20,7 +20,7 @@ test('confirmation traps focus, cancels on Escape, and preserves dirty SQL', asy
   await page.evaluate(() => document.documentElement.dataset.theme='light');
   await page.waitForTimeout(300);
   await page.screenshot({path:'test-results/confirmation-light.png'});
-  await dialog.getByRole('button', {name:'확인',exact:true}).click();
+  await dialog.getByRole('button', {name:'버리고 닫기',exact:true}).click();
   await expect(page.getByRole('tab')).toHaveCount(1);
 });
 

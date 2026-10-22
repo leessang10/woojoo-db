@@ -47,6 +47,9 @@ pub struct Profile {
     read_only: bool,
     #[serde(default, rename = "rememberPassword")]
     remember_password: bool,
+    /// PostgreSQL statement_timeout in seconds; 0 disables it.
+    #[serde(default, rename = "queryTimeoutSeconds")]
+    query_timeout_seconds: Option<u32>,
 }
 impl Profile {
     fn credential_identity(&self) -> crate::credentials::Identity {
@@ -184,7 +187,7 @@ async fn connect(state: &State, mut profile: Profile) -> DbResult<String> {
                     } else {
                         PgSslMode::Disable
                     })
-                    .options([("statement_timeout", "30000")]);
+                    .options([("statement_timeout", (profile.query_timeout_seconds.unwrap_or(30) as u64 * 1000).to_string())]);
                 let options = match rds_ca(&profile.host, profile.tls) {
                     Some(ca) => options.ssl_root_cert_from_pem(ca.to_vec()),
                     None => options,
@@ -911,6 +914,7 @@ mod integration_tests {
                     tls: false,
                     read_only: false,
                     remember_password: false,
+                    query_timeout_seconds: None,
                 },
             )
             .await
@@ -1051,6 +1055,7 @@ mod sqlite_tests {
             tls: false,
             read_only,
             remember_password: false,
+            query_timeout_seconds: None,
         };
         let id = connect(&state, profile(false)).await.unwrap();
         crate::sessions::execute(

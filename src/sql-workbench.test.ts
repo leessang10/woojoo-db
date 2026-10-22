@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bindParameters, executeScript, explainSql, formatSql, parameterLiteral, parameterNames, splitSql } from './sql-workbench';
+import { bindParameters, executeScript, explainSql, formatSql, isReadOnlySql, parameterLiteral, parameterNames, splitSql, statementAt } from './sql-workbench';
 import type { Result } from './model';
 
 describe('SQL workbench lexical handling', () => {
@@ -50,5 +50,29 @@ describe('SQL workbench lexical handling', () => {
     expect(results[0].result).toBe(result);
     expect(results[1]).toMatchObject({ index: 2, sql: 'BROKEN', error: 'Error: syntax error' });
     expect(report).toHaveBeenCalledTimes(2);
+  });
+});
+describe('statement under the cursor', () => {
+  const sql = "SELECT 1;\n\nSELECT ';' AS x;\nUPDATE t SET a = 1";
+  it('picks the statement containing the cursor and ignores quoted semicolons', () => {
+    expect(statementAt(sql, 'postgres', 3)).toBe('SELECT 1;');
+    expect(statementAt(sql, 'postgres', sql.indexOf("';'") + 1)).toBe("SELECT ';' AS x;");
+    expect(statementAt(sql, 'postgres', sql.length)).toBe('UPDATE t SET a = 1');
+  });
+  it('treats a cursor after a terminator or on a blank line as the previous statement', () => {
+    expect(statementAt(sql, 'postgres', 'SELECT 1;'.length)).toBe('SELECT 1;');
+    expect(statementAt(sql, 'postgres', 'SELECT 1;\n'.length)).toBe('SELECT 1;');
+    expect(statementAt('  ', 'postgres', 1)).toBe('');
+  });
+});
+describe('read-only SQL detection', () => {
+  it('accepts queries and rejects changes, including data-modifying CTEs', () => {
+    expect(isReadOnlySql('SELECT updated_at FROM t; SHOW TABLES', 'mysql')).toBe(true);
+    expect(isReadOnlySql('EXPLAIN SELECT 1', 'postgres')).toBe(true);
+    expect(isReadOnlySql('DELETE FROM t', 'postgres')).toBe(false);
+    expect(isReadOnlySql('WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x', 'postgres')).toBe(false);
+    expect(isReadOnlySql('SELECT * INTO copy FROM t', 'postgres')).toBe(false);
+    expect(isReadOnlySql('EXPLAIN ANALYZE DELETE FROM t', 'postgres')).toBe(false);
+    expect(isReadOnlySql("SELECT 'drop table'", 'postgres')).toBe(true);
   });
 });

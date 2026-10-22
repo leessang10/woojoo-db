@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{Emitter, Manager};
 mod journal;
 mod credentials;
 mod local_database;
@@ -15,6 +16,16 @@ mod sessions;
 mod structure;
 mod erd_changes;
 
+/// Set by the UI while closing would lose pending edits or open transactions.
+static CLOSE_GUARD: AtomicBool = AtomicBool::new(false);
+#[tauri::command]
+fn set_close_guard(enabled: bool) { CLOSE_GUARD.store(enabled, Ordering::SeqCst); }
+#[tauri::command]
+fn close_window(window: tauri::Window) -> Result<(), String> {
+    CLOSE_GUARD.store(false, Ordering::SeqCst);
+    window.destroy().map_err(|error| error.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(db::State::default())
@@ -25,7 +36,17 @@ fn main() {
             app.manage(store);
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if CLOSE_GUARD.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.emit("close-requested", ());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            set_close_guard,
+            close_window,
             local_database::create_local_database,
             journal::execution_list,
             journal::execution_detail,

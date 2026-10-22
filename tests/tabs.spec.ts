@@ -31,7 +31,7 @@ await page.getByRole('alertdialog').getByRole('button', { name: '취소', exact:
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(2);
   await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 3;');
   await page.getByRole('button', { name: '탭 닫기: 쿼리 1', exact: true }).click();
-await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact: true }).click();
+await page.getByRole('alertdialog').getByRole('button', { name: '버리고 닫기', exact: true }).click();
   await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(1);
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '탭 닫기: users', exact: true }).click();

@@ -20,7 +20,7 @@ test('bulk close respects clicked tab order and confirms dirty tabs atomically',
   await expect(page.locator('.cm-content')).toHaveText('SELECT unsaved;');
   await page.getByRole('tab', { name: '쿼리 1', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: '다른 탭 닫기', exact: true }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '버리고 닫기', exact: true }).click();
   await expect(tabs).toHaveText(['쿼리 1']);
   await tabs.first().click({ button: 'right' });
   for (const name of ['다른 탭 닫기', '왼쪽 탭 닫기', '오른쪽 탭 닫기']) {

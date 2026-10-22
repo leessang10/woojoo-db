@@ -34,7 +34,7 @@ test('tab and editor menus support keyboard navigation and preserve original tab
   await page.locator('.cm-content').fill('SELECT 1;');
   await page.getByRole('tab', { name: '쿼리 1' }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: '탭 닫기', exact: true }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: '확인', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '버리고 닫기', exact: true }).click();
   await expect(page.getByRole('tab')).toHaveCount(1);
   await page.locator('.cm-content').click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: '전체 SQL 복사' })).toBeEnabled();

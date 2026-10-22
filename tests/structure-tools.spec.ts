@@ -17,7 +17,7 @@ test('detail tabs show readable DDL, constraint editing and empty objects',async
  });
  await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'SQLite',exact:true}).click();await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('preview.sqlite3');await page.getByRole('button',{name:'연결하기',exact:true}).click();await expect(page.locator('.tree-table')).toHaveText('board');await page.locator('.tree-table').click();
  const dialog=page.getByRole('dialog');
- await page.getByRole('button',{name:'테이블 변경',exact:true}).click();
+ await page.getByRole('button',{name:'테이블 수정',exact:true}).click();
  await expect(dialog.getByLabel('Charset',{exact:true})).toHaveCount(0);
  await expect(dialog.getByLabel('설명',{exact:true})).toHaveCount(0);
  await dialog.getByLabel('테이블 이름',{exact:true}).fill('renamed_board');

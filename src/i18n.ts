@@ -276,6 +276,19 @@ const messages: Record<string, string> = {
   '행 적용_en': 'Apply {count} rows',
   '검토 설명': '{table}의 {count}개 행을 수정합니다.',
   '검토 설명_en': 'Update {count} rows in {table}.',
+  "DB Collation": "DB collation",
+  "새로고침": "Refresh",
+  "읽기 전용 연결": "Read-only connection",
+  "읽기 전용 연결입니다. 구조를 변경할 수 없습니다.": "This connection is read-only. Structure changes are disabled.",
+  "컬럼이 삭제되었습니다. 새로고침하세요.": "The column was removed. Refresh and try again.",
+  "테이블 구조가 변경되었습니다. 새로고침한 뒤 다시 검토하세요.": "The table structure changed. Refresh and review again.",
+  "수정": "Edit",
+  "테이블 수정": "Edit table",
+  "컬럼 수정": "Edit column",
+  "버리고 닫기": "Discard and close",
+  "버리기": "Discard",
+  '탭 닫기 상세': '저장하지 않은 내용이 있습니다: {items}. 닫으면 사라집니다.',
+  '탭 닫기 상세_en': 'This tab has unsaved work: {items}. Closing discards it.',
 };
 
 function readLanguage(): Language {
