@@ -27,6 +27,8 @@ export type WorkspaceTab = {
   busy: boolean;
   loaded: boolean;
   queryTable?: Table | null;
+  /** Schema a query tab runs in; undefined uses the connection default. */
+  querySchema?: string;
   file?: { path: string | null; name: string; savedSql: string };
 };
 
@@ -58,6 +60,7 @@ export function restoreTabs(initial: WorkspaceTab): WorkspaceTab[] {
       const tab = createTab(item.profileId === 'demo' ? 'demo' : `saved:${item.profileId}`, Number(item.number)||0, table, item.editorSql);
       return [{...tab, id:typeof item.id==='string'?item.id:tab.id, kind:item.kind as WorkspaceTab['kind'], objectSchema:typeof item.objectSchema==='string'?item.objectSchema:table?.schema??'',
         customName:typeof item.customName==='string'?item.customName:undefined,
+        querySchema:typeof item.querySchema==='string'?item.querySchema:undefined,
         initialSql:typeof item.initialSql==='string'?item.initialSql:'',
         ...(typeof item.filePath==='string'?{file:{path:item.filePath,name:typeof item.fileName==='string'?item.fileName:'query.sql',savedSql:typeof item.initialSql==='string'?item.initialSql:''}}:{})}];
     });
@@ -67,7 +70,7 @@ export function restoreTabs(initial: WorkspaceTab): WorkspaceTab[] {
 export function persistTabs(tabs: WorkspaceTab[], profiles: Record<string,string>, activeTab?:string) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({activeTab,profileIds:Object.values(profiles),tabs:tabs.filter(tab=>profiles[tab.session]).map(tab=>({
     id:tab.id,profileId:profiles[tab.session],number:tab.number,kind:tab.kind,selected:tab.selected,objectSchema:tab.objectSchema,
-    customName:tab.customName,editorSql:tab.editorSql,initialSql:tab.initialSql,filePath:tab.file?.path,fileName:tab.file?.name,
+    customName:tab.customName,querySchema:tab.querySchema,editorSql:tab.editorSql,initialSql:tab.initialSql,filePath:tab.file?.path,fileName:tab.file?.name,
   }))}));
 }
 export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {

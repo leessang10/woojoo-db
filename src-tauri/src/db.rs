@@ -706,8 +706,9 @@ pub async fn run_query(
     state: tauri::State<'_, State>,
     id: String,
     sql: String,
+    schema: Option<String>,
 ) -> DbResult<QueryResult> {
-    crate::journal::record(&app, &store, &state, &id, &sql, "sql", crate::sessions::execute(&state, &id, sql.clone())).await
+    crate::journal::record(&app, &store, &state, &id, &sql, "sql", crate::sessions::execute_in(&state, &id, sql.clone(), schema)).await
 }
 #[cfg(test)]
 async fn execute_query(pool: Pool, sql: String) -> DbResult<QueryResult> {

@@ -13,6 +13,8 @@ export type SqlFileMetadata = { path: string | null; name: string; savedSql: str
 type NativeFile = { path: string; name: string; sql: string };
 export type QueryToolsProps = {
   primaryAction?: ReactNode;
+  /** Controls shown before the tool groups, such as the execution schema. */
+  leadingAction?: ReactNode;
   onOpenCommonSql?: () => void;
   commonSqlDisabled?: boolean;
   engine: Engine; session: string | null; sql: string; disabled?: boolean;
@@ -29,7 +31,7 @@ export type QueryToolsProps = {
   commandsRef?: MutableRefObject<{ save?: () => void; runScript?: () => void; cancel?: () => void }>;
 };
 
-export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute, commandsRef }: QueryToolsProps) {
+export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, leadingAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute, commandsRef }: QueryToolsProps) {
   const { language } = useLanguage();
   const { requestConfirm } = useConfirm();
   const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
@@ -134,6 +136,7 @@ export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, 
   }
   return <div className="query-tools">
     <div className="query-toolbar">
+      {leadingAction && <div className="query-leading-action">{leadingAction}</div>}
       <div className="query-toolbar-scroll" ref={scroller} data-overflow-start={overflow.start} data-overflow-end={overflow.end} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
       <div className="query-tool-group" role="group" aria-label={tr('SQL 파일', 'SQL files')}>
       <Button variant="outline" size="xs" disabled={busy} onClick={() => void open()}>{tr('SQL 열기', 'Open SQL')}</Button>

@@ -106,7 +106,7 @@ export async function readErd(id: string, schema: string): Promise<ErdSchema> {
   }
   return invoke('read_erd', { id, schema });
 }
-export async function query(id: string, sql: string): Promise<Result> {
+export async function query(id: string, sql: string, schema?: string): Promise<Result> {
   if (id === 'demo') {
     await wait();
     const match = sql.match(/^\s*select\s+\*\s+from\s+(?:(?:"?public"?|`public`)\.)?(?:"((?:[^"]|"")+)"|`((?:[^`]|``)+)`|([a-z_][a-z0-9_]*))(?:\s+limit\s+\d+)?\s*;?\s*$/i);
@@ -116,7 +116,7 @@ export async function query(id: string, sql: string): Promise<Result> {
     const limit = sql.match(/\blimit\s+(\d+)\s*;?\s*$/i);
     return { ...result, rows: limit ? result.rows.slice(0, Number(limit[1])) : result.rows, columns: result.columns.map(c => ({...c, editable:false})) };
   }
-  return invoke('run_query', { id, sql });
+  return invoke('run_query', { id, sql, schema: schema ?? null });
 }
 export async function save(id: string, table: Table, edits: Edit[]) {
   if (id === 'demo') {

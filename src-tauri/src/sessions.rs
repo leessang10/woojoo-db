@@ -23,6 +23,8 @@ pub(crate) struct Session {
     manual: AtomicBool,
     transaction: AtomicBool,
     transaction_known: AtomicBool,
+    /// Session default captured at connect: PostgreSQL search_path or MySQL database.
+    default_schema: Option<String>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +44,7 @@ impl Session {
     pub(crate) fn was_cancelled(&self) -> bool { self.cancelled.load(Ordering::SeqCst) }
     pub(crate) async fn new(pool: &Pool, read_only: bool) -> DbResult<Self> {
         let cancelled = Arc::new(AtomicBool::new(false));
-        let (connection, server_id) = match pool {
+        let (connection, server_id, default_schema) = match pool {
             Pool::Pg(p) => {
                 let mut c = p.acquire().await.map_err(db::error)?.detach();
                 sqlx::query("SET standard_conforming_strings=on")
@@ -53,7 +55,11 @@ impl Session {
                     .fetch_one(&mut c)
                     .await
                     .map_err(db::error)?;
-                (Connection::Pg(c), pid as i64)
+                let path: String = sqlx::query_scalar("SELECT current_setting('search_path')")
+                    .fetch_one(&mut c)
+                    .await
+                    .map_err(db::error)?;
+                (Connection::Pg(c), pid as i64, Some(path))
             }
             Pool::My(p) => {
                 let mut c = p.acquire().await.map_err(db::error)?.detach();
@@ -67,7 +73,11 @@ impl Session {
                     .fetch_one(&mut c)
                     .await
                     .map_err(db::error)?;
-                (Connection::My(c), pid as i64)
+                let database: Option<String> = sqlx::query_scalar("SELECT DATABASE()")
+                    .fetch_one(&mut c)
+                    .await
+                    .map_err(db::error)?;
+                (Connection::My(c), pid as i64, database)
             }
             Pool::Sqlite(p) => {
                 let mut c = p.acquire().await.map_err(db::error)?.detach();
@@ -76,7 +86,7 @@ impl Session {
                     .await
                     .map_err(db::error)?
                     .set_progress_handler(1000, move || !flag.load(Ordering::SeqCst));
-                (Connection::Sqlite(c), 0)
+                (Connection::Sqlite(c), 0, None)
             }
         };
         Ok(Self {
@@ -89,6 +99,7 @@ impl Session {
             manual: AtomicBool::new(false),
             transaction: AtomicBool::new(false),
             transaction_known: AtomicBool::new(true),
+            default_schema,
         })
     }
     async fn set_manual(&self, manual: bool) -> DbResult<()> {
@@ -112,14 +123,37 @@ impl Session {
         }
     }
     pub(crate) async fn execute(&self, sql: String) -> DbResult<QueryResult> {
-        self.execute_mode(sql, false).await
+        self.execute_mode(sql, false, None).await
     }
-    async fn execute_object(&self, sql: String) -> DbResult<QueryResult> {
+    pub(crate) async fn execute_in(&self, sql: String, schema: Option<String>) -> DbResult<QueryResult> {
+        self.execute_mode(sql, false, schema).await
+    }
+    async fn execute_object(&self, sql: String, schema: Option<String>) -> DbResult<QueryResult> {
         validate_object_sql(&sql, self.read_only, matches!(self.control, Pool::My(_)))?;
-        self.execute_mode(sql, true).await
+        self.execute_mode(sql, true, schema).await
+    }
+    /// Tabs share one session, so every run first selects its own schema (or restores the default).
+    async fn select_schema(&self, conn: &mut Connection, schema: Option<&str>) -> DbResult<()> {
+        match conn {
+            Connection::Pg(c) => {
+                let path = match schema {
+                    Some(name) => format!("\"{}\"", name.replace('"', "\"\"")),
+                    None => match &self.default_schema { Some(path) => path.clone(), None => return Ok(()) },
+                };
+                sqlx::query("SELECT set_config('search_path', $1, false)").bind(path).execute(&mut *c).await.map_err(db::error)?;
+            }
+            Connection::My(c) => {
+                if let Some(name) = schema.map(str::to_owned).or_else(|| self.default_schema.clone()) {
+                    // USE cannot be prepared; the identifier is quoted and backticks doubled.
+                    (&mut *c).execute(format!("USE `{}`", name.replace('`', "``")).as_str()).await.map_err(db::error)?;
+                }
+            }
+            Connection::Sqlite(_) => {}
+        }
+        Ok(())
     }
     #[allow(deprecated)]
-    async fn execute_mode(&self, sql: String, object_sql: bool) -> DbResult<QueryResult> {
+    async fn execute_mode(&self, sql: String, object_sql: bool, schema: Option<String>) -> DbResult<QueryResult> {
         let words = if object_sql {
             scan_words(&sql, false)?
         } else {
@@ -133,6 +167,7 @@ impl Session {
             return Err("읽기 전용 연결: SELECT/WITH/EXPLAIN만 실행할 수 있습니다.".into());
         }
         let mut conn = self.connection.lock().await;
+        self.select_schema(&mut conn, schema.as_deref()).await?;
         self.cancelled.store(false, Ordering::SeqCst);
         self.running.store(true, Ordering::SeqCst);
         let now = std::time::Instant::now();
@@ -527,8 +562,12 @@ pub(crate) async fn session(state: &State, id: &str) -> DbResult<Arc<Session>> {
         .cloned()
         .ok_or_else(|| "연결이 닫혔습니다.".into())
 }
+#[cfg(test)]
 pub(crate) async fn execute(state: &State, id: &str, sql: String) -> DbResult<QueryResult> {
     session(state, id).await?.execute(sql).await
+}
+pub(crate) async fn execute_in(state: &State, id: &str, sql: String, schema: Option<String>) -> DbResult<QueryResult> {
+    session(state, id).await?.execute_in(sql, schema).await
 }
 #[tauri::command]
 pub async fn execution_state(
@@ -749,8 +788,9 @@ pub async fn run_object_sql(
     state: tauri::State<'_, State>,
     id: String,
     sql: String,
+    schema: Option<String>,
 ) -> DbResult<QueryResult> {
-    crate::journal::record(&app, &store, &state, &id, &sql, "object", async { session(&state, &id).await?.execute_object(sql.clone()).await }).await
+    crate::journal::record(&app, &store, &state, &id, &sql, "object", async { session(&state, &id).await?.execute_object(sql.clone(), schema).await }).await
 }
 
 #[cfg(test)]
