@@ -401,10 +401,46 @@ p.empty-tree{flex-direction:row;align-items:center}
 .schema-select{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground)}
 .schema-select [data-slot=native-select],.schema-select select,.schema-select button{min-width:120px;max-width:180px}
 
-/* Query history in the sidebar. */
+/* Query history: the right-hand panel and the full history tab. */
+.history-sidebar{width:300px;flex-shrink:0;display:flex;flex-direction:column;min-width:0;background:var(--surface);border-left:1px solid var(--line)}
+@media(max-width:1100px){.history-sidebar{width:260px}}
+.history-toggle-button[aria-pressed=true]{background:var(--secondary);color:var(--foreground)}
+/* With the history panel open the topbar narrows: connection details shrink, actions never slide under the panel. */
+.topbar{min-width:0}.topbar-right{min-width:0;flex-shrink:1}.topbar-right>*{flex-shrink:0}.topbar-right>.connection-status{flex-shrink:1}
 .history-panel{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1;padding:0 8px 12px}
-.history-heading{display:flex;align-items:center;justify-content:space-between;margin:0 8px;font-size:11px;font-weight:600;letter-spacing:.07em;color:var(--muted-foreground)}
-.history-heading button{width:24px;height:24px}
+.history-heading{display:flex;align-items:center;justify-content:space-between;height:48px;min-height:48px;margin:0 -8px 4px;padding:0 8px 0 16px;border-bottom:1px solid var(--line);font-size:11px;font-weight:600;letter-spacing:.07em;color:var(--muted-foreground)}
+.history-heading-actions{display:flex;align-items:center;gap:2px}
+.history-icon{width:24px;height:24px;flex-shrink:0;color:var(--muted-foreground)}
+.history-icon:hover:not(:disabled){color:var(--foreground)}
+.history-page{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;padding:20px 24px 16px;overflow:hidden}
+.history-page-heading{display:flex;align-items:center;gap:10px}
+.history-page-heading h1{margin:0;font-size:18px;font-weight:600}
+.history-count{font-size:12px;color:var(--muted-foreground);margin-right:auto}
+.history-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.history-toolbar .history-scope{flex-shrink:0}
+.history-toolbar .history-scope button{flex:none;padding:0 12px}
+.history-toolbar .history-search{flex:1;min-width:200px;max-width:420px}
+.history-toolbar .history-status{width:auto;min-width:130px}
+.history-toolbar .history-dates{display:flex;align-items:center;gap:6px;color:var(--muted-foreground)}
+.history-toolbar .history-dates>input{width:140px}
+.history-table-scroll{flex:1;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.history-table{width:100%;min-width:680px;border-collapse:collapse;table-layout:fixed;font-size:12px}
+.history-table th{position:sticky;top:0;z-index:1;height:34px;padding:0 10px;text-align:left;font-weight:500;color:var(--muted-foreground);background:var(--surface);border-bottom:1px solid var(--line);white-space:nowrap}
+.history-col-status{width:88px}.history-col-time{width:150px}.history-col-name{width:120px}
+.history-table td{height:36px;padding:0 10px;border-bottom:1px solid var(--line);vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-table .history-entry{border-radius:0;padding:0}
+.history-table .history-entry[data-expanded=true]>td{border-bottom-color:transparent}
+.history-col-toggle{width:36px}.history-table td:first-child{padding:0 4px 0 8px}
+.history-col-number{width:96px;text-align:right!important;font-variant-numeric:tabular-nums}
+.history-col-actions{width:72px;text-align:right}
+.history-col-actions [data-slot=button]{display:inline-flex}
+.history-status-cell{display:inline-flex;align-items:center;gap:6px}
+.history-time{font-variant-numeric:tabular-nums}
+.history-muted{color:var(--muted-foreground)}
+.history-sql-cell .history-sql{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-detail-row td{height:auto;padding:4px 10px 12px;white-space:normal;background:var(--surface)}
+.history-full-sql{margin:0 0 6px;padding:10px 12px;max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:4px;background:var(--background);font:12px/1.6 'Cascadia Code',Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.history-detail-row .history-detail-error{margin-bottom:6px;font-size:12px}
 .history-scope{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .history-scope button{flex:1;height:28px;font-size:12px;border-radius:0;color:var(--muted-foreground)}
 .history-scope button[aria-pressed=true]{background:var(--secondary);color:var(--foreground);font-weight:600}

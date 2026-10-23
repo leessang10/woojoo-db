@@ -81,16 +81,20 @@ test('rail navigation restores the workspace without toggling the sidebar or los
   await page.locator('.run-button').click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.locator('.cm-content').fill('SELECT * FROM users LIMIT 7;');
-  const explorer = page.locator('.rail').getByRole('button', { name: '탐색기', exact: true });
-  const history = page.locator('.rail').getByRole('button', { name: '쿼리 기록', exact: true });
+  const explorer = page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true});
+  const history = page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true});
   await expect(explorer).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.rail .rail-button[aria-pressed]')).toHaveCount(1);
   await history.click();
   await expect(history).toHaveAttribute('aria-pressed','true');
   await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toBeVisible();
-  await expect(page.locator('.tree')).toHaveCount(0);
+  // History opens beside the explorer instead of replacing it.
+  await expect(page.locator('.tree')).toBeVisible();
   await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 7;');
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await history.click();
+  await expect(page.locator('.history-sidebar')).toHaveCount(0);
+  await explorer.click();
   await expect(page.locator('.sidebar')).toHaveCount(0);
   await explorer.click();
   await expect(page.locator('.sidebar')).toHaveCount(1);
@@ -171,12 +175,11 @@ test('connections keep separate tabs while a query completes in the background',
 test('sidebar objects leave executed queries for new and existing tabs', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  await page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true}).click();
   for (let repeat = 0; repeat < 2; repeat++) {
     for (const selector of ['.tree-table', '.tree-schema']) {
-      await page.locator('.rail').getByRole('button', {name:'쿼리 기록',exact:true}).click();
-      await page.locator('.rail').getByRole('button', {name:'탐색기',exact:true}).click();
       await page.locator(selector).first().click();
-      await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
+      await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toBeVisible();
       await expect(page.locator(selector === '.tree-table' ? '.object-view-bar' : '.object-page')).toBeVisible();
     }
   }

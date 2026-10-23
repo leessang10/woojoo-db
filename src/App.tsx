@@ -46,6 +46,11 @@ const initialProfile: Profile = { id: 'demo', name: 'Woojoo playground', engine:
 type Connection = { profile: Profile; session: string };
 const initialTab = createTab('demo', 0, { schema: 'public', name: 'users' }, tableQuery('postgres', 'public', 'users'));
 type Notice = { text: string; kind: 'success' | 'info' | 'error' };
+// Each rail item is a work area with its own sidebar explorer; AWS joins this list.
+type WorkArea = 'database';
+const WORK_AREAS: { id: WorkArea; icon: typeof Database; label: [string, string]; title: [string, string] }[] = [
+  { id: 'database', icon: Database, label: ['데이터베이스', 'Databases'], title: ['데이터베이스 · 연결과 스키마', 'Databases · connections and schemas'] },
+];
 const COLLAPSED_KEY = 'woojoo-collapsed-schemas-v1';
 function readCollapsed(): Record<string, string[]> {
   try { const value = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}'); return value && typeof value === 'object' ? value : {}; }
@@ -128,9 +133,11 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommonSql, setShowCommonSql] = useState(false);
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
-  // The rail picks what the sidebar shows; the workspace tabs never change with it.
-  const [sidebarView, setSidebarView] = useState<'explorer' | 'history'>(() => { try { return localStorage.getItem('woojoo-sidebar-view') === 'history' ? 'history' : 'explorer'; } catch { return 'explorer'; } });
-  useEffect(() => { try { localStorage.setItem('woojoo-sidebar-view', sidebarView); } catch { /* Session-only preference. */ } }, [sidebarView]);
+  // The rail picks a work area (databases now, AWS later) and the sidebar shows that area's explorer.
+  const [area, setArea] = useState<WorkArea>('database');
+  // Query history sits in a right-hand panel beside the database workspace.
+  const [historyOpen, setHistoryOpen] = useState(() => { try { return localStorage.getItem('woojoo-history-panel') === 'open'; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem('woojoo-history-panel', historyOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [historyOpen]);
   const [renaming, setRenaming] = useState<{id:string;name:string}|null>(null);
   const [tabDrop, setTabDrop] = useState<{id:string;after:boolean}|null>(null);
   const tabDrag = useRef<{id:string;x:number;y:number;moving:boolean;target?:{id:string;after:boolean}}|null>(null);
@@ -161,9 +168,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem('woojoo-sidebar') !== 'closed'; } catch { return true; } });
   function toggleSidebar() { setSidebarOpen(open => !open); }
   // Clicking the active rail item collapses the sidebar, like an activity bar.
-  function showSidebarView(view: 'explorer' | 'history') {
-    if (sidebarOpen && sidebarView === view) { setSidebarOpen(false); return; }
-    setSidebarView(view); setSidebarOpen(true);
+  function showArea(next: WorkArea) {
+    if (sidebarOpen && area === next) { setSidebarOpen(false); return; }
+    setArea(next); setSidebarOpen(true);
   }
   useEffect(() => { try { localStorage.setItem('woojoo-sidebar', sidebarOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [sidebarOpen]);
 
@@ -331,6 +338,7 @@ export default function App() {
     if(item.customName) return item.customName;
     if(item.kind==='query'&&item.file) return item.file.name;
     if (item.kind === 'schema') return item.objectSchema;
+    if (item.kind === 'history') return tr('쿼리 기록', 'Query history');
     return item.kind === 'table' ? item.selected?.name ?? t('탐색기') : t('쿼리 번호', {number:item.number});
   }
   function tabMenu(item: WorkspaceTab): MenuItem[] {
@@ -436,6 +444,14 @@ export default function App() {
     workspace.patch(next.id, { kind: 'schema', view: view ?? 'objects', objectSchema: schema, loaded: true });
   }
   const openErd = (schema: string) => openSchema(schema, 'erd');
+  // Each connection keeps at most one full history tab.
+  async function openHistory() {
+    const existing = workspace.connectionTabs.find(item => item.kind === 'history');
+    if (existing) { await activateTab(existing.id); return; }
+    if(!await leaveData())return;
+    const next = workspace.add();
+    workspace.patch(next.id, { kind: 'history', loaded: true });
+  }
   async function openDetails(table: Table, refresh = false) {
     const existing = tableTab(table);
     if (existing && !refresh && existing.details.length) { if (await activateTab(existing.id)) setView(existing.id, 'structure'); return; }
@@ -495,6 +511,7 @@ export default function App() {
       }
       const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
       if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
+      else if (mod && event.altKey && key === 'b') { event.preventDefault(); setHistoryOpen(open => !open); }
       else if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); }
       else if (mod && event.shiftKey && event.key === 'Enter') { event.preventDefault(); queryCommands.current.runScript?.(); }
       else if (mod && event.key === 'Enter') { event.preventDefault(); runRef.current(); }
@@ -665,9 +682,9 @@ export default function App() {
   // The breadcrumb and sidebar both follow the active tab's object.
   const activeSchema = tab.kind === 'schema' ? tab.objectSchema : selected?.schema ?? (tab.kind === 'query' ? tab.querySchema : undefined);
   const crumbSchema = activeSchema || undefined;
-  const crumbObject = tab.kind === 'schema' ? undefined : tab.kind === 'query' ? tabName(tab) : selected?.name;
+  const crumbObject = tab.kind === 'schema' ? undefined : tab.kind === 'query' || tab.kind === 'history' ? tabName(tab) : selected?.name;
   function revealInExplorer() {
-    setSidebarOpen(true); setSidebarView('explorer');
+    setSidebarOpen(true); setArea('database');
     window.setTimeout(() => document.querySelector<HTMLElement>('.tree .active')?.scrollIntoView({ block: 'nearest' }), 0);
   }
   useEffect(() => {
@@ -689,13 +706,12 @@ export default function App() {
   return <div className="app">
     <aside className="rail">
       <span className="brand-mark" aria-label="Woojoo">W</span>
-      <Button variant="ghost" size="bare" className={`rail-button ${sidebarOpen && sidebarView === 'explorer' ? 'selected' : ''}`} aria-pressed={sidebarOpen && sidebarView === 'explorer'} aria-label={tr("탐색기","Explorer")} title={tr("탐색기 · 연결과 스키마","Explorer · connections and schemas")} onClick={() => showSidebarView('explorer')}><Database size={21}/></Button>
-      <Button variant="ghost" size="bare" className={`rail-button ${sidebarOpen && sidebarView === 'history' ? 'selected' : ''}`} aria-pressed={sidebarOpen && sidebarView === 'history'} aria-label={tr("쿼리 기록","Query history")} title={tr("쿼리 기록","Query history")} onClick={() => showSidebarView('history')}><ScrollText size={21}/></Button>
+      {WORK_AREAS.map(({ id, icon: Icon, label, title }) => <Button key={id} variant="ghost" size="bare" className={`rail-button ${sidebarOpen && area === id ? 'selected' : ''}`} aria-pressed={sidebarOpen && area === id} aria-label={tr(...label)} title={tr(...title)} onClick={() => showArea(id)}><Icon size={21}/></Button>)}
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} aria-label={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
     {sidebarOpen && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
       <div className="workspace-brand"><span>Woojoo</span></div>
-      {sidebarView === 'history' ? <HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} onOpen={entry => void openExecution(entry)}/> : <>
+      {area === 'database' && <>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
       <div className="connections">{selectableConnections.length>0&&<ConnectionSwitcher connections={selectableConnections} active={active} onSelect={id=>{editorSelection.current='';void selectConnection(id);}} onAdd={()=>setShowConnect(true)}>{currentConnection ? (()=>{const c=currentConnection;return <Button variant="ghost" size="bare" key={c.session} {...menuFor([
         {label:t('연결 선택'), action:()=>selectConnection(c.session)},
@@ -724,7 +740,7 @@ export default function App() {
       </div></>}</>}
     </aside>}
     <main className="main" data-environment={!emptyWorkspace&&connected?connection.profile.environment:undefined}>
-      <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" className="icon-button sidebar-toggle" aria-label={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기')} title={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기') + ' · Ctrl/Cmd+B'} aria-expanded={sidebarOpen} aria-controls="database-sidebar" onClick={toggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>{!emptyWorkspace&&<nav className="breadcrumb-path" aria-label={tr('현재 위치','Location')}><Database size={14}/><Button variant="ghost" size="bare" className="crumb-link" title={tr('탐색기에서 보기','Show in explorer')} onClick={revealInExplorer}>{connection.profile.name}</Button><ChevronRight size={13}/>{crumbSchema ? <Button variant="ghost" size="bare" className="crumb-link" aria-current={!crumbObject?'page':undefined} title={tr('스키마 열기','Open schema')} onClick={()=>void openSchema(crumbSchema)}>{crumbSchema}</Button> : <span className="crumb-muted" title={connection.profile.engine === 'postgres' ? tr('스키마를 생략한 이름은 연결의 search_path(보통 public)에서 찾습니다.','Unqualified names resolve through the connection search_path (usually public).') : tr('스키마를 생략한 이름은 연결의 기본 데이터베이스에서 찾습니다.','Unqualified names resolve in the connection default database.')}>{tr('기본 스키마','Default schema')}</span>}{crumbObject&&<><ChevronRight size={13}/><strong aria-current="page">{crumbObject}</strong></>}</nav>}</div><div className="topbar-right">{!emptyWorkspace&&<span className="connection-status" data-connected={connected} title={connected?(connection.profile.engine==='sqlite'?connection.profile.database:`${connection.profile.username}@${connection.profile.host}:${connection.profile.port}/${connection.profile.database}`):undefined}><span className={`live-dot ${connected?'':'offline'}`} aria-hidden="true"/>{!connected&&<strong>{tr('연결 끊김','Disconnected')}</strong>}<span>{[engineLabel(connection.profile.engine),connection.profile.engine==='sqlite'?connection.profile.database.split(/[\\/]/).pop():connection.profile.host,connection.profile.engine==='sqlite'?null:connection.profile.tls?'TLS':tr('TLS 없음','No TLS')].filter(Boolean).join(' · ')}</span></span>}{!emptyWorkspace&&production&&<span className="env-banner" data-environment="production" role="note"><AlertTriangle size={13}/>PRODUCTION</span>}{!emptyWorkspace&&connection.profile.environment==='staging'&&<span className="env-banner" data-environment="staging">STAGING</span>}{!emptyWorkspace&&connection.profile.readOnly&&<span className="env-banner" data-environment="readonly">{tr('읽기 전용','Read-only')}</span>}<Button variant="ghost" size="bare" className="subtle-button" onClick={() => setShowConnect(true)}><Plus size={14}/> {t("연결 추가")} </Button></div></header>
+      <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" className="icon-button sidebar-toggle" aria-label={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기')} title={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기') + ' · Ctrl/Cmd+B'} aria-expanded={sidebarOpen} aria-controls="database-sidebar" onClick={toggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>{!emptyWorkspace&&<nav className="breadcrumb-path" aria-label={tr('현재 위치','Location')}><Database size={14}/><Button variant="ghost" size="bare" className="crumb-link" title={tr('탐색기에서 보기','Show in explorer')} onClick={revealInExplorer}>{connection.profile.name}</Button><ChevronRight size={13}/>{tab.kind === 'history' ? <strong aria-current="page">{crumbObject}</strong> : crumbSchema ?<Button variant="ghost" size="bare" className="crumb-link" aria-current={!crumbObject?'page':undefined} title={tr('스키마 열기','Open schema')} onClick={()=>void openSchema(crumbSchema)}>{crumbSchema}</Button> : <span className="crumb-muted" title={connection.profile.engine === 'postgres' ? tr('스키마를 생략한 이름은 연결의 search_path(보통 public)에서 찾습니다.','Unqualified names resolve through the connection search_path (usually public).') : tr('스키마를 생략한 이름은 연결의 기본 데이터베이스에서 찾습니다.','Unqualified names resolve in the connection default database.')}>{tr('기본 스키마','Default schema')}</span>}{crumbObject&&tab.kind!=='history'&&<><ChevronRight size={13}/><strong aria-current="page">{crumbObject}</strong></>}</nav>}</div><div className="topbar-right">{!emptyWorkspace&&<span className="connection-status" data-connected={connected} title={connected?(connection.profile.engine==='sqlite'?connection.profile.database:`${connection.profile.username}@${connection.profile.host}:${connection.profile.port}/${connection.profile.database}`):undefined}><span className={`live-dot ${connected?'':'offline'}`} aria-hidden="true"/>{!connected&&<strong>{tr('연결 끊김','Disconnected')}</strong>}<span>{[engineLabel(connection.profile.engine),connection.profile.engine==='sqlite'?connection.profile.database.split(/[\\/]/).pop():connection.profile.host,connection.profile.engine==='sqlite'?null:connection.profile.tls?'TLS':tr('TLS 없음','No TLS')].filter(Boolean).join(' · ')}</span></span>}{!emptyWorkspace&&production&&<span className="env-banner" data-environment="production" role="note"><AlertTriangle size={13}/>PRODUCTION</span>}{!emptyWorkspace&&connection.profile.environment==='staging'&&<span className="env-banner" data-environment="staging">STAGING</span>}{!emptyWorkspace&&connection.profile.readOnly&&<span className="env-banner" data-environment="readonly">{tr('읽기 전용','Read-only')}</span>}<Button variant="ghost" size="bare" className="subtle-button" onClick={() => setShowConnect(true)}><Plus size={14}/> {t("연결 추가")} </Button><Button variant="ghost" size="bare" className="icon-button history-toggle-button" aria-label={tr('쿼리 기록','Query history')} title={tr('쿼리 기록 패널','Query history panel') + ' · Ctrl/Cmd+Alt+B'} aria-pressed={historyOpen} aria-controls="history-sidebar" onClick={() => setHistoryOpen(open => !open)}><ScrollText size={17}/></Button></div></header>
       <>
       {emptyWorkspace?<div className="workspace-empty"><Database size={28}/><h1>{tr("첫 데이터베이스를 연결하세요","Connect your first database")}</h1>{!api.desktop&&<p className="connection-availability">{tr("실제 DB 연결은 데스크톱 앱에서 사용할 수 있습니다.","Use the desktop app to connect to a database.")}</p>}<div className="empty-connection-actions">{!connections.some(c=>c.session!=='demo')&&<Button size="sm" disabled={creatingLocal||!api.desktop} title={!api.desktop?tr('데스크톱 앱에서 사용할 수 있습니다.','Available in the desktop app.'):undefined} onClick={()=>void createLocalDatabase()}>{creatingLocal?<Loader2 size={14} className="spin"/>:<Database size={14}/>} {tr('로컬 SQLite 만들기','Create local SQLite')}</Button>}<Button variant="outline" size="sm" disabled={creatingLocal} onClick={()=>{setEditProfile(undefined);setShowConnect(true);}}><Plus size={14}/>{t("새 연결")}</Button></div>{localError&&<p className="local-connection-error" role="alert">{localError}</p>}</div>:<>
       <div className="tabs" {...menuFor([{label:t("새 쿼리"),action:()=>addQuery()}])}><div className="tab-list" onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }} role="tablist" aria-label={t('쿼리 탭')}>
@@ -737,12 +753,12 @@ export default function App() {
             else if(event.altKey&&(event.key==='ArrowLeft'||event.key==='ArrowRight')){event.preventDefault();const index=workspace.connectionTabs.findIndex(tab=>tab.id===item.id);const next=workspace.connectionTabs[index+(event.key==='ArrowRight'?1:-1)];if(next)workspace.reorder(item.id,next.id,event.key==='ArrowRight');}
             else if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') menuFor(tabMenu(item)).onKeyDown(event);
             else navigateTabs(event,item.id);
-          }} className="tab" title={tabName(item)} onClick={() => {if(suppressTabClick.current){suppressTabClick.current=false;return;}void activateTab(item.id);}}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'schema' && item.view === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
+          }} className="tab" title={tabName(item)} onClick={() => {if(suppressTabClick.current){suppressTabClick.current=false;return;}void activateTab(item.id);}}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'schema' && item.view === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'history' ? <ScrollText size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
           <Button variant="ghost" size="bare" className="tab-close" aria-label={t('탭 닫기 이름', {name:tabName(item)})} title={t('탭 닫기')} disabled={item.busy} onClick={() => closeTab(item)}><X size={13}/></Button>
         </div>)}
       </div><Button variant="ghost" size="bare" className="tab-add" title={t('새 쿼리') + ' · Ctrl/Cmd+T'} aria-label={t('새 쿼리')} onClick={() => addQuery()}><Plus size={17}/></Button></div>
       {showCommonSql && <CommonSqlDialog key={active} engine={connection.profile.engine} onClose={() => setShowCommonSql(false)} onSelect={sql => { setShowCommonSql(false); void addQuery(sql); }}/>}
-      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button disabled={reconnecting} onClick={()=>void reconnectProfile(connection.profile)}>{reconnecting?tr('연결 중…','Connecting…'):tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'schema' && tab.view === 'erd' ? <>{viewBar}<Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
+      {tab.kind === 'history' && workspace.connectionTabs.some(item => item.id === tab.id) ? <HistoryPanel variant="page" key={tab.id} profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} onOpen={entry => void openExecution(entry)}/> : !connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button disabled={reconnecting} onClick={()=>void reconnectProfile(connection.profile)}>{reconnecting?tr('연결 중…','Connecting…'):tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'schema' && tab.view === 'erd' ?<>{viewBar}<Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
         onBusyChange={value=>workspace.patch(tab.id,{busy:value})}
         canApply={()=>!allTabsRef.current.some(item=>item.session===active&&item.id!==tab.id&&(item.busy||Object.keys(item.draft).length||dataDirtyRef.current[item.id]))}
         onApplied={()=>{for(const item of allTabsRef.current.filter(item=>item.session===active&&item.id!==tab.id)){if(item.kind==='table')workspace.patch(item.id,{loaded:false,details:[]});if(item.kind==='schema')workspace.patch(item.id,{erd:null});}setCatalogVersion(v=>v+1);refreshTables();}}
@@ -798,6 +814,7 @@ export default function App() {
       </>}
       </>
     </main>
+    {historyOpen && <aside className="history-sidebar" id="history-sidebar"><HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} panelScope={emptyWorkspace ? 'all' : 'connection'} onOpen={entry => void openExecution(entry)} onShowAll={emptyWorkspace ? undefined : () => void openHistory()} onClose={() => setHistoryOpen(false)}/></aside>}
     {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
       <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>
       <p className="modal-description">{tr('체크한 스키마만 사이드바에 표시합니다. 열린 탭에는 영향을 주지 않습니다.','Only checked schemas appear in the sidebar. Open tabs are preserved.')}</p>
@@ -826,6 +843,7 @@ export default function App() {
         ['Ctrl + S', tr('SQL 파일 저장','Save SQL file')],
         ['Ctrl + T / Ctrl + W', tr('새 쿼리 탭 / 현재 탭 닫기','New query tab / close tab')],
         ['Ctrl + B', tr('사이드바 접기/펼치기','Toggle sidebar')],
+        ['Ctrl + Alt + B', tr('쿼리 기록 패널 열기/닫기','Toggle the query history panel')],
         ['Ctrl + ,', tr('설정','Settings')],
         ['F2', tr('탭 이름 변경 (탭에 포커스)','Rename the focused tab')],
         ['Alt + ← / →', tr('탭 순서 이동','Move the focused tab')],

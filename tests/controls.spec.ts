@@ -3,6 +3,7 @@ import { chooseOption } from './select-control';
 
 test('calendar filters use accessible popovers and can select and clear a date', async ({ page }) => {
   await page.addInitScript(() => {
+    localStorage.setItem('woojoo-profiles-v1', JSON.stringify([{ id: 'archive-profile', name: 'Archive SQLite', engine: 'sqlite', host: '', port: 0, database: 'archive.db', username: '', tls: false }]));
     Object.defineProperty(window, 'isTauri', { value: true });
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {
       transformCallback: () => 1,
@@ -15,7 +16,8 @@ test('calendar filters use accessible popovers and can select and clear a date',
     } });
   });
   await page.goto('/');
-  await page.locator('.rail').getByRole('button', { name: '쿼리 기록', exact: true }).click();
+  await page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true}).click();
+  await page.getByRole('button', { name: '전체 기록 보기', exact: true }).click();
   const start = page.getByRole('button', { name: '시작일', exact: true });
   await start.click();
   await expect(page.locator('.ui-calendar')).toBeVisible();

@@ -9,7 +9,7 @@ export type WorkspaceTab = {
   number: number;
   customName?: string;
   /** 'details' and 'erd' are legacy kinds, migrated into table and schema tabs on restore. */
-  kind: 'table' | 'query' | 'schema' | 'details' | 'erd';
+  kind: 'table' | 'query' | 'schema' | 'history' | 'details' | 'erd';
   /** Which face of a table tab (data, structure, ddl, relations) or schema tab (objects, erd) is shown. */
   view?: TabView;
   erd: ErdDocument | null;
@@ -60,7 +60,7 @@ export function restoreTabs(initial: WorkspaceTab): WorkspaceTab[] {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     if (!Array.isArray(saved.tabs)) return [initial];
     const tabs = saved.tabs.slice(0,100).flatMap((item: Record<string, unknown>) => {
-      if (typeof item.profileId !== 'string' || typeof item.editorSql !== 'string' || !['table','query','schema','details','erd'].includes(String(item.kind))) return [];
+      if (typeof item.profileId !== 'string' || typeof item.editorSql !== 'string' || !['table','query','schema','history','details','erd'].includes(String(item.kind))) return [];
       const selected = item.selected as {schema?:unknown;name?:unknown}|null;
       const table = selected && typeof selected.schema === 'string' && typeof selected.name === 'string' ? {schema:selected.schema,name:selected.name}:null;
       const tab = createTab(item.profileId === 'demo' ? 'demo' : `saved:${item.profileId}`, Number(item.number)||0, table, item.editorSql);

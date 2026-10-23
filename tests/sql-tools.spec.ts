@@ -48,7 +48,7 @@ test('typed parameters execute and searchable history survives reload without pa
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.reload();
   await expect(page.locator('.query-tools')).toBeVisible();
-  await page.locator('.rail').getByRole('button', { name: '쿼리 기록', exact: true }).click();
+  await page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true}).click();
   const history = page.getByRole('region', { name: '쿼리 기록', exact: true });
   await history.getByLabel('SQL·오류 검색').fill(':limit');
   await expect(history.locator('.history-sql')).toHaveText('SELECT * FROM users LIMIT :limit;');

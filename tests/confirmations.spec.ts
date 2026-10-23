@@ -31,7 +31,7 @@ test('opening history in a new tab never replaces the current SQL', async ({ pag
   await page.locator('.query-tools').getByRole('button', {name:'스크립트 실행',exact:true}).click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(1);
   await page.locator('.cm-content').fill('SELECT 42;');
-  await page.locator('.rail').getByRole('button', {name:'쿼리 기록',exact:true}).click();
+  await page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true}).click();
   const history = page.getByRole('region', {name:'쿼리 기록',exact:true});
   await history.locator('.history-open').first().click();
   await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 1;');

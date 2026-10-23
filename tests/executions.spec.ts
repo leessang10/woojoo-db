@@ -1,7 +1,7 @@
 import { chooseOption } from './select-control';
 import { test, expect } from '@playwright/test';
 
-test('sidebar history filters, pages, reads full SQL and reopens in the original profile', async ({page})=>{
+test('history panel and tab filter, page, read full SQL, pages, reads full SQL and reopens in the original profile', async ({page})=>{
   await page.addInitScript(()=>{
     const profile={id:'archive-profile',name:'Archive SQLite',engine:'sqlite',host:'',port:0,database:'archive.db',username:'',tls:false};
     localStorage.setItem('woojoo-profiles-v1',JSON.stringify([profile]));
@@ -32,17 +32,25 @@ test('sidebar history filters, pages, reads full SQL and reopens in the original
     }});
   });
   await page.goto('/');
-  await page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true}).click();
+  await page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true}).click();
   const history=page.getByRole('region',{name:'쿼리 기록',exact:true});
   await expect(history.locator('.history-entry')).toHaveCount(50);
   await history.getByRole('button',{name:/더 보기/}).click();
   await expect(history.locator('.history-entry')).toHaveCount(53);
-  await chooseOption(page.getByLabel('실행 상태',{exact:true}), 'failed');
-  await expect(history.locator('.history-entry')).toHaveCount(1);
-  await history.getByRole('button',{name:'상세 보기'}).click();
-  await expect(history.locator('.history-detail-error')).toHaveText('syntax error');
-  await chooseOption(page.getByLabel('실행 상태',{exact:true}), '');
-  await page.getByLabel('SQL·오류 검색').fill('한글');
+  await history.getByRole('button',{name:'전체 기록 보기',exact:true}).click();
+  const all=page.getByRole('region',{name:'전체 쿼리 기록',exact:true});
+  await expect(page.getByRole('tab',{name:'쿼리 기록',exact:true})).toHaveAttribute('aria-selected','true');
+  await chooseOption(all.getByLabel('실행 상태',{exact:true}), 'failed');
+  await expect(all.locator('.history-entry')).toHaveCount(1);
+  await all.getByRole('button',{name:'상세 보기'}).click();
+  await expect(all.locator('.history-detail-error')).toHaveText('syntax error');
+  await chooseOption(all.getByLabel('실행 상태',{exact:true}), '');
+  await all.getByLabel('SQL·오류 검색').fill('한글');
+  await expect(all.locator('.history-entry')).toHaveCount(1);
+  await expect(all.locator('.history-sql')).toContainText('한글');
+  await all.getByRole('button',{name:'상세 보기'}).click();
+  await expect(all.locator('.history-full-sql')).toHaveText("SELECT '"+'한글'.repeat(400)+"';");
+  await history.getByLabel('SQL·오류 검색').fill('한글');
   await expect(history.locator('.history-entry')).toHaveCount(1);
   await page.screenshot({path:'test-results/executions-dark.png'});
   await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
@@ -67,8 +75,8 @@ test('archive remains accessible without connections and shows storage errors',a
     }}});
   });
   await page.goto('/');
-  await page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true}).click();
+  await page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('Archive unavailable');
-  await page.locator('.rail').getByRole('button',{name:'탐색기',exact:true}).click();
+  await page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true}).click();
   await expect(page.locator('.workspace-empty')).toBeVisible();
 });
