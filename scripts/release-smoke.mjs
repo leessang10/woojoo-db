@@ -52,11 +52,10 @@ try {
   expect(await page.evaluate(() => !!window.__TAURI_INTERNALS__)).toBe(true);
   await chooseLanguage(page, 'ko');
   await expect(page.locator('.workspace-empty')).toBeVisible();
-  const database = page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true});
-  const archive = page.locator('.rail').getByRole('button',{name:'실행한 쿼리',exact:true});
-  await expect(page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true})).toHaveCount(0);
+  const database = page.locator('.rail').getByRole('button',{name:'탐색기',exact:true});
+  const archive = page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true});
   await archive.click();
-  await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toBeVisible();
   await database.click();
   await expect(page.locator('.workspace-empty')).toBeVisible();
   await expect(page.locator('.sidebar')).toBeVisible();
@@ -84,8 +83,9 @@ try {
   await expect(page.locator('.tree-table')).toHaveCount(1);
   for(let i=0;i<2;i++) {
     await archive.click();
+    await database.click();
     await page.locator('.tree-table').click();
-    await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
     await expect(page.locator('.object-page')).toBeVisible();
   }
   await page.locator('.tab-add').click();

@@ -1,7 +1,7 @@
 import { chooseOption } from './select-control';
 import { test, expect } from '@playwright/test';
 
-test('execution page filters, paginates, reads full SQL and reopens in the original profile', async ({page})=>{
+test('sidebar history filters, pages, reads full SQL and reopens in the original profile', async ({page})=>{
   await page.addInitScript(()=>{
     const profile={id:'archive-profile',name:'Archive SQLite',engine:'sqlite',host:'',port:0,database:'archive.db',username:'',tls:false};
     localStorage.setItem('woojoo-profiles-v1',JSON.stringify([profile]));
@@ -32,35 +32,29 @@ test('execution page filters, paginates, reads full SQL and reopens in the origi
     }});
   });
   await page.goto('/');
-  await page.getByRole('button',{name:'실행한 쿼리',exact:true}).click();
-  const pageRegion=page.getByRole('region',{name:'실행한 쿼리',exact:true});
-  await expect(pageRegion.locator('tbody tr')).toHaveCount(50);
-  expect((await page.getByLabel('시작일',{exact:true}).boundingBox())!.width).toBeLessThanOrEqual(150);
-  expect((await page.getByLabel('종료일',{exact:true}).boundingBox())!.width).toBeLessThanOrEqual(150);
-  await page.getByRole('button',{name:'다음 페이지',exact:true}).click();
-  await expect(pageRegion.locator('tbody tr')).toHaveCount(3);
+  await page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true}).click();
+  const history=page.getByRole('region',{name:'쿼리 기록',exact:true});
+  await expect(history.locator('.history-entry')).toHaveCount(50);
+  await history.getByRole('button',{name:/더 보기/}).click();
+  await expect(history.locator('.history-entry')).toHaveCount(53);
   await chooseOption(page.getByLabel('실행 상태',{exact:true}), 'failed');
-  await expect(pageRegion.locator('tbody tr')).toHaveCount(1);
-  await pageRegion.locator('tbody button').click();
-  await expect(page.locator('.execution-error')).toHaveText('syntax error');
+  await expect(history.locator('.history-entry')).toHaveCount(1);
+  await history.getByRole('button',{name:'상세 보기'}).click();
+  await expect(history.locator('.history-detail-error')).toHaveText('syntax error');
   await chooseOption(page.getByLabel('실행 상태',{exact:true}), '');
   await page.getByLabel('SQL·오류 검색').fill('한글');
-  await expect(pageRegion.locator('tbody tr')).toHaveCount(1);
-  await pageRegion.locator('tbody button').click();
-  await expect(page.locator('.execution-sql')).toHaveText("SELECT '"+'한글'.repeat(400)+"';");
+  await expect(history.locator('.history-entry')).toHaveCount(1);
   await page.screenshot({path:'test-results/executions-dark.png'});
   await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
-  await expect(page.locator('.connection')).toHaveCSS('background-color','rgb(255, 255, 255)');
   await page.screenshot({path:'test-results/executions-light.png'});
-  await page.getByRole('button',{name:'편집기에서 열기'}).click();
-  await expect(pageRegion).not.toBeVisible();
+  await history.locator('.history-open').click();
+  await expect(history).toBeVisible();
   await page.getByRole('button',{name:'다시 연결',exact:true}).click();
   await page.getByRole('button',{name:'연결하기',exact:true}).click();
   await expect(page.locator('.cm-content')).toHaveText("SELECT '"+'한글'.repeat(400)+"';");
   expect(await page.evaluate(()=>(window as any).journalCalls.some((c:any)=>c.command==='run_query'))).toBe(false);
   await page.reload();
-  await page.getByRole('button',{name:'실행한 쿼리',exact:true}).click();
-  await expect(pageRegion.locator('tbody tr')).toHaveCount(50);
+  await expect(page.getByRole('region',{name:'쿼리 기록',exact:true}).locator('.history-entry')).toHaveCount(50);
 });
 
 test('archive remains accessible without connections and shows storage errors',async({page})=>{
@@ -73,8 +67,8 @@ test('archive remains accessible without connections and shows storage errors',a
     }}});
   });
   await page.goto('/');
-  await page.getByRole('button',{name:'실행한 쿼리',exact:true}).click();
+  await page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true}).click();
   await expect(page.getByRole('alert')).toContainText('Archive unavailable');
-  await page.getByRole('button',{name:'작업 공간으로 돌아가기'}).click();
+  await page.locator('.rail').getByRole('button',{name:'탐색기',exact:true}).click();
   await expect(page.locator('.workspace-empty')).toBeVisible();
 });

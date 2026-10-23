@@ -24,19 +24,18 @@ test('confirmation traps focus, cancels on Escape, and preserves dirty SQL', asy
   await expect(page.getByRole('tab')).toHaveCount(1);
 });
 
-test('SQL history replacement confirmation stays above its parent dialog', async ({ page }) => {
+test('opening history in a new tab never replaces the current SQL', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.cm-content')).toHaveAttribute('contenteditable','true');
   await page.locator('.cm-content').fill('SELECT * FROM users LIMIT 1;');
   await page.locator('.query-tools').getByRole('button', {name:'스크립트 실행',exact:true}).click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(1);
   await page.locator('.cm-content').fill('SELECT 42;');
-  await page.locator('.query-tools').getByRole('button', {name:'SQL 기록',exact:true}).click();
-  const history = page.getByRole('dialog', {name:'SQL 기록',exact:true});
-  await history.getByRole('button', {name:'불러오기',exact:true}).first().click();
-  await page.getByRole('alertdialog').getByRole('button', {name:'취소',exact:true}).click();
-  await expect(history).toBeVisible();
-  await expect(history.getByRole('button', {name:'불러오기',exact:true}).first()).toBeFocused();
-  await history.getByRole('button', {name:'닫기',exact:true}).click();
+  await page.locator('.rail').getByRole('button', {name:'쿼리 기록',exact:true}).click();
+  const history = page.getByRole('region', {name:'쿼리 기록',exact:true});
+  await history.locator('.history-open').first().click();
+  await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 1;');
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await page.locator('.tab-list [role=tab]').first().click();
   await expect(page.locator('.cm-content')).toHaveText('SELECT 42;');
 });

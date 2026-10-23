@@ -81,26 +81,22 @@ test('rail navigation restores the workspace without toggling the sidebar or los
   await page.locator('.run-button').click();
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.locator('.cm-content').fill('SELECT * FROM users LIMIT 7;');
-  const database = page.locator('.rail').getByRole('button', { name: '데이터베이스', exact: true });
-  const executions = page.locator('.rail').getByRole('button', { name: '실행한 쿼리', exact: true });
-  await expect(page.locator('.rail').getByRole('button', {name:'쿼리 기록',exact:true})).toHaveCount(0);
-  for (const collapsed of [false, true]) {
-    if (collapsed) await page.getByRole('button', {name:'사이드바 접기',exact:true}).click();
-    await executions.click();
-    await expect(executions).toHaveAttribute('aria-current','page');
-    await expect(database).not.toHaveClass(/selected/);
-    await executions.click();
-    await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toBeVisible();
-    await database.click();
-    await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).not.toBeVisible();
-    await expect(database).toHaveAttribute('aria-current','page');
-    await expect(executions).not.toHaveClass(/selected/);
-    await expect(page.locator('.sidebar')).toHaveCount(collapsed?0:1);
-    await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 7;');
-    await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
-    await database.click();
-    await expect(page.locator('.sidebar')).toHaveCount(collapsed?0:1);
-  }
+  const explorer = page.locator('.rail').getByRole('button', { name: '탐색기', exact: true });
+  const history = page.locator('.rail').getByRole('button', { name: '쿼리 기록', exact: true });
+  await expect(explorer).toHaveAttribute('aria-pressed','true');
+  await history.click();
+  await expect(history).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toBeVisible();
+  await expect(page.locator('.tree')).toHaveCount(0);
+  await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 7;');
+  await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
+  await history.click();
+  await expect(page.locator('.sidebar')).toHaveCount(0);
+  await explorer.click();
+  await expect(page.locator('.sidebar')).toHaveCount(1);
+  await expect(page.locator('.tree')).toBeVisible();
+  await expect(explorer).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.cm-content')).toHaveText('SELECT * FROM users LIMIT 7;');
 });
 
 test('opening the table after a query restores an editable table without losing the SQL', async ({ page }) => {
@@ -177,9 +173,10 @@ test('sidebar objects leave executed queries for new and existing tabs', async (
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   for (let repeat = 0; repeat < 2; repeat++) {
     for (const selector of ['.tree-table', '.tree-schema']) {
-      await page.locator('.rail').getByRole('button', {name:'실행한 쿼리',exact:true}).click();
+      await page.locator('.rail').getByRole('button', {name:'쿼리 기록',exact:true}).click();
+      await page.locator('.rail').getByRole('button', {name:'탐색기',exact:true}).click();
       await page.locator(selector).first().click();
-      await expect(page.getByRole('region',{name:'실행한 쿼리',exact:true})).toHaveCount(0);
+      await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
       await expect(page.locator('.object-page')).toBeVisible();
     }
   }

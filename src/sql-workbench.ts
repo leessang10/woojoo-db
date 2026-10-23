@@ -158,7 +158,11 @@ export function readQueryHistory(connection?: string): QueryHistory[] {
     return Array.isArray(rows) ? rows.filter((row): row is QueryHistory => !!row && typeof row.sql === 'string' && typeof row.id === 'string' && typeof row.at === 'string' && typeof row.engine === 'string' && (!connection || row.connection === connection)).slice(0, 200) : [];
   } catch { return []; }
 }
+/** Fired on window after local history changes so open history views refresh. */
+export const HISTORY_EVENT = 'woojoo-history-changed';
 export function appendQueryHistory(entry: QueryHistory): boolean {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify([entry, ...readQueryHistory()].slice(0, 200))); return true; }
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify([entry, ...readQueryHistory()].slice(0, 200))); }
   catch { return false; }
+  window.dispatchEvent(new Event(HISTORY_EVENT));
+  return true;
 }

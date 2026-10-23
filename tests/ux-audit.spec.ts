@@ -22,8 +22,8 @@ test('failed queries retain explicitly stale results after dismissing the error 
  await page.locator('.run-button').click();
  await expect(page.locator('.data-grid tbody tr')).toHaveCount(1);
  await expect(page.locator('.stale-result-label')).toHaveCount(0);
- await page.getByRole('button',{name:'SQL 기록',exact:true}).click();
- await expect(page.getByRole('dialog',{name:'SQL 기록'})).toContainText('DB 처리 12 ms');
+ await page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true}).click();
+ await expect(page.getByRole('region',{name:'쿼리 기록'}).locator('.history-entry').first()).toContainText('12 ms');
 });
 
 test('data tools reclaim editor space and keep the filter controls together',async({page})=>{

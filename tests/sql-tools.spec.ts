@@ -48,12 +48,12 @@ test('typed parameters execute and searchable history survives reload without pa
   await expect(page.locator('.data-grid tbody tr')).toHaveCount(2);
   await page.reload();
   await expect(page.locator('.query-tools')).toBeVisible();
-  await page.locator('.query-tools').getByRole('button', { name: 'SQL 기록', exact: true }).click();
-  const history = page.getByRole('dialog', { name: 'SQL 기록', exact: true });
-  await history.getByLabel('기록 검색').fill(':limit');
-  await expect(history.locator('pre')).toHaveText('SELECT * FROM users LIMIT :limit;');
-  await history.getByLabel('기록 검색').fill('does-not-exist');
-  await expect(history.locator('pre')).toHaveCount(0);
+  await page.locator('.rail').getByRole('button', { name: '쿼리 기록', exact: true }).click();
+  const history = page.getByRole('region', { name: '쿼리 기록', exact: true });
+  await history.getByLabel('SQL·오류 검색').fill(':limit');
+  await expect(history.locator('.history-sql')).toHaveText('SELECT * FROM users LIMIT :limit;');
+  await history.getByLabel('SQL·오류 검색').fill('does-not-exist');
+  await expect(history.locator('.history-sql')).toHaveCount(0);
 });
 test('MySQL routine definitions use the explicit server script path after confirmation',async({page})=>{
  await page.addInitScript(()=>{(window as any).objectSql=[];Object.defineProperty(window,'isTauri',{value:true});Object.defineProperty(window,'__TAURI_INTERNALS__',{value:{invoke:async(command:string,args:any)=>{if(command==='connect_db')return 'mysql-objects';if(command==='list_tables')return [];if(command==='run_object_sql'){(window as any).objectSql.push(args.sql);return {columns:[],rows:[],affected:0,elapsedMs:1,truncated:false};}throw new Error(command);}}});});

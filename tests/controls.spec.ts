@@ -15,7 +15,7 @@ test('calendar filters use accessible popovers and can select and clear a date',
     } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: '실행한 쿼리', exact: true }).click();
+  await page.locator('.rail').getByRole('button', { name: '쿼리 기록', exact: true }).click();
   const start = page.getByRole('button', { name: '시작일', exact: true });
   await start.click();
   await expect(page.locator('.ui-calendar')).toBeVisible();

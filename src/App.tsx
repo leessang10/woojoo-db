@@ -1,7 +1,7 @@
 import { ConnectionSwitcher } from './ConnectionSwitcher';
 import { CommonSqlDialog } from './CommonSqlDialog';
 import { useConfirm } from './components/ConfirmProvider';
-import { ExecutionsPage, type ExecutionEntry } from './ExecutionsPage';
+import { HistoryPanel, type ExecutionEntry } from './HistoryPanel';
 import { listen } from '@tauri-apps/api/event';
 import { ScrollText } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -127,7 +127,9 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommonSql, setShowCommonSql] = useState(false);
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
-  const [showExecutions,setShowExecutions]=useState(false);
+  // The rail picks what the sidebar shows; the workspace tabs never change with it.
+  const [sidebarView, setSidebarView] = useState<'explorer' | 'history'>(() => { try { return localStorage.getItem('woojoo-sidebar-view') === 'history' ? 'history' : 'explorer'; } catch { return 'explorer'; } });
+  useEffect(() => { try { localStorage.setItem('woojoo-sidebar-view', sidebarView); } catch { /* Session-only preference. */ } }, [sidebarView]);
   const [renaming, setRenaming] = useState<{id:string;name:string}|null>(null);
   const [tabDrop, setTabDrop] = useState<{id:string;after:boolean}|null>(null);
   const tabDrag = useRef<{id:string;x:number;y:number;moving:boolean;target?:{id:string;after:boolean}}|null>(null);
@@ -157,6 +159,11 @@ export default function App() {
   const [editing, setEditing] = useState<{ index: number; col: string; value: string; isNull: boolean } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem('woojoo-sidebar') !== 'closed'; } catch { return true; } });
   function toggleSidebar() { setSidebarOpen(open => !open); }
+  // Clicking the active rail item collapses the sidebar, like an activity bar.
+  function showSidebarView(view: 'explorer' | 'history') {
+    if (sidebarOpen && sidebarView === view) { setSidebarOpen(false); return; }
+    setSidebarView(view); setSidebarOpen(true);
+  }
   useEffect(() => { try { localStorage.setItem('woojoo-sidebar', sidebarOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [sidebarOpen]);
 
   const [collapsedByProfile, setCollapsedByProfile] = useState(readCollapsed);
@@ -240,8 +247,8 @@ export default function App() {
     try{if(!c.session.startsWith('saved:'))await api.disconnect(c.session);await api.forgetPassword(c.profile.id);workspace.removeSession(c.session);setConnections(list=>list.filter(item=>item!==c));if(active===c.session)setActive('demo');}catch(e){announceError(String(e));}
   }
   async function leaveData(){if(advanced[tab.id]&&tab.busy)return false;if(!dataDirtyRef.current[tab.id])return true;if(!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return false;return true;}
-  async function selectConnection(id:string){if(id!==active&&!await leaveData())return;setActive(id);setShowExecutions(false);}
-  async function openExecution(entry:ExecutionEntry){const target=connections.find(c=>c.profile.id===entry.profileId);if(!target||!await leaveData())return;workspace.add(null,entry.sql,target.session);setActive(target.session);setShowExecutions(false);editorSelection.current="";}
+  async function selectConnection(id:string){if(id!==active&&!await leaveData())return;setActive(id);}
+  async function openExecution(entry:Pick<ExecutionEntry,'sql'|'profileId'>){const target=connections.find(c=>c.profile.id===entry.profileId);if(!target||!await leaveData())return;workspace.add(null,entry.sql,target.session);setActive(target.session);editorSelection.current="";}
   async function saveProfile(profile:Profile){
     if(!await leaveData())return;
     const old=connections.find(c=>c.profile.id===profile.id);
@@ -345,7 +352,7 @@ export default function App() {
       group(tr('왼쪽 탭 닫기', 'Close tabs to the left'), tabs.slice(0, index)),
     ];
   }
-  async function activateTab(id: string) { if(id!==tab.id&&!await leaveData())return; editorSelection.current = ''; setEditing(null); setShowReview(false); workspace.activate(id); setShowExecutions(false); return true; }
+  async function activateTab(id: string) { if(id!==tab.id&&!await leaveData())return; editorSelection.current = ''; setEditing(null); setShowReview(false); workspace.activate(id);  return true; }
   async function navigateTabs(event: React.KeyboardEvent<HTMLButtonElement>, id: string) {
     const items = workspace.connectionTabs, index = items.findIndex(item => item.id === id);
     let next: number;
@@ -357,7 +364,7 @@ export default function App() {
     event.preventDefault(); if (!await activateTab(items[next].id)) return; document.getElementById(`tab-${items[next].id}`)?.focus();
   }
   useEffect(() => { document.getElementById(`tab-${tab.id}`)?.scrollIntoView({block:'nearest', inline:'nearest'}); }, [tab.id]);
-  async function addQuery(sql = '', schema?: string) { if(emptyWorkspace)return;if(!await leaveData())return;editorSelection.current = ''; const next=workspace.add(null, sql); if(schema)workspace.patch(next.id,{querySchema:schema}); setShowExecutions(false); }
+  async function addQuery(sql = '', schema?: string) { if(emptyWorkspace)return;if(!await leaveData())return;editorSelection.current = ''; const next=workspace.add(null, sql); if(schema)workspace.patch(next.id,{querySchema:schema});  }
   async function closeTab(item: WorkspaceTab) {
     if (item.busy || pending.current.has(item.id)) return;
     if ((isDirty(item)||dataDirty[item.id])) {
@@ -384,7 +391,7 @@ export default function App() {
     if (!refresh && existing) { activateTab(existing.id); return; }
     if (refresh && !await askDiscard()) return;
     if(!refresh&&!await leaveData())return;
-    setShowExecutions(false);
+    
     const target = refresh ? tab : workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name));
     await performFor(target.id, async () => {
       const data = await api.readTable(active, table);
@@ -418,7 +425,7 @@ export default function App() {
     const existing = workspace.connectionTabs.find(item => item.kind === 'schema' && item.objectSchema === schema);
     if (existing) { activateTab(existing.id); return; }
     if(!await leaveData())return;
-    setShowExecutions(false);
+    
     const next = workspace.add();
     workspace.patch(next.id, { kind: 'schema', objectSchema: schema, loaded: true });
   }
@@ -426,7 +433,7 @@ export default function App() {
     const existing = workspace.connectionTabs.find(item => item.kind === 'erd' && item.objectSchema === schema);
     if (existing) { activateTab(existing.id); return; }
     if (!await leaveData()) return;
-    setShowExecutions(false);
+    
     const next = workspace.add();
     workspace.patch(next.id, { kind: 'erd', objectSchema: schema, loaded: true });
   }
@@ -434,7 +441,7 @@ export default function App() {
     const existing = workspace.connectionTabs.find(item => item.kind === 'details' && item.selected?.schema === table.schema && item.selected.name === table.name);
     if (existing && !refresh) { activateTab(existing.id); return; }
     if(!existing&&!await leaveData())return;
-    setShowExecutions(false);
+    
     const next = existing ?? workspace.add(table);
     if(existing && !await activateTab(next.id))return;
     workspace.patch(next.id, { kind: 'details', objectSchema: table.schema });
@@ -480,7 +487,7 @@ export default function App() {
         if (event.key === 'Escape') setShowSettings(false);
         return;
       }
-      if (showConnect || showReview || showHelp || editing || showExecutions) {
+      if (showConnect || showReview || showHelp || editing) {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') event.preventDefault();
         if (event.key === 'Escape' && !busyRef.current) {
           setEditing(null); setShowReview(false); setShowHelp(false);
@@ -501,7 +508,7 @@ export default function App() {
     const leave = (event: BeforeUnloadEvent) => { if (allTabsRef.current.some(isDirty)||Object.values(dataDirty).some(Boolean)) event.preventDefault(); };
     window.addEventListener('keydown', key); window.addEventListener('beforeunload', leave);
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('beforeunload', leave); };
-  }, [confirming, renaming, showConnect, showReview, showHelp, showSettings, editing,showExecutions,dataDirty]);
+  }, [confirming, renaming, showConnect, showReview, showHelp, showSettings, editing,dataDirty]);
   // Unsaved SQL text is restored from the workspace on restart; pending row edits and open transactions are not.
   const liveSessions = connections.filter(c => c.session !== 'demo' && !c.session.startsWith('saved:'));
   const closeGuard = workspace.tabs.some(item => Object.keys(item.draft).length > 0) || Object.values(dataDirty).some(Boolean) || liveSessions.length > 0;
@@ -655,7 +662,7 @@ export default function App() {
   const crumbSchema = activeSchema || undefined;
   const crumbObject = tab.kind === 'schema' ? undefined : tab.kind === 'erd' ? 'ERD' : tab.kind === 'query' ? tabName(tab) : selected?.name;
   function revealInExplorer() {
-    setSidebarOpen(true);
+    setSidebarOpen(true); setSidebarView('explorer');
     window.setTimeout(() => document.querySelector<HTMLElement>('.tree .active')?.scrollIntoView({ block: 'nearest' }), 0);
   }
   useEffect(() => {
@@ -669,12 +676,13 @@ export default function App() {
   return <div className="app">
     <aside className="rail">
       <span className="brand-mark" aria-label="Woojoo">W</span>
-      <Button variant="ghost" size="bare" className={`rail-button ${!showExecutions ? 'selected' : ''}`} aria-current={!showExecutions ? 'page' : undefined} aria-label={t("데이터베이스")} title={t("데이터베이스")} onClick={() => setShowExecutions(false)}><Database size={21}/></Button>
-      <Button variant="ghost" size="bare" className={`rail-button ${showExecutions?'selected':''}`} title={tr("실행한 쿼리","Executed queries")} aria-label={tr("실행한 쿼리","Executed queries")} aria-current={showExecutions ? 'page' : undefined} onClick={()=>setShowExecutions(true)}><ScrollText size={21}/></Button>
+      <Button variant="ghost" size="bare" className={`rail-button ${sidebarOpen && sidebarView === 'explorer' ? 'selected' : ''}`} aria-pressed={sidebarOpen && sidebarView === 'explorer'} aria-label={tr("탐색기","Explorer")} title={tr("탐색기 · 연결과 스키마","Explorer · connections and schemas")} onClick={() => showSidebarView('explorer')}><Database size={21}/></Button>
+      <Button variant="ghost" size="bare" className={`rail-button ${sidebarOpen && sidebarView === 'history' ? 'selected' : ''}`} aria-pressed={sidebarOpen && sidebarView === 'history'} aria-label={tr("쿼리 기록","Query history")} title={tr("쿼리 기록","Query history")} onClick={() => showSidebarView('history')}><ScrollText size={21}/></Button>
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} aria-label={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
     {sidebarOpen && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
       <div className="workspace-brand"><span>Woojoo</span></div>
+      {sidebarView === 'history' ? <HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} onOpen={entry => void openExecution(entry)}/> : <>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
       <div className="connections">{selectableConnections.length>0&&<ConnectionSwitcher connections={selectableConnections} active={active} onSelect={id=>{editorSelection.current='';void selectConnection(id);}} onAdd={()=>setShowConnect(true)}>{currentConnection ? (()=>{const c=currentConnection;return <Button variant="ghost" size="bare" key={c.session} {...menuFor([
         {label:t('연결 선택'), action:()=>selectConnection(c.session)},
@@ -700,12 +708,11 @@ export default function App() {
           : !visibleTables.length && (search && shownTables.length ? <p className="empty-tree">{tr(`"${search}"와 일치하는 테이블이 없습니다.`,`No tables match "${search}".`)}</p>
           : chosenSchemas && tableList.length ? <div className="empty-tree"><p>{tr('스키마 필터 때문에 모든 테이블이 숨겨져 있습니다.','The schema filter hides every table.')}</p><Button variant="outline" size="xs" onClick={()=>setSchemaFilters(prev=>{const next={...prev};delete next[connection.profile.id];return next;})}>{tr('필터 해제','Clear filter')}</Button></div>
           : <p className="empty-tree"> {t("표시할 테이블이 없습니다.")} </p>)}
-      </div></>}
+      </div></>}</>}
     </aside>}
     <main className="main" data-environment={!emptyWorkspace&&connected?connection.profile.environment:undefined}>
       <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" className="icon-button sidebar-toggle" aria-label={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기')} title={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기') + ' · Ctrl/Cmd+B'} aria-expanded={sidebarOpen} aria-controls="database-sidebar" onClick={toggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>{!emptyWorkspace&&<nav className="breadcrumb-path" aria-label={tr('현재 위치','Location')}><Database size={14}/><Button variant="ghost" size="bare" className="crumb-link" title={tr('탐색기에서 보기','Show in explorer')} onClick={revealInExplorer}>{connection.profile.name}</Button><ChevronRight size={13}/>{crumbSchema ? <Button variant="ghost" size="bare" className="crumb-link" aria-current={!crumbObject?'page':undefined} title={tr('스키마 열기','Open schema')} onClick={()=>void openSchema(crumbSchema)}>{crumbSchema}</Button> : <span className="crumb-muted" title={connection.profile.engine === 'postgres' ? tr('스키마를 생략한 이름은 연결의 search_path(보통 public)에서 찾습니다.','Unqualified names resolve through the connection search_path (usually public).') : tr('스키마를 생략한 이름은 연결의 기본 데이터베이스에서 찾습니다.','Unqualified names resolve in the connection default database.')}>{tr('기본 스키마','Default schema')}</span>}{crumbObject&&<><ChevronRight size={13}/><strong aria-current="page">{crumbObject}</strong></>}</nav>}</div><div className="topbar-right">{!emptyWorkspace&&<span className="connection-status" data-connected={connected} title={connected?(connection.profile.engine==='sqlite'?connection.profile.database:`${connection.profile.username}@${connection.profile.host}:${connection.profile.port}/${connection.profile.database}`):undefined}><span className={`live-dot ${connected?'':'offline'}`} aria-hidden="true"/>{!connected&&<strong>{tr('연결 끊김','Disconnected')}</strong>}<span>{[engineLabel(connection.profile.engine),connection.profile.engine==='sqlite'?connection.profile.database.split(/[\\/]/).pop():connection.profile.host,connection.profile.engine==='sqlite'?null:connection.profile.tls?'TLS':tr('TLS 없음','No TLS')].filter(Boolean).join(' · ')}</span></span>}{!emptyWorkspace&&production&&<span className="env-banner" data-environment="production" role="note"><AlertTriangle size={13}/>PRODUCTION</span>}{!emptyWorkspace&&connection.profile.environment==='staging'&&<span className="env-banner" data-environment="staging">STAGING</span>}{!emptyWorkspace&&connection.profile.readOnly&&<span className="env-banner" data-environment="readonly">{tr('읽기 전용','Read-only')}</span>}<Button variant="ghost" size="bare" className="subtle-button" onClick={() => setShowConnect(true)}><Plus size={14}/> {t("연결 추가")} </Button></div></header>
-      {showExecutions&&<ExecutionsPage onClose={()=>setShowExecutions(false)} onOpen={openExecution} profileIds={connections.filter(c=>c.session!=="demo").map(c=>c.profile.id)}/>}
-      <div style={{display:showExecutions?"none":"contents"}}>
+      <>
       {emptyWorkspace?<div className="workspace-empty"><Database size={28}/><h1>{tr("첫 데이터베이스를 연결하세요","Connect your first database")}</h1>{!api.desktop&&<p className="connection-availability">{tr("실제 DB 연결은 데스크톱 앱에서 사용할 수 있습니다.","Use the desktop app to connect to a database.")}</p>}<div className="empty-connection-actions">{!connections.some(c=>c.session!=='demo')&&<Button size="sm" disabled={creatingLocal||!api.desktop} title={!api.desktop?tr('데스크톱 앱에서 사용할 수 있습니다.','Available in the desktop app.'):undefined} onClick={()=>void createLocalDatabase()}>{creatingLocal?<Loader2 size={14} className="spin"/>:<Database size={14}/>} {tr('로컬 SQLite 만들기','Create local SQLite')}</Button>}<Button variant="outline" size="sm" disabled={creatingLocal} onClick={()=>{setEditProfile(undefined);setShowConnect(true);}}><Plus size={14}/>{t("새 연결")}</Button></div>{localError&&<p className="local-connection-error" role="alert">{localError}</p>}</div>:<>
       <div className="tabs" {...menuFor([{label:t("새 쿼리"),action:()=>addQuery()}])}><div className="tab-list" onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }} role="tablist" aria-label={t('쿼리 탭')}>
         {workspace.connectionTabs.map(item => <div key={item.id} className={`tab-item ${tab.id === item.id ? 'active' : ''} ${tabDrop?.id===item.id?(tabDrop.after?'drop-after':'drop-before'):''}`} data-workspace-tab={item.id}>
@@ -776,7 +783,7 @@ export default function App() {
       </section>}
       </>}
       </>}
-      </div>
+      </>
     </main>
     {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
       <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>

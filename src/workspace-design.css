@@ -196,7 +196,6 @@
 .structure-modal .modal-actions{margin-top:24px;padding-top:20px}
 .structure-modal .dialog-error{margin:16px 0;line-height:1.7}
 .structure-row-actions{display:flex;gap:8px;align-items:center}
-.executions-scroll td button[data-slot=button]{border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:6px 10px;min-height:30px}
 .data-workbench .dw-row-actions{gap:6px;padding:4px}
 .data-workbench .dw-row-actions button{min-width:28px;min-height:28px}
 .data-workbench .dw-cell button{border:1px solid var(--line);background:var(--surface);border-radius:4px;margin:3px;min-width:24px}
@@ -266,7 +265,6 @@
 .dw-filter-toolbar>input{width:auto;flex:1 1 160px;min-width:100px;max-width:360px}
 .dw-filter-toolbar>.dw-muted{font-size:11px}
 .data-workbench .dw-toolbar{flex-shrink:0}
-.executions-description{margin:0;padding:0 24px 16px;color:var(--muted-foreground);font-size:12px;line-height:1.6}
 @media(max-height:760px){.sql-editor{height:140px}.connection-scroll{padding:16px 24px}.connection-modal>.modal-actions{padding:10px 24px}}
 /* Shared action sizes. Bare controls retain their navigation/list geometry. */
 [data-slot=button]:not([data-size=bare]){border-radius:6px;font-size:12px;font-weight:500;gap:6px;box-shadow:none;line-height:1;}
@@ -402,3 +400,31 @@ p.empty-tree{flex-direction:row;align-items:center}
 .query-leading-action{display:flex;align-items:center;flex-shrink:0;padding-right:10px;margin-right:2px;border-right:1px solid var(--line)}
 .schema-select{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground)}
 .schema-select [data-slot=native-select],.schema-select select,.schema-select button{min-width:120px;max-width:180px}
+
+/* Query history in the sidebar. */
+.history-panel{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1;padding:0 8px 12px}
+.history-heading{display:flex;align-items:center;justify-content:space-between;margin:0 8px;font-size:11px;font-weight:600;letter-spacing:.07em;color:var(--muted-foreground)}
+.history-heading button{width:24px;height:24px}
+.history-scope{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.history-scope button{flex:1;height:28px;font-size:12px;border-radius:0;color:var(--muted-foreground)}
+.history-scope button[aria-pressed=true]{background:var(--secondary);color:var(--foreground);font-weight:600}
+.history-search{margin:0}
+.history-status{width:100%}
+.history-error{margin:0;font-size:12px;color:var(--destructive)}
+.history-list{list-style:none;margin:0;padding:0;overflow:auto;min-height:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.history-entry{border-radius:6px;padding:4px 4px 6px}
+.history-entry:hover{background:var(--secondary)}
+.history-row{display:flex;align-items:flex-start;gap:2px}
+.history-open{flex:1;min-width:0;height:auto;justify-content:flex-start;align-items:flex-start;gap:6px;padding:2px;text-align:left;font-size:12px;white-space:normal}
+.history-open svg{margin-top:2px;flex-shrink:0}
+.history-sql{font-family:'Cascadia Code',Consolas,monospace;font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.history-ok{color:var(--good,#4caf7d)}
+.history-bad{color:var(--destructive)}
+.history-toggle{width:22px;height:22px;flex-shrink:0}
+.history-meta{display:block;margin-left:22px;font-size:11px;color:var(--muted-foreground)}
+.history-detail{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:6px 0 0 22px;font-size:11px;color:var(--muted-foreground)}
+.history-detail-error{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--destructive);font-size:11px}
+.history-empty{margin:8px;font-size:12px;color:var(--muted-foreground)}
+.history-more{align-self:center}
+.history-dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
+.history-dates>*{min-width:0;width:100%}
