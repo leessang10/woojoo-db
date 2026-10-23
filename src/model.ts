@@ -1,4 +1,5 @@
-export type Engine = 'postgres' | 'mysql' | 'mariadb' | 'sqlite';
+import { readSettings } from './settings';
+export type Engine ='postgres' | 'mysql' | 'mariadb' | 'sqlite';
 export type Row = Record<string, string | null>;
 export type Column = { name: string; dataType: string; primary: boolean; editable: boolean };
 export type Table = { schema: string; name: string };
@@ -24,7 +25,7 @@ export function collectEdits(rows: Row[], draft: Record<string, string | null>):
 }
 export function tableQuery(engine: Engine, schema: string, table: string) {
   const q = (s: string) => engine === 'postgres' || engine === 'sqlite' ? `"${s.replaceAll('"', '""')}"` : `\`${s.replaceAll('`', '``')}\``;
-  return `SELECT *\nFROM ${q(schema)}.${q(table)}\nLIMIT 500;`;
+  return `SELECT *\nFROM ${q(schema)}.${q(table)}\nLIMIT ${readSettings().resultLimit};`;
 }
 export function csv(columns: string[], rows: Row[]) {
   const quote = (value: string | null) => {

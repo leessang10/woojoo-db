@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cells, looksProduction, mergeRows, tabKey } from './model';
+import { cells, mergeRows, tabKey } from './model';
+import { matchesProduction } from '../settings';
 import { layoutTopology } from './topology-layout';
 import { buildTopology } from './topology-data';
 
@@ -7,8 +8,10 @@ describe('AWS model', () => {
   it('formats list cells and keys tabs by scope', () => {
     expect(cells('ec2', { InstanceId: 'i-1', Tags: [{ Key: 'Name', Value: 'web' }], State: { Name: 'running' } }, 'en').slice(0, 2)).toEqual(['web', 'running']);
     expect(tabKey({ kind: 'resources', profile: 'a', region: 'r', service: 'ec2' })).not.toEqual(tabKey({ kind: 'resources', profile: 'b', region: 'r', service: 'ec2' }));
-    expect(looksProduction('team-prod')).toBe(true);
-    expect(looksProduction('product-dev')).toBe(false);
+    expect(matchesProduction('team-prod', 'prod, live')).toBe(true);
+    expect(matchesProduction('LIVE_us', 'prod, live')).toBe(true);
+    expect(matchesProduction('team-prod', '')).toBe(false);
+    expect(matchesProduction('product-dev', 'prod')).toBe(false);
   });
   it('merges pages without duplicates', () => {
     expect(mergeRows([{ id: 1 }], [{ id: 1 }, { id: 2 }], row => String(row.id))).toHaveLength(2);

@@ -494,3 +494,12 @@ p.empty-tree{flex-direction:row;align-items:center}
 .relations-fk{font-size:11px;font-weight:700;color:var(--primary);width:16px}
 .relations-pad{display:inline-block;width:16px}
 .relations-card li svg{width:16px;color:#d6a64b}
+
+/* Settings: grouped sections, a short hint under each label, and a scrollable body. */
+.modal.settings-modal{width:500px;max-height:calc(100vh - 48px);overflow:auto}
+.settings-section{margin:20px 0 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
+.settings-section:first-child{margin-top:0}
+.modal.settings-modal .settings-row>span:first-child{display:flex;flex-direction:column;gap:4px;min-width:0}
+.modal.settings-modal .settings-row small{font-size:11px;line-height:1.5;color:var(--muted-foreground)}
+.modal.settings-modal .settings-row.settings-row-stacked{flex-direction:column;align-items:stretch;gap:10px}
+.settings-row-stacked input{height:32px;font-size:12px}

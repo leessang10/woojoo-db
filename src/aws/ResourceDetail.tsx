@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useLanguage } from '../i18n';
+import { useSettings } from '../settings';
 import { awsBrowseResources, awsCancel, type AwsRow } from '../aws';
 import { AwsError } from './AwsError';
 import { ResourceActions } from './ResourceActions';
@@ -25,6 +26,7 @@ export function Facts({ tab, row }: { tab: AwsTab; row: AwsRow }) {
 
 export function ResourceDetail({ tab, revision, onConnectRds }: { tab: AwsTab; revision: number; onConnectRds: (row: AwsRow) => void }) {
   const { language } = useLanguage(); const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
+  const { awsActions } = useSettings();
   const service = tab.service!, row = tab.row!;
   const browsable = service === 's3' || service === 'logs';
   const [view, setView] = useState<View>(browsable ? 'browse' : 'overview');
@@ -38,7 +40,7 @@ export function ResourceDetail({ tab, revision, onConnectRds }: { tab: AwsTab; r
     </div>
     <div className="object-view-bar" role="group" aria-label={tr('보기', 'View')}>{views.map(([value, label]) => <Button key={value} variant="ghost" size="bare" className="view-option" aria-pressed={view === value} onClick={() => setView(value)}>{label}</Button>)}</div>
     <div className="aws-detail-body" hidden={view !== 'overview'}><p className="aws-snapshot-note">{tr('목록에서 연 시점의 정보입니다. 최신 상태는 목록을 새로고침하세요.', 'Captured when opened from the list. Refresh the list for the latest state.')}</p><Facts tab={tab} row={row}/></div>
-    {view === 'actions' && <ResourceActions tab={tab} row={row} onDone={clearListCache}/>}
+    {view === 'actions' && (awsActions ? <ResourceActions tab={tab} row={row} onDone={clearListCache}/> : <div className="aws-detail-body"><p className="aws-note">{tr('AWS 변경 작업이 꺼져 있습니다. 설정 › AWS에서 "변경 작업 허용"을 켜면 시작·중지·삭제 같은 작업을 검토 후 실행할 수 있습니다.', 'AWS changes are off. Turn on "Allow changes" in Settings › AWS to review and run actions such as start, stop or delete.')}</p></div>)}
     {view === 'json' && <pre className="aws-json">{JSON.stringify(row, null, 2)}</pre>}
     {browsable && <div className="aws-browse" hidden={view !== 'browse'}>{service === 's3' ? <S3Browser tab={tab} bucket={row.Name} revision={revision}/> : <LogBrowser tab={tab} group={row.logGroupName} revision={revision}/>}</div>}
   </section>;

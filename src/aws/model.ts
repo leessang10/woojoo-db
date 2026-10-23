@@ -1,4 +1,5 @@
 import type { AwsRow, AwsService } from '../aws';
+import { matchesProduction } from '../settings';
 
 export const AWS_SERVICES: AwsService[] = ['ec2', 'rds', 's3', 'logs'];
 export const serviceLabel: Record<AwsService, [string, string]> = {
@@ -112,5 +113,5 @@ export function readAwsContext(): { profile: string; region: string } {
 export function writeAwsContext(profile: string, region: string) {
   try { localStorage.setItem(CONTEXT_KEY, JSON.stringify({ profile, region })); } catch { /* Session-only choice. */ }
 }
-/** Profiles that look like production get the same warning banner as production DB connections. */
-export const looksProduction = (profile: string) => /(^|[^a-z])(prod|production|prd|live)([^a-z]|$)/i.test(profile);
+/** Profiles matching the Settings production words get the same warning banner as production DB connections. */
+export const looksProduction = (profile: string) => matchesProduction(profile);

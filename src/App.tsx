@@ -27,7 +27,7 @@ import CodeMirror, { type EditorState } from '@uiw/react-codemirror';
 import { sql as sqlLanguage, PostgreSQL, MySQL, SQLite } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { GitBranch, Moon, Sun, PanelLeftClose, PanelLeftOpen, Play } from 'lucide-react';
-import { readTheme, saveTheme } from './theme';
+import { applyTheme, readTheme, readThemePreference, saveTheme, watchSystemTheme, type ThemePreference } from './theme';
 import { useLanguage } from './i18n';
 import { SettingsDialog } from './SettingsDialog';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
@@ -72,13 +72,16 @@ export default function App() {
   const { language, t } = useLanguage();
   const { requestConfirm, confirming } = useConfirm();
   const tr=(ko:string,en:string)=>language==='ko'?ko:en;
+  const [themePreference, setThemePreference] = useState(readThemePreference);
   const [theme, setTheme] = useState(readTheme);
   const themeLabel = theme === 'dark' ? t("라이트 모드로 전환") : t("다크 모드로 전환");
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    saveTheme(next);
-    setTheme(next);
+  function chooseTheme(preference: ThemePreference) {
+    setTheme(saveTheme(preference));
+    setThemePreference(preference);
   }
+  // The rail button picks an explicit theme, leaving "follow system" until Settings selects it again.
+  const toggleTheme = () => chooseTheme(theme === 'dark' ? 'light' : 'dark');
+  useEffect(() => themePreference === 'system' ? watchSystemTheme(next => { applyTheme(next); setTheme(next); }) : undefined, [themePreference]);
   const [connections, setConnections] = useState<Connection[]>(()=>[{ profile: initialProfile, session: 'demo' },...readProfiles().map(profile=>({profile,session:`saved:${profile.id}`}))]);
   const [active, setActive] = useState(()=>{try{const id=localStorage.getItem('woojoo-active-profile');return id&&readProfiles().some(p=>p.id===id)?`saved:${id}`:readProfiles()[0]?`saved:${readProfiles()[0].id}`:'demo';}catch{return 'demo';}});
   const connection = connections.find(c => c.session === active) ?? connections[0];
@@ -855,7 +858,7 @@ export default function App() {
     {showConnect && <ConnectionDialog initialProfile={editProfile} initialAws={awsPreset} onClose={() => {setShowConnect(false);setEditProfile(undefined);setAwsPreset(undefined);}} onSave={saveProfile} saveDisabled={!!editProfile&&connections.some(c=>c.profile.id===editProfile.id&&!c.session.startsWith('saved:'))} onPasswordForgotten={passwordForgotten} onConnected={async(profile,session)=>{await acceptConnection(profile,session);setAwsPreset(undefined);setArea('database');}}/>}
     {editing && <ModalSurface title={t("셀 편집")} onClose={() => setEditing(null)} locked={false}><div className="modal cell-modal" role="dialog" aria-modal="true" aria-label={t("셀 편집")}><div className="modal-heading"><h2> {t("셀 편집")} </h2><Button variant="ghost" size="bare" onClick={() => setEditing(null)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{selected?.name} / <strong>{editing.col}</strong> {t("· 행")} {editing.index + 1}</p><Textarea aria-label={t("셀 값")} autoFocus value={editing.value} disabled={editing.isNull} onChange={e => setEditing({...editing,value:e.target.value})} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value})); setEditing(null); } }}/><p className="field-hint">{tr('Ctrl/Cmd+Enter: 대기열에 추가 · Esc: 취소','Ctrl/Cmd+Enter: stage · Esc: cancel')}</p><label className="checkbox-label"><Input type="checkbox" checked={editing.isNull} onChange={e => setEditing({...editing,isNull:e.target.checked})}/> {t("NULL로 설정")} </label><div className="modal-actions"><Button variant="outline" size="sm" className="secondary-button" onClick={() => setEditing(null)}> {t("취소")} </Button><Button variant="default" size="sm" className="primary-button" onClick={() => {setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value}));setEditing(null);}}> {t("변경 대기열에 추가")} </Button></div></div></ModalSurface>}
     {showReview && <ModalSurface title={t("변경 사항 검토")} onClose={() => setShowReview(false)} locked={busy}><div className="modal review-modal" role="dialog" aria-modal="true" aria-label={t("변경 사항 검토")}><div className="modal-heading"><h2> {t("변경 사항 검토")} </h2><Button variant="ghost" size="bare" disabled={busy} onClick={() => setShowReview(false)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{t('검토 설명', {table: `${selected?.schema}.${selected?.name}`, count: edits.length})} {active === 'demo' ? t("데모 데이터에만 반영됩니다.") : t("모든 변경을 하나의 트랜잭션으로 적용합니다.")}</p>{production&&<p className="production-warning" role="note"><AlertTriangle size={14}/>{tr(`운영(PRODUCTION) 연결 "${connection.profile.name}"에 적용합니다.`,`These changes go to the PRODUCTION connection "${connection.profile.name}".`)}</p>}<div className="review-list">{edits.map((edit,i) => <div className="review-row" key={i}><small>{result.columns.filter(c => c.primary).map(c => `${c.name} = ${edit.original[c.name]}`).join(', ')}</small>{Object.entries(edit.changes).map(([col,val]) => <div key={col}><strong>{col}</strong><del>{edit.original[col] ?? 'NULL'}</del><ArrowRight size={14}/><ins>{val ?? 'NULL'}</ins></div>)}</div>)}</div>{error && <p className="dialog-error">{error}</p>}<div className="modal-actions"><Button variant="outline" size="sm" disabled={busy} className="secondary-button" onClick={() => setShowReview(false)}> {t("돌아가기")} </Button><Button variant="default" size="sm" disabled={busy} className="primary-button" onClick={() => void applyChanges()}>{busy ? t("적용 중...") : t('행 적용', {count: edits.length})}</Button></div></div></ModalSurface>}
-    {showSettings && <SettingsDialog theme={theme} onThemeChange={next => { saveTheme(next); setTheme(next); }} sidebarOpen={sidebarOpen} onSidebarChange={setSidebarOpen} onClose={() => setShowSettings(false)}/> }
+    {showSettings && <SettingsDialog theme={themePreference} onThemeChange={chooseTheme} sidebarOpen={sidebarOpen} onSidebarChange={setSidebarOpen} onClose={() => setShowSettings(false)}/> }
     {showHelp && <ModalSurface title={t("도움말")} onClose={() => setShowHelp(false)} locked={false}><div className="modal help-modal" role="dialog" aria-modal="true" aria-label={t("도움말")}><div className="modal-heading"><h2> {t("도움말")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHelp(false)} aria-label={t("닫기")}><X size={20}/></Button></div><div className="help-content"><table className="shortcut-table"><caption>{tr('단축키','Keyboard shortcuts')} · {tr('Mac에서는 Ctrl 대신 Cmd','Use Cmd instead of Ctrl on macOS')}</caption><tbody>{([
         ['Ctrl + Enter', tr('선택한 SQL 또는 커서가 있는 구문 실행','Run the selection or the statement at the cursor')],
         ['Ctrl + Shift + Enter', tr('편집기 전체를 스크립트로 실행','Run the whole editor as a script')],

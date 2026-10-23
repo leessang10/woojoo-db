@@ -33,6 +33,7 @@ const messages: Record<string, string> = {
   "AWS 요청을 취소했습니다.": "The AWS request was cancelled.",
   "검토가 만료되었습니다. 작업을 다시 검토하세요.": "The review expired. Review the change again.",
   "확인 문구가 일치하지 않습니다.": "The confirmation does not match.",
+  "AWS 변경 작업이 꺼져 있습니다. 설정에서 켜세요.": "AWS changes are turned off. Turn them on in Settings.",
   "검토 이후 프로필의 AWS 계정이 바뀌었습니다. 작업을 실행하지 않았습니다.": "The profile’s AWS account changed after the review. Nothing was run.",
   "선택한 리전에 RDS 인스턴스가 없습니다.":"No RDS instances found in this region.",
   "보안 그룹에서 현재 PC의 DB 접속을 허용해야 합니다.": "The security group must allow database access from this computer.",

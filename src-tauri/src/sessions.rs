@@ -265,7 +265,7 @@ impl Session {
                                         .collect();
                                     db::unique_columns(&output.columns)?;
                                 }
-                                if output.rows.len() >= 500 {
+                                if output.rows.len() >= db::result_limit() {
                                     output.truncated = true;
                                     continue;
                                 }

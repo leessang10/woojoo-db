@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
-    sync::{LazyLock, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        LazyLock, Mutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -124,8 +127,22 @@ fn display(args: &[String]) -> String {
     format!("aws {} {} --cli-input-json '{}'", args[0], args[1], args.last().map(String::as_str).unwrap_or(""))
 }
 
+/// Off until Settings turns AWS changes on; checked again before a reviewed change runs.
+static ENABLED: AtomicBool = AtomicBool::new(false);
+#[tauri::command]
+pub fn aws_set_actions_enabled(enabled: bool) {
+    ENABLED.store(enabled, Ordering::SeqCst);
+    if !enabled {
+        PENDING.lock().unwrap().clear();
+    }
+}
+fn ensure_enabled() -> Result<(), String> {
+    if ENABLED.load(Ordering::SeqCst) { Ok(()) } else { Err("AWS_ACTIONS_DISABLED".into()) }
+}
+
 #[tauri::command]
 pub async fn aws_prepare_action(query: ActionQuery) -> Result<Review, String> {
+    ensure_enabled()?;
     validate(&query.profile)?;
     let args = arguments(&query)?;
     let account = account(&query.profile, &query.region).await?;
@@ -155,6 +172,7 @@ fn take(review: &str, confirmation: &str) -> Result<Pending, String> {
 }
 #[tauri::command]
 pub async fn aws_run_action(review: String, confirmation: String) -> Result<Value, String> {
+    ensure_enabled()?;
     let item = take(&review, &confirmation)?;
     // The profile may have switched accounts (SSO, role) since the review; never write elsewhere.
     if account(&item.profile, &item.region).await? != item.account {
@@ -195,6 +213,13 @@ mod tests {
         assert_eq!(input["Tags"][0]["Value"], "web 1");
         let args = arguments(&query(Action::LogsRetention, "/aws/lambda/x", Some("30"))).unwrap();
         assert!(display(&args).starts_with("aws logs put-retention-policy"));
+    }
+    #[tokio::test]
+    async fn changes_are_refused_while_disabled() {
+        // Off by default; the setter is not called so other tests' reviews are left alone.
+        let error = aws_prepare_action(query(Action::Ec2Stop, "i-1", None)).await.err().unwrap();
+        assert_eq!(error, "AWS_ACTIONS_DISABLED");
+        assert_eq!(aws_run_action("x".into(), "i-1".into()).await.err().unwrap(), "AWS_ACTIONS_DISABLED");
     }
     #[test]
     fn reviews_need_the_exact_phrase_and_are_single_use() {

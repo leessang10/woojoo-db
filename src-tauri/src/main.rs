@@ -61,6 +61,7 @@ fn main() {
             aws::actions::aws_prepare_action,
             aws::actions::aws_run_action,
             aws::actions::aws_cancel_action,
+            aws::actions::aws_set_actions_enabled,
             sessions::run_object_sql,
             sessions::transaction_mode,
             sessions::transaction_finish,
@@ -96,7 +97,8 @@ fn main() {
             db::read_erd,
             export::save_erd_export,
             db::run_query,
-            db::apply_edits
+            db::apply_edits,
+            db::set_result_limit
         ])
         .run(tauri::generate_context!())
         .expect("Woojoo 실행 실패");

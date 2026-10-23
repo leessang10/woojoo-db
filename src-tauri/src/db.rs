@@ -16,6 +16,15 @@ use zeroize::Zeroize;
 
 pub(crate) type Row = Map<String, Value>;
 pub(crate) type DbResult<T> = Result<T, String>;
+/// Rows a table view or query result keeps before it is marked truncated; set from Settings.
+static RESULT_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(500);
+pub(crate) fn result_limit() -> usize {
+    RESULT_LIMIT.load(std::sync::atomic::Ordering::Relaxed)
+}
+#[tauri::command]
+pub fn set_result_limit(limit: usize) {
+    RESULT_LIMIT.store(limit.clamp(100, 10_000), std::sync::atomic::Ordering::Relaxed);
+}
 #[derive(Clone)]
 pub(crate) enum Pool {
     Pg(PgPool),
@@ -539,13 +548,14 @@ async fn read(state: &State, id: String, table: Table) -> DbResult<QueryResult> 
         .map(|c| quote_ident(&c.name, pg))
         .collect::<Vec<_>>();
     let sql = format!(
-        "SELECT {projection} FROM {}{} LIMIT 501",
+        "SELECT {projection} FROM {}{} LIMIT {}",
         qualified(&table, pg),
         if order.is_empty() {
             String::new()
         } else {
             format!(" ORDER BY {}", order.join(","))
-        }
+        },
+        result_limit() + 1
     );
     let mut rows = match p {
         Pool::Sqlite(p) => sqlx::query(&sql)
@@ -605,8 +615,8 @@ async fn read(state: &State, id: String, table: Table) -> DbResult<QueryResult> 
             })
             .collect::<DbResult<Vec<_>>>()?,
     };
-    let truncated = rows.len() > 500;
-    rows.truncate(500);
+    let truncated = rows.len() > result_limit();
+    rows.truncate(result_limit());
     Ok(QueryResult {
         columns,
         rows,

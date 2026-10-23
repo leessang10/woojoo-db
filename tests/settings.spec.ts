@@ -27,3 +27,24 @@ test('settings apply immediately and persist without replacing the current query
   await expect(settings.getByLabel('Show sidebar')).not.toBeChecked();
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
 });
+
+test('system theme follows the OS and database and editor settings apply', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  await page.keyboard.press('Control+,');
+  const dialog = page.getByRole('dialog', { name: '설정', exact: true });
+  await chooseOption(dialog.getByLabel('테마', { exact: true }), 'system');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await chooseOption(dialog.getByLabel('결과 최대 행 수'), '1000');
+  await chooseOption(dialog.getByLabel('편집기 글꼴 크기'), '16');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.cm-editor')).toHaveCSS('font-size', '16px');
+  await page.getByRole('button', { name: '이 테이블로 새 쿼리' }).click();
+  await expect(page.locator('.cm-content')).toContainText('LIMIT 1000');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.keyboard.press('Control+,');
+  await expect(dialog.getByLabel('결과 최대 행 수')).toHaveAttribute('data-value', '1000');
+});

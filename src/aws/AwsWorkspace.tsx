@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useLanguage } from '../i18n';
+import { useSettings } from '../settings';
 import { desktop } from '../api';
 import type { Theme } from '../theme';
 import type { AwsPreset } from '../AwsConnection';
@@ -23,6 +24,7 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   visible: boolean; sidebarOpen: boolean; onToggleSidebar: () => void; commandsRef: MutableRefObject<AwsCommands>; theme: Theme; onConnectRds: (preset: AwsPreset) => void;
 }) {
   const { t, language } = useLanguage(); const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
+  useSettings(); // Re-renders when the production words change.
   const saved = useRef(readAwsContext());
   const [info, setInfo] = useState<AwsCliInfo | null>(null), [infoError, setInfoError] = useState(''), [checking, setChecking] = useState(false), [cliCheck, setCliCheck] = useState(0);
   const [profile, setProfile] = useState(''), [env, setEnv] = useState<AwsEnvironment | null>(null), [envError, setEnvError] = useState(''), [envLoading, setEnvLoading] = useState(false), [envCheck, setEnvCheck] = useState(0);

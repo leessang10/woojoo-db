@@ -4,6 +4,7 @@ import { test, expect, type Page } from './fixtures';
 async function mock(page: Page, scenario = 'normal') {
   await page.addInitScript(({ scenario }) => {
     (window as any).calls = [];
+    if (scenario === 'actions') localStorage.setItem('woojoo-settings-v1', JSON.stringify({ awsActions: true }));
     const ec2 = [{ InstanceId: 'i-web', Tags: [{ Key: 'Name', Value: 'web-1' }], State: { Name: 'running' }, InstanceType: 't3.small', Placement: { AvailabilityZone: 'ap-northeast-2a' }, PrivateIpAddress: '10.0.1.5', VpcId: 'vpc-1', SubnetId: 'subnet-1' },
       { InstanceId: 'i-batch', Tags: [{ Key: 'Name', Value: 'batch' }], State: { Name: 'stopped' }, InstanceType: 't3.micro', Placement: { AvailabilityZone: 'ap-northeast-2c' }, VpcId: 'vpc-1', SubnetId: 'subnet-1' }];
     const rds = [{ DBInstanceIdentifier: 'app-db', DBInstanceStatus: 'available', Engine: 'postgres', EngineVersion: '16.4', DBInstanceClass: 'db.t3.micro', AvailabilityZone: 'ap-northeast-2a', Endpoint: { Address: 'app.example.rds.amazonaws.com', Port: 5432 }, DBName: 'app', MasterUsername: 'admin', DBSubnetGroup: { VpcId: 'vpc-1' } }];
@@ -32,7 +33,7 @@ async function mock(page: Page, scenario = 'normal') {
       }
       if (command === 'aws_prepare_action') return { review: 'r1', account: '123456789012', phrase: args.query.resource, command: 'aws ec2 stop-instances --cli-input-json \'{"InstanceIds":["i-web"]}\'' };
       if (command === 'aws_run_action') return {};
-      if (command === 'aws_cancel' || command === 'aws_cancel_action') return;
+      if (command === 'aws_cancel' || command === 'aws_cancel_action' || command === 'aws_set_actions_enabled' || command === 'set_result_limit') return;
       if (command === 'aws_rds_instances') return [{ id: 'app-db', engine: 'postgres', version: '16.4', status: 'available', host: 'app.example.rds.amazonaws.com', port: 5432, database: 'app', username: 'admin', public: false, supported: true }];
       if (command === 'connect_db') return 'rds-session';
       if (command === 'list_tables') return [];
@@ -87,8 +88,22 @@ test('S3 and CloudWatch Logs details browse objects and events', async ({ page }
   expect(browse.find((c: any) => c.args.query.kind === 'events').args.query).toMatchObject({ resource: '/aws/lambda/api' });
 });
 
-test('write actions need a review and the typed resource name', async ({ page }) => {
+test('AWS changes stay hidden until Settings allows them', async ({ page }) => {
   await mock(page);
+  await page.locator('#aws-sidebar').getByRole('button', { name: 'EC2 인스턴스' }).click();
+  await page.locator('.aws-grid').getByText('web-1').dblclick();
+  await page.getByRole('button', { name: '작업', exact: true }).click();
+  await expect(page.getByText('AWS 변경 작업이 꺼져 있습니다')).toBeVisible();
+  await expect(page.getByRole('button', { name: '중지…' })).toHaveCount(0);
+  await page.keyboard.press('Control+,');
+  await page.getByRole('dialog').getByLabel('AWS 변경 작업 허용').check();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '중지…' })).toBeVisible();
+  expect((await calls(page, 'aws_set_actions_enabled')).at(-1).args).toEqual({ enabled: true });
+});
+
+test('write actions need a review and the typed resource name', async ({ page }) => {
+  await mock(page, 'actions');
   await page.locator('#aws-sidebar').getByRole('button', { name: 'EC2 인스턴스' }).click();
   await page.locator('.aws-grid').getByText('web-1').dblclick();
   await page.getByRole('button', { name: '작업', exact: true }).click();
