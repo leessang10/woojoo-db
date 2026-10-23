@@ -1,91 +1,7 @@
+use super::cli::{cli_path, json, run, validate, validate_region};
 use serde::Serialize;
 use serde_json::Value;
-use std::{path::PathBuf, process::Stdio, time::Duration};
-use tokio::process::Command;
 
-fn cli_path() -> Option<PathBuf> {
-    let executable = if cfg!(windows) { "aws.exe" } else { "aws" };
-    let mut candidates: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|paths| {
-            std::env::split_paths(&paths)
-                .filter(|p| p.is_absolute())
-                .map(|p| p.join(executable))
-                .collect()
-        })
-        .unwrap_or_default();
-    if cfg!(windows) {
-        if let Some(base) = std::env::var_os("ProgramFiles") {
-            candidates.push(PathBuf::from(base).join("Amazon/AWSCLIV2/aws.exe"));
-        }
-    }
-    candidates.into_iter().find(|p| p.is_file())
-}
-fn validate(value: &str) -> Result<(), String> {
-    if value.is_empty()
-        || value.len() > 256
-        || value.starts_with('-')
-        || value.chars().any(char::is_control)
-    {
-        return Err("AWS_INVALID_SELECTION".into());
-    }
-    Ok(())
-}
-fn failure(stderr: &str) -> String {
-    let s = stderr.to_lowercase();
-    if s.contains("accessdenied") || s.contains("unauthorizedoperation") {
-        "AWS_ACCESS_DENIED"
-    } else if s.contains("expired")
-        || s.contains("sso")
-        || s.contains("invalidclienttokenid")
-        || s.contains("unable to locate credentials")
-        || s.contains("token")
-    {
-        "AWS_AUTH_REQUIRED"
-    } else if s.contains("could not connect")
-        || s.contains("timeout")
-        || s.contains("ssl validation")
-    {
-        "AWS_NETWORK_ERROR"
-    } else {
-        "AWS_CLI_FAILED"
-    }
-    .into()
-}
-async fn run(args: &[&str]) -> Result<String, String> {
-    let path = cli_path().ok_or("AWS_CLI_NOT_FOUND")?;
-    let mut command = Command::new(path);
-    command
-        .args(args)
-        .env("AWS_PAGER", "")
-        .env("AWS_CLI_AUTO_PROMPT", "off")
-        .env("AWS_MAX_ATTEMPTS", "2")
-        .stdin(Stdio::null())
-        .kill_on_drop(true);
-    #[cfg(windows)]
-    command.creation_flags(0x08000000);
-    let output = tokio::time::timeout(Duration::from_secs(60), command.output())
-        .await
-        .map_err(|_| "AWS_TIMEOUT")?
-        .map_err(|_| "AWS_CLI_START_FAILED")?;
-    if !output.status.success() {
-        return Err(failure(&String::from_utf8_lossy(&output.stderr)));
-    }
-    String::from_utf8(output.stdout).map_err(|_| "AWS_INVALID_RESPONSE".into())
-}
-async fn json(args: &[&str]) -> Result<Value, String> {
-    let mut args = args.to_vec();
-    args.extend([
-        "--output",
-        "json",
-        "--color",
-        "off",
-        "--cli-connect-timeout",
-        "5",
-        "--cli-read-timeout",
-        "20",
-    ]);
-    serde_json::from_str(&run(&args).await?).map_err(|_| "AWS_INVALID_RESPONSE".into())
-}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CliInfo {
@@ -232,13 +148,7 @@ fn instances(value: Value) -> Result<Vec<Instance>, String> {
 #[tauri::command]
 pub async fn aws_rds_instances(profile: String, region: String) -> Result<Vec<Instance>, String> {
     validate(&profile)?;
-    validate(&region)?;
-    if !region
-        .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-    {
-        return Err("AWS_INVALID_SELECTION".into());
-    }
+    validate_region(&region)?;
     // CLI auto-pagination stays enabled. Return only non-secret connection metadata.
     instances(
         json(&[
@@ -262,17 +172,6 @@ mod tests {
         assert_eq!(rows[0].port, 5432);
         assert!(!rows[1].supported);
         assert!(rows[1].host.is_empty());
-    }
-    #[test]
-    fn rejects_flags_and_sanitizes_errors() {
-        assert!(validate("--debug").is_err());
-        assert!(validate("x\ny").is_err());
-        assert!(validate("team production").is_ok());
-        assert_eq!(
-            failure("ExpiredToken: sensitive details"),
-            "AWS_AUTH_REQUIRED"
-        );
-        assert_eq!(failure("AccessDeniedException"), "AWS_ACCESS_DENIED");
     }
     #[tokio::test]
     #[ignore = "requires a configured local AWS CLI; reads metadata only"]
