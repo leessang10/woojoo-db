@@ -1,0 +1,117 @@
+/* API work area. Builds on the shared sidebar, tab, modal and panel styles. */
+.api-section-actions{display:inline-flex;align-items:center;gap:0}
+.api-env-picker{padding:0 12px}.api-env-picker>*{width:100%}
+.api-tree{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding-bottom:8px}
+.api-sidebar .tree-table.api-tree-request,.api-sidebar [data-slot=button].tree-table.api-tree-request{display:flex;align-items:center;gap:8px;padding-left:16px}
+.api-sidebar .tree-table.api-tree-request.nested,.api-sidebar [data-slot=button].tree-table.api-tree-request.nested{padding-left:32px}
+.api-tree-request>span:last-child,.api-tree-collection>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.api-sidebar .tree-table.api-tree-collection,.api-sidebar [data-slot=button].tree-table.api-tree-collection{display:flex;align-items:center;gap:6px;padding-left:10px;color:var(--text)}
+.api-tree-collection svg{flex-shrink:0;color:var(--muted-foreground)}
+.api-tree-collection small{margin-left:auto;padding-right:4px;font-size:10px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.api-tree-empty{margin:4px 16px 8px 32px;font-size:11px;line-height:1.5;color:var(--muted-foreground)}
+.api-tree>.api-tree-empty{margin-left:16px}
+/* Method colours follow the usual API-client convention. */
+.api-method-tag{flex-shrink:0;min-width:34px;font:600 10px/1 'Cascadia Code',Consolas,monospace;letter-spacing:.02em;color:var(--muted-foreground)}
+[data-method=GET].api-method-tag{color:#5fb98b}[data-method=POST].api-method-tag{color:#e0a854}[data-method=PUT].api-method-tag{color:#5d9be0}
+[data-method=PATCH].api-method-tag{color:#a07ee0}[data-method=DELETE].api-method-tag{color:#e0676d}[data-method=HEAD].api-method-tag,[data-method=OPTIONS].api-method-tag{color:#4fb6bd}
+:root[data-theme=light] [data-method=GET].api-method-tag{color:#23804f}:root[data-theme=light] [data-method=POST].api-method-tag{color:#a6660b}
+:root[data-theme=light] [data-method=PUT].api-method-tag{color:#2462a8}:root[data-theme=light] [data-method=PATCH].api-method-tag{color:#6a43b5}
+:root[data-theme=light] [data-method=DELETE].api-method-tag{color:#b9323a}:root[data-theme=light] [data-method=HEAD].api-method-tag,:root[data-theme=light] [data-method=OPTIONS].api-method-tag{color:#16767c}
+.api-main .tab-item .tab{gap:6px}
+.api-new-tab{flex-shrink:0;width:36px;color:var(--muted-foreground)}
+.api-dirty,.api-tab-busy{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:var(--changed-line)}
+.api-tab-busy{background:var(--brand);animation:api-pulse 1s ease-in-out infinite}
+@keyframes api-pulse{50%{opacity:.3}}
+.api-notice{font-size:11px;color:var(--muted-foreground)}
+.api-no-env{color:var(--muted-foreground)}
+.api-main[data-environment=production] .topbar{box-shadow:inset 0 -2px #d64541}
+
+.api-request{display:flex;flex-direction:column;flex:1;min-height:0}
+.api-line{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.api-line .api-method{flex:0 0 112px}
+.api-line .api-method button{font:600 12px 'Cascadia Code',Consolas,monospace}
+.api-line .api-url{flex:1;min-width:0;height:32px;font:13px 'Cascadia Code',Consolas,monospace}
+.api-line .api-send{min-width:84px}
+.api-line .api-dirty{margin-left:2px}
+.api-missing{display:flex;align-items:center;gap:6px;margin:0;padding:6px 16px;font-size:12px;color:var(--changed-line);border-bottom:1px solid var(--line);background:var(--changed)}
+.api-split{display:grid;flex:1;min-height:0}
+.api-config,.api-response{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.api-resizer{cursor:row-resize;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface)}
+.api-resizer:hover{background:var(--selection)}
+.api-sections{display:flex;align-items:center;gap:2px;min-height:38px;padding:0 12px;border-bottom:1px solid var(--line)}
+.api-response-bar .api-sections{border:0;padding:0}
+.api-section{height:38px;padding:0 10px;font-size:12px;color:var(--muted-foreground);border-radius:0;box-shadow:none}
+.api-section[aria-selected=true]{color:var(--text);box-shadow:inset 0 -2px var(--brand)}
+.api-section small{margin-left:5px;font-size:10px;font-weight:600;color:var(--brand);font-variant-numeric:tabular-nums}
+.api-section-body{flex:1;min-height:0;overflow:auto}
+.api-hint{display:flex;align-items:center;gap:6px;margin:12px 16px;font-size:12px;line-height:1.6;color:var(--muted-foreground)}
+.api-warn{color:var(--changed-line)}
+
+.api-pairs{width:100%;table-layout:fixed;border-spacing:0;font-size:12px}
+.api-pairs th{height:28px;padding:0 8px;text-align:left;font-weight:500;font-size:11px;color:var(--muted-foreground);border-bottom:1px solid var(--line)}
+.api-pairs td{padding:0;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+.api-pairs td:last-child{border-right:0}
+.api-pairs input:not([type=checkbox]){width:100%;height:30px;padding:0 8px;border:0;background:transparent;color:var(--text);font:12px 'Cascadia Code',Consolas,monospace;outline:none}
+.api-pairs input:not([type=checkbox]):focus{background:var(--editor);box-shadow:inset 0 0 0 1px var(--brand)}
+.api-pairs tr[data-disabled] input{color:var(--muted-foreground);text-decoration:line-through}
+.api-pair-check{width:32px;text-align:center}.api-pair-check input{accent-color:var(--action)}
+.api-pair-tools{width:60px;white-space:nowrap;text-align:right}
+.api-pair-tools .icon-button{width:26px;height:26px;color:var(--muted-foreground)}
+.api-pair-file{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12px;color:var(--brand)}
+.api-pair-file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.api-pairs-readonly th{width:32%;height:auto;padding:6px 16px;font:12px 'Cascadia Code',Consolas,monospace;color:var(--muted-foreground);vertical-align:top;border-right:1px solid var(--line);overflow-wrap:anywhere}
+.api-pairs-readonly td{padding:6px 12px;font:12px 'Cascadia Code',Consolas,monospace;overflow-wrap:anywhere;user-select:text}
+
+.api-body{display:flex;flex-direction:column;height:100%}
+.api-body-kinds{display:flex;align-items:center;flex-wrap:wrap;gap:14px;padding:8px 16px;font-size:12px;border-bottom:1px solid var(--line)}
+.api-body-kinds label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--muted-foreground)}
+.api-body-kinds label:has(input:checked){color:var(--text)}
+.api-body-kinds input{accent-color:var(--action)}
+.api-beautify{margin-left:auto}
+.api-editor{flex:1;min-height:0;overflow:hidden}
+.api-editor>div{height:100%}
+.api-form{display:flex;flex-direction:column;gap:12px;max-width:520px;padding:14px 16px}
+.api-form>label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted-foreground)}
+.api-form>label input:not([type=checkbox]){height:32px;font-size:12px}
+.api-form .api-check{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+.api-form .api-check input{accent-color:var(--action)}
+.api-form .api-hint{margin:0}
+
+.api-response-body{display:flex;flex-direction:column;flex:1;min-height:0}
+.api-response-bar{display:flex;align-items:center;gap:10px;min-height:38px;padding:0 12px;border-bottom:1px solid var(--line)}
+.api-status{padding:2px 7px;border-radius:4px;font:600 11px 'Cascadia Code',Consolas,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.api-status[data-tone=ok]{color:#5fb98b;background:color-mix(in srgb,#5fb98b 14%,transparent)}
+.api-status[data-tone=info]{color:#5d9be0;background:color-mix(in srgb,#5d9be0 14%,transparent)}
+.api-status[data-tone=warn]{color:#e0a854;background:color-mix(in srgb,#e0a854 16%,transparent)}
+.api-status[data-tone=error]{color:#e0676d;background:color-mix(in srgb,#e0676d 16%,transparent)}
+:root[data-theme=light] .api-status[data-tone=ok]{color:#1e7a4a}:root[data-theme=light] .api-status[data-tone=warn]{color:#985c08}:root[data-theme=light] .api-status[data-tone=error]{color:#b0303a}
+.api-meta{font-size:11px;color:var(--muted-foreground);font-variant-numeric:tabular-nums;white-space:nowrap}
+.api-response-empty{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;font-size:12px;color:var(--muted-foreground);text-align:center}
+.api-response-empty small{font-size:11px;opacity:.8}
+.api-response-error{color:var(--error-text)}
+.api-response-error span{max-width:640px;font:12px/1.6 'Cascadia Code',Consolas,monospace;overflow-wrap:anywhere;user-select:text}
+.api-headers{flex:1;overflow:auto}
+.api-image{flex:1;overflow:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center;background:var(--editor)}
+.api-image img{max-width:100%}
+
+.api-history-list{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding-bottom:8px}
+.api-history .search-field{margin:8px 12px}
+[data-slot=button].api-history-item{display:flex;flex-direction:column;align-items:stretch;gap:3px;height:auto;margin:0 6px;padding:7px 10px;border-radius:5px;text-align:left;font-weight:400}
+.api-history-line{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted-foreground)}
+.api-history-line time{margin-left:auto;font-variant-numeric:tabular-nums}
+.api-history-line .api-status{padding:0 5px}
+.api-history-url{font:11px 'Cascadia Code',Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.modal.api-name-modal{width:420px}
+.modal.api-curl-modal{width:620px}
+.modal.api-curl-modal textarea.api-curl-text{height:200px;font:12px/1.6 'Cascadia Code',Consolas,monospace}
+.modal.api-env-modal{width:760px}
+.api-env-body{display:flex;gap:16px;height:340px}
+.api-env-list{display:flex;flex-direction:column;gap:2px;width:180px;flex-shrink:0;overflow:auto;padding-right:12px;border-right:1px solid var(--line)}
+.api-env-list [data-slot=button].tree-table{margin:0;width:100%;padding-left:10px}
+.api-env-list [data-slot=button].tree-table span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.api-env-list>[data-slot=button]:last-child{margin-top:8px;align-self:flex-start}
+.api-env-editor{flex:1;min-width:0;overflow:auto}
+.api-env-name{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.modal .api-env-name input{height:32px}
+.modal .api-pairs input:not([type=checkbox]){height:30px;border:0;border-radius:0}

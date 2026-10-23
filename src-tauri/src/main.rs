@@ -6,6 +6,7 @@ mod journal;
 mod credentials;
 mod local_database;
 mod aws;
+mod http;
 mod data;
 mod db;
 mod export;
@@ -34,6 +35,8 @@ fn main() {
             std::fs::create_dir_all(&directory)?;
             let store=tauri::async_runtime::block_on(journal::Journal::open(&directory.join("query-executions.sqlite3"))).map_err(std::io::Error::other)?;
             app.manage(store);
+            let requests=tauri::async_runtime::block_on(http::store::Store::open(&directory.join("api-client.sqlite3"))).map_err(std::io::Error::other)?;
+            app.manage(requests);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -62,6 +65,18 @@ fn main() {
             aws::actions::aws_run_action,
             aws::actions::aws_cancel_action,
             aws::actions::aws_set_actions_enabled,
+            http::store::http_workspace,
+            http::store::http_save_collection,
+            http::store::http_save_request,
+            http::store::http_save_environment,
+            http::store::http_delete,
+            http::store::http_set_active_environment,
+            http::store::http_history,
+            http::store::http_history_detail,
+            http::store::http_clear_history,
+            http::client::http_send,
+            http::client::http_cancel,
+            http::client::http_pick_file,
             sessions::run_object_sql,
             sessions::transaction_mode,
             sessions::transaction_finish,

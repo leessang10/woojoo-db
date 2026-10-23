@@ -3,8 +3,9 @@ import { CommonSqlDialog } from './CommonSqlDialog';
 import { useConfirm } from './components/ConfirmProvider';
 import { HistoryPanel, type ExecutionEntry } from './HistoryPanel';
 import { listen } from '@tauri-apps/api/event';
-import { Cloud, ScrollText } from 'lucide-react';
+import { Cloud, ScrollText, Waypoints } from 'lucide-react';
 import { AwsWorkspace, type AwsCommands } from './aws/AwsWorkspace';
+import { ApiWorkspace, type ApiCommands } from './http/ApiWorkspace';
 import type { AwsPreset } from './AwsConnection';
 import { invoke } from '@tauri-apps/api/core';
 import DataWorkbench from './DataWorkbench';
@@ -49,13 +50,14 @@ type Connection = { profile: Profile; session: string };
 const initialTab = createTab('demo', 0, { schema: 'public', name: 'users' }, tableQuery('postgres', 'public', 'users'));
 type Notice = { text: string; kind: 'success' | 'info' | 'error' };
 // Each rail item is a work area with its own sidebar explorer, tabs and right panel.
-type WorkArea = 'database' | 'aws';
+type WorkArea = 'database' | 'aws' | 'api';
 const WORK_AREAS: { id: WorkArea; icon: typeof Database; label: [string, string]; title: [string, string] }[] = [
   { id: 'database', icon: Database, label: ['데이터베이스', 'Databases'], title: ['데이터베이스 · 연결과 스키마', 'Databases · connections and schemas'] },
   { id: 'aws', icon: Cloud, label: ['AWS', 'AWS'], title: ['AWS · 로컬 AWS CLI로 리소스 조회', 'AWS · resources through your local AWS CLI'] },
+  { id: 'api', icon: Waypoints, label: ['API', 'API'], title: ['API · 로컬 HTTP 요청 테스트', 'API · local HTTP request testing'] },
 ];
 const AREA_KEY = 'woojoo-work-area';
-const readArea = (): WorkArea => { try { return localStorage.getItem(AREA_KEY) === 'aws' ? 'aws' : 'database'; } catch { return 'database'; } };
+const readArea = (): WorkArea => { try { const value = localStorage.getItem(AREA_KEY); return value === 'aws' || value === 'api' ? value : 'database'; } catch { return 'database'; } };
 const COLLAPSED_KEY = 'woojoo-collapsed-schemas-v1';
 function readCollapsed(): Record<string, string[]> {
   try { const value = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}'); return value && typeof value === 'object' ? value : {}; }
@@ -149,6 +151,9 @@ export default function App() {
   const [awsVisited, setAwsVisited] = useState(area === 'aws');
   useEffect(() => { if (area === 'aws') setAwsVisited(true); }, [area]);
   const awsCommands = useRef<AwsCommands>({});
+  const [apiVisited, setApiVisited] = useState(area === 'api');
+  useEffect(() => { if (area === 'api') setApiVisited(true); }, [area]);
+  const apiCommands = useRef<ApiCommands>({});
   const [awsPreset, setAwsPreset] = useState<AwsPreset>();
   // Query history sits in a right-hand panel beside the database workspace.
   const [historyOpen, setHistoryOpen] = useState(() => { try { return localStorage.getItem('woojoo-history-panel') === 'open'; } catch { return false; } });
@@ -535,6 +540,20 @@ export default function App() {
         else if (event.key === 'Escape') setShowHelp(false);
         return;
       }
+      if (areaRef.current === 'api') {
+        // Dialogs inside the API area handle their own keys.
+        if (document.querySelector('[data-modal-content]')) return;
+        if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
+        // The body editor sends on its own and marks the event handled.
+        else if (mod && event.key === 'Enter') { if (!event.defaultPrevented) apiCommands.current.send?.(); event.preventDefault(); }
+        else if (mod && event.altKey && key === 'b') { event.preventDefault(); apiCommands.current.togglePanel?.(); }
+        else if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); }
+        else if (mod && key === 's') { event.preventDefault(); apiCommands.current.save?.(); }
+        else if (mod && key === 'n') { event.preventDefault(); apiCommands.current.newTab?.(); }
+        else if (mod && key === 'w') { event.preventDefault(); apiCommands.current.closeTab?.(); }
+        else if (event.key === 'Escape') setShowHelp(false);
+        return;
+      }
       if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
       else if (mod && event.altKey && key === 'b') { event.preventDefault(); setHistoryOpen(open => !open); }
       else if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); }
@@ -838,6 +857,7 @@ export default function App() {
       </>
     </main>
     {historyOpen && area === 'database' && <aside className="history-sidebar" id="history-sidebar"><HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} panelScope={emptyWorkspace ? 'all' : 'connection'} onOpen={entry => void openExecution(entry)} onShowAll={emptyWorkspace ? undefined : () => void openHistory()} onClose={() => setHistoryOpen(false)}/></aside>}
+    {apiVisited && <ApiWorkspace visible={area === 'api'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={apiCommands} theme={theme}/>}
     {awsVisited && <AwsWorkspace visible={area === 'aws'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={awsCommands} theme={theme} onConnectRds={preset => { setEditProfile(undefined); setAwsPreset(preset); setShowConnect(true); }}/>}
     {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
       <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>

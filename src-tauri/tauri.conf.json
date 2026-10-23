@@ -11,7 +11,7 @@
   },
   "app": {
     "windows": [{
-      "title": "Woojoo — Database workspace",
+      "title": "Woojoo — Backend workspace",
       "width": 1440, "height": 940, "minWidth": 960, "minHeight": 640,
       "backgroundColor": "#141720"
     }],
