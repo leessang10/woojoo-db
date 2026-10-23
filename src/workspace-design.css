@@ -428,3 +428,33 @@ p.empty-tree{flex-direction:row;align-items:center}
 .history-more{align-self:center}
 .history-dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
 .history-dates>*{min-width:0;width:100%}
+
+/* View switcher shared by table and schema tabs. */
+.object-view-bar{display:flex;align-items:center;gap:2px;min-height:40px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--background)}
+.object-view-bar .view-option{height:28px;padding:0 12px;border-radius:6px;font-size:12px;color:var(--muted-foreground)}
+.object-view-bar .view-option:hover{color:var(--foreground);background:var(--secondary)}
+.object-view-bar .view-option[aria-pressed=true]{color:var(--foreground);background:var(--secondary);font-weight:600}
+.object-view-bar>[data-slot=button]:last-child{height:28px}
+
+/* Relations: referencing tables, the table, referenced tables. */
+.relations-view{display:flex;flex-direction:column;min-height:0;flex:1;overflow:auto;padding:16px 24px 24px;gap:14px}
+.relations-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.relations-toolbar p{margin:0;font-size:12px;color:var(--muted-foreground)}
+.relations-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,280px) minmax(0,1fr);gap:20px;align-items:start}
+.relations-column h3{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:12px;font-weight:600;color:var(--muted-foreground)}
+.relations-column h3 span{font-weight:400}
+.relations-column ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.relations-column li{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.relation-table{gap:6px}
+.relation-columns{font-size:11px;color:var(--muted-foreground);overflow-wrap:anywhere}
+.relations-column small{font-size:11px;color:var(--muted-foreground)}
+.relations-none,.relations-empty{margin:0;font-size:12px;color:var(--muted-foreground)}
+.relations-card{border:1px solid var(--primary);border-radius:8px;background:var(--surface);overflow:hidden}
+.relations-card header{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.relations-card header small{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+.relations-card ul{list-style:none;margin:0;padding:6px 0}
+.relations-card li{display:flex;align-items:center;gap:6px;padding:3px 12px;font-size:12px}
+.relations-card li code{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+.relations-fk{font-size:11px;font-weight:700;color:var(--primary);width:16px}
+.relations-pad{display:inline-block;width:16px}
+.relations-card li svg{width:16px;color:#d6a64b}

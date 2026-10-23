@@ -2,12 +2,16 @@ import { useEffect, useRef, useState, type SetStateAction } from 'react';
 import { collectEdits, type ColumnDetail, type Result, type Table } from './model';
 import type { ErdDocument } from './erd-model';
 
+export type TabView = 'data' | 'structure' | 'ddl' | 'relations' | 'objects' | 'erd';
 export type WorkspaceTab = {
   id: string;
   session: string;
   number: number;
   customName?: string;
+  /** 'details' and 'erd' are legacy kinds, migrated into table and schema tabs on restore. */
   kind: 'table' | 'query' | 'schema' | 'details' | 'erd';
+  /** Which face of a table tab (data, structure, ddl, relations) or schema tab (objects, erd) is shown. */
+  view?: TabView;
   erd: ErdDocument | null;
   objectSchema: string;
   details: ColumnDetail[];
@@ -29,6 +33,8 @@ export type WorkspaceTab = {
   queryTable?: Table | null;
   /** Schema a query tab runs in; undefined uses the connection default. */
   querySchema?: string;
+  /** Search on a table tab's structure view; the data view keeps its own result filter. */
+  objectFilter?: string;
   file?: { path: string | null; name: string; savedSql: string };
 };
 
@@ -58,18 +64,24 @@ export function restoreTabs(initial: WorkspaceTab): WorkspaceTab[] {
       const selected = item.selected as {schema?:unknown;name?:unknown}|null;
       const table = selected && typeof selected.schema === 'string' && typeof selected.name === 'string' ? {schema:selected.schema,name:selected.name}:null;
       const tab = createTab(item.profileId === 'demo' ? 'demo' : `saved:${item.profileId}`, Number(item.number)||0, table, item.editorSql);
-      return [{...tab, id:typeof item.id==='string'?item.id:tab.id, kind:item.kind as WorkspaceTab['kind'], objectSchema:typeof item.objectSchema==='string'?item.objectSchema:table?.schema??'',
+      const views:TabView[]=['data','structure','ddl','relations','objects','erd'];
+      const legacy = item.kind === 'details' ? {kind:'table' as const,view:'structure' as TabView,migrated:true} : item.kind === 'erd' ? {kind:'schema' as const,view:'erd' as TabView,migrated:true} : {kind:item.kind as WorkspaceTab['kind'],view:views.includes(item.view as TabView)?item.view as TabView:undefined,migrated:false};
+      return [{...tab, id:typeof item.id==='string'?item.id:tab.id, kind:legacy.kind, view:legacy.view, migrated:legacy.migrated, objectSchema:typeof item.objectSchema==='string'?item.objectSchema:table?.schema??'',
         customName:typeof item.customName==='string'?item.customName:undefined,
         querySchema:typeof item.querySchema==='string'?item.querySchema:undefined,
         initialSql:typeof item.initialSql==='string'?item.initialSql:'',
         ...(typeof item.filePath==='string'?{file:{path:item.filePath,name:typeof item.fileName==='string'?item.fileName:'query.sql',savedSql:typeof item.initialSql==='string'?item.initialSql:''}}:{})}];
     });
-    return tabs;
+    // A legacy structure or ERD tab folds into an existing tab for the same object.
+    const key = (tab: WorkspaceTab) => JSON.stringify([tab.session, tab.kind, tab.kind === 'schema' ? tab.objectSchema : tab.selected?.schema, tab.selected?.name ?? '']);
+    const kept = new Set(tabs.filter((tab: WorkspaceTab & {migrated:boolean}) => !tab.migrated && tab.kind !== 'query').map(key));
+    return tabs.filter((tab: WorkspaceTab & {migrated:boolean}) => tab.kind === 'query' || !tab.migrated || !kept.has(key(tab)) && (kept.add(key(tab)), true))
+      .map(({migrated: _, ...tab}: WorkspaceTab & {migrated:boolean}) => tab);
   } catch { return [initial]; }
 }
 export function persistTabs(tabs: WorkspaceTab[], profiles: Record<string,string>, activeTab?:string) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({activeTab,profileIds:Object.values(profiles),tabs:tabs.filter(tab=>profiles[tab.session]).map(tab=>({
-    id:tab.id,profileId:profiles[tab.session],number:tab.number,kind:tab.kind,selected:tab.selected,objectSchema:tab.objectSchema,
+    id:tab.id,profileId:profiles[tab.session],number:tab.number,kind:tab.kind,view:tab.view,selected:tab.selected,objectSchema:tab.objectSchema,
     customName:tab.customName,querySchema:tab.querySchema,editorSql:tab.editorSql,initialSql:tab.initialSql,filePath:tab.file?.path,fileName:tab.file?.name,
   }))}));
 }

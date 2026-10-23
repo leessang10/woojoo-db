@@ -31,7 +31,7 @@ test('schema list opens searchable table details and returns to existing editabl
   await expect(page.locator('.object-table tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: '데이터 보기', exact: true }).click();
   await expect(page.getByText('Keep pending', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '테이블 상세', exact: true }).click();
+  await page.locator('.object-view-bar').getByRole('button', { name: '구조', exact: true }).click();
   await expect(page.getByLabel('컬럼 검색')).toHaveValue('email');
   await page.getByRole('tab',{name:'상세',exact:true}).click();
   await expect(page.locator('.object-heading .object-properties')).toHaveCount(0);
@@ -40,7 +40,7 @@ test('schema list opens searchable table details and returns to existing editabl
   await page.screenshot({path:'test-results/table-details-compact.png'});
   await page.getByRole('tabpanel').getByRole('button', { name: 'public', exact: true }).click();
   await expect(page.getByLabel('스키마 내 테이블 검색')).toHaveValue('users');
-  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(3);
+  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(2);
 });
 
 test('object pages translate and SELECT opens a separate query tab', async ({ page }) => {
@@ -48,13 +48,13 @@ test('object pages translate and SELECT opens a separate query tab', async ({ pa
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   await chooseLanguage(page, 'en');
   await page.locator('.tree-table').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Table details' }).click();
+  await page.getByRole('menuitem', { name: 'View structure' }).click();
   await expect(page.getByRole('columnheader', { name: 'Nullable' })).toBeVisible();
   await expect(page.locator('.object-table tbody tr')).toHaveCount(6);
   await page.getByRole('button', { name: 'Open SELECT query' }).click();
   await expect(page.locator('.cm-content')).toContainText('SELECT *');
-  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(3);
-  await page.getByRole('tab', { name: 'users · Structure' }).click();
+  await expect(page.locator('.tab-list').getByRole('tab')).toHaveCount(2);
+  await page.getByRole('tab', { name: 'users', exact: true }).click();
   await page.getByRole('button', { name: 'Refresh details' }).click();
   await expect(page.locator('.object-table tbody tr')).toHaveCount(6);
 });
@@ -86,7 +86,7 @@ test('native metadata errors can be retried without reading table data again', a
   await page.getByRole('button', { name: '연결하기', exact: true }).click();
   await expect(page.locator('.tree-table')).toHaveText('widgets');
   await page.locator('.tree-table').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: '테이블 상세' }).click();
+  await page.getByRole('menuitem', { name: '구조 보기' }).click();
   await expect(page.getByRole('alert')).toContainText('Metadata unavailable');
   await page.evaluate(()=>{(window as any).allowMetadata=true;});
   await page.getByRole('button', { name: '상세 새로고침' }).click();

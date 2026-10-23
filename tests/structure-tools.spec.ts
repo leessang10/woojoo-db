@@ -15,7 +15,7 @@ test('detail tabs show readable DDL, constraint editing and empty objects',async
    throw new Error(command);
   }}});
  });
- await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'SQLite',exact:true}).click();await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('preview.sqlite3');await page.getByRole('button',{name:'연결하기',exact:true}).click();await expect(page.locator('.tree-table')).toHaveText('board');await page.locator('.tree-table').click();
+ await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'SQLite',exact:true}).click();await page.getByRole('textbox',{name:'데이터베이스',exact:true}).fill('preview.sqlite3');await page.getByRole('button',{name:'연결하기',exact:true}).click();await expect(page.locator('.tree-table')).toHaveText('board');await page.locator('.tree-table').click();await page.locator('.object-view-bar').getByRole('button',{name:'구조',exact:true}).click();
  const dialog=page.getByRole('dialog');
  await page.getByRole('button',{name:'테이블 수정',exact:true}).click();
  await expect(dialog.getByLabel('Charset',{exact:true})).toHaveCount(0);
@@ -26,12 +26,13 @@ test('detail tabs show readable DDL, constraint editing and empty objects',async
  await page.keyboard.press('Escape');
  for(const theme of ['dark','light']) {
   if(theme==='light')await page.getByRole('button',{name:'라이트 모드로 전환',exact:true}).click();
-  await page.getByRole('tab',{name:'DDL',exact:true}).click();
-  await expect(page.getByRole('tab',{name:'DDL',exact:true})).toHaveAttribute('aria-selected','true');
+  await page.locator('.object-view-bar').getByRole('button',{name:'DDL',exact:true}).click();
+  await expect(page.locator('.object-view-bar').getByRole('button',{name:'DDL',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(page.locator('.object-definitions .cm-content')).toHaveAttribute('contenteditable','false');
   await expect(page.locator('.object-definitions .cm-content')).toContainText('FOREIGN KEY');
   expect((await page.locator('.object-definitions .cm-editor').boundingBox())!.height).toBeGreaterThan(250);
   await page.screenshot({animations:'disabled',path:`test-results/structure-ddl-${theme}.png`});
+  await page.locator('.object-view-bar').getByRole('button',{name:'구조',exact:true}).click();
   await page.getByRole('tab',{name:/^인덱스/}).click();
   await page.getByRole('button',{name:'인덱스 · 제약조건 편집',exact:true}).click();
   await expect(dialog.locator('.structure-definition-row')).toHaveCount(2);
@@ -58,7 +59,7 @@ test('detail tabs show readable DDL, constraint editing and empty objects',async
  await page.getByRole('tab',{name:'뷰',exact:true}).click();
  await expect(page.locator('.object-table tbody tr')).toHaveCount(1);
  await expect(page.locator('.object-table')).toContainText('board_view');
- await page.setViewportSize({width:960,height:640});await page.getByRole('tab',{name:'DDL',exact:true}).click();
+ await page.setViewportSize({width:960,height:640});await page.locator('.object-view-bar').getByRole('button',{name:'DDL',exact:true}).click();
  const box=(await page.locator('.object-definitions .cm-editor').boundingBox())!;expect(box.y).toBeGreaterThanOrEqual(0);expect(box.width).toBeGreaterThan(300);
  await page.getByRole('button',{name:'SQL 편집기로 열기',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.editor-pane .cm-content')).toContainText('CREATE TABLE board');
 });

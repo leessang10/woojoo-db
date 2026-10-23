@@ -5,7 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 async function openDemo(page: import('@playwright/test').Page) {
   await page.goto('/');
   await page.getByRole('button', { name: '스키마 상세: public', exact: true }).click();
-  await page.getByRole('button', { name: 'ERD 열기' }).click();
+  await page.locator('.object-view-bar').getByRole('button', { name: 'ERD', exact: true }).click();
   await expect(page.locator('.erd-table-node')).toHaveCount(1);
 }
 
@@ -26,7 +26,7 @@ test('ERD filters columns, edits table style, saves, and preserves the workspace
   await page.getByRole('button', { name: '다시 실행', exact: true }).click();
   await page.getByRole('tab', { name: 'users', exact: true }).click();
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'public · ERD' }).click();
+  await page.getByRole('tab', { name: 'public', exact: true }).click();
   await expect(page.locator('.erd-table-node')).toHaveClass(/square/);
   await openDemo(page);
   await expect(page.locator('.erd-table-node')).toHaveClass(/square/);
@@ -77,7 +77,7 @@ test('real FK transport generates editable relations with PK/FK filtering and re
   await page.getByRole('button', { name: '연결하기', exact: true }).click();
   await expect(page.locator('.tree-table')).toHaveCount(2);
   await page.getByRole('button', { name: '스키마 상세: public', exact: true }).click();
-  await page.getByRole('button', { name: 'ERD 열기' }).click();
+  await page.locator('.object-view-bar').getByRole('button', { name: 'ERD', exact: true }).click();
   await expect(page.locator('.erd-table-node')).toHaveCount(2);
   await expect(page.locator('.react-flow__edge')).toHaveCount(1);
   await chooseOption(page.getByLabel('컬럼 표시', { exact: true }), 'pk');

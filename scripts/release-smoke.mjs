@@ -86,7 +86,7 @@ try {
     await database.click();
     await page.locator('.tree-table').click();
     await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
-    await expect(page.locator('.object-page')).toBeVisible();
+    await expect(page.locator('.object-view-bar')).toBeVisible();
   }
   await page.locator('.tab-add').click();
   const last=page.getByRole('tab').last();

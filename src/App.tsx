@@ -30,8 +30,9 @@ import { useLanguage } from './i18n';
 import { SettingsDialog } from './SettingsDialog';
 import { ContextMenu, type MenuItem, type MenuState } from './ContextMenu';
 import type { StructurePlan } from './structure';
-import { ObjectPage } from './ObjectPage';
-import { createTab, isDirty, useWorkspaceTabs, type WorkspaceTab } from './workspace-tabs';
+import { DdlView, ObjectPage } from './ObjectPage';
+import { RelationsView } from './RelationsView';
+import { createTab, isDirty, useWorkspaceTabs, type TabView, type WorkspaceTab } from './workspace-tabs';
 import { AlertTriangle, ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileCode2, Filter, Info, KeyRound, Layers3, Loader2, Plus, RefreshCw, Search, Settings2, Square, Table2, Terminal, Undo2, X } from 'lucide-react';
 import * as api from './api';
 import { collectEdits, csv, tableQuery, type Profile, type Table, type Result } from './model';
@@ -329,9 +330,7 @@ export default function App() {
   function tabName(item: WorkspaceTab) {
     if(item.customName) return item.customName;
     if(item.kind==='query'&&item.file) return item.file.name;
-    if (item.kind === 'erd') return `${item.objectSchema} · ERD`;
     if (item.kind === 'schema') return item.objectSchema;
-    if (item.kind === 'details') return `${item.selected?.name} · ${t('구조')}`;
     return item.kind === 'table' ? item.selected?.name ?? t('탐색기') : t('쿼리 번호', {number:item.number});
   }
   function tabMenu(item: WorkspaceTab): MenuItem[] {
@@ -386,17 +385,27 @@ export default function App() {
     items.forEach(item => editorStates.current.delete(item.id));
     workspace.closeMany(items.map(item => item.id));
   }
+  const tableTab = (table: Table) => workspace.connectionTabs.find(item => item.kind === 'table' && item.selected?.name === table.name && item.selected.schema === table.schema);
+  const schemaTab = (schema: string) => workspace.connectionTabs.find(item => item.kind === 'schema' && item.objectSchema === schema);
+  function setView(id: string, view: TabView) { workspace.patch(id, { view }); }
+  /** Sidebar and relation links: reuse the table's tab with its last view, otherwise open its data. */
+  async function openObject(table: Table, view?: TabView) {
+    const existing = tableTab(table);
+    if (existing) { if (await activateTab(existing.id) && view) setView(existing.id, view); return; }
+    if (view && view !== 'data') { if (!await leaveData()) return; const next = workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name)); workspace.patch(next.id, { view }); return; }
+    await openTable(table);
+  }
   async function openTable(table: Table, refresh = false) {
-    const existing = workspace.connectionTabs.find(item => item.kind === 'table' && item.selected?.name === table.name && item.selected.schema === table.schema);
-    if (!refresh && existing) { activateTab(existing.id); return; }
+    const existing = tableTab(table);
+    if (!refresh && existing) { if (await activateTab(existing.id)) setView(existing.id, 'data'); return; }
     if (refresh && !await askDiscard()) return;
     if(!refresh&&!await leaveData())return;
-    
+
     const target = refresh ? tab : workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name));
     await performFor(target.id, async () => {
       const data = await api.readTable(active, table);
       const sql = tableQuery(connection.profile.engine, table.schema, table.name);
-      workspace.patch(target.id, { selected: table, source: 'table', result: data, resultStale:false, draft: {}, filter: '', sort: null, scroll: 0, editorSql: sql, initialSql: sql, loaded: true, lastQuery: '' });
+      workspace.patch(target.id, { selected: table, source: 'table', view: 'data', result: data, resultStale:false, draft: {}, filter: '', sort: null, scroll: 0, editorSql: sql, initialSql: sql, loaded: true, lastQuery: '' });
     });
   }
   function changeBlocked(table: Table) {
@@ -409,52 +418,42 @@ export default function App() {
     const list = await api.tables(session);
     if(activeSessionRef.current === session) setTableList(list);
     for(const item of allTabsRef.current.filter(item => item.session === session)) {
-      if(item.kind === 'erd') workspace.patch(item.id,{erd:null});
+      if(item.kind === 'schema') workspace.patch(item.id,{erd:null});
       if(item.selected?.schema !== change.table.schema || item.selected.name !== change.table.name) continue;
       if(change.kind === 'dropTable') {
-        workspace.patch(item.id,{kind:'schema',objectSchema:change.table.schema,selected:null,details:[],result:{columns:[],rows:[],elapsedMs:0,affected:0,truncated:false},draft:{},filter:'',error:''});
-      } else if(item.kind === 'details') {
-        workspace.patch(item.id,{selected:renamed,details:await api.describeTable(session,renamed),filter:'',error:''});
+        workspace.patch(item.id,{kind:'schema',view:'objects',objectSchema:change.table.schema,selected:null,details:[],result:{columns:[],rows:[],elapsedMs:0,affected:0,truncated:false},draft:{},filter:'',error:''});
       } else if(item.kind === 'table') {
         const sql = tableQuery(connection.profile.engine,renamed.schema,renamed.name);
-        workspace.patch(item.id,{selected:renamed,resultStale:false,result:await api.readTable(session,renamed),draft:{},sort:null,filter:'',scroll:0,error:'',...(item.editorSql===item.initialSql?{editorSql:sql,initialSql:sql}:{})});
+        workspace.patch(item.id,{selected:renamed,objectSchema:renamed.schema,details:item.details.length?await api.describeTable(session,renamed):[],resultStale:false,result:await api.readTable(session,renamed),draft:{},sort:null,filter:'',scroll:0,error:'',...(item.editorSql===item.initialSql?{editorSql:sql,initialSql:sql}:{})});
       }
     }
   }
-  async function openSchema(schema: string) {
-    const existing = workspace.connectionTabs.find(item => item.kind === 'schema' && item.objectSchema === schema);
-    if (existing) { activateTab(existing.id); return; }
+  async function openSchema(schema: string, view?: TabView) {
+    const existing = schemaTab(schema);
+    if (existing) { if (await activateTab(existing.id) && view) setView(existing.id, view); return; }
     if(!await leaveData())return;
-    
     const next = workspace.add();
-    workspace.patch(next.id, { kind: 'schema', objectSchema: schema, loaded: true });
+    workspace.patch(next.id, { kind: 'schema', view: view ?? 'objects', objectSchema: schema, loaded: true });
   }
-  async function openErd(schema: string) {
-    const existing = workspace.connectionTabs.find(item => item.kind === 'erd' && item.objectSchema === schema);
-    if (existing) { activateTab(existing.id); return; }
-    if (!await leaveData()) return;
-    
-    const next = workspace.add();
-    workspace.patch(next.id, { kind: 'erd', objectSchema: schema, loaded: true });
-  }
+  const openErd = (schema: string) => openSchema(schema, 'erd');
   async function openDetails(table: Table, refresh = false) {
-    const existing = workspace.connectionTabs.find(item => item.kind === 'details' && item.selected?.schema === table.schema && item.selected.name === table.name);
-    if (existing && !refresh) { activateTab(existing.id); return; }
+    const existing = tableTab(table);
+    if (existing && !refresh && existing.details.length) { if (await activateTab(existing.id)) setView(existing.id, 'structure'); return; }
     if(!existing&&!await leaveData())return;
-    
-    const next = existing ?? workspace.add(table);
-    if(existing && !await activateTab(next.id))return;
-    workspace.patch(next.id, { kind: 'details', objectSchema: table.schema });
+    const next = existing ?? workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name));
+    if(existing && existing.id !== tab.id && !await activateTab(next.id))return;
+    workspace.patch(next.id, { view: 'structure', objectSchema: table.schema });
     await performFor(next.id, async () => {
       const details = await api.describeTable(active, table);
-      workspace.patch(next.id, { details, loaded: true });
+      workspace.patch(next.id, { details });
     });
   }
   function tableMenu(table: Table): MenuItem[] {
     return [
-      { label: t('테이블 상세'), action: () => void openDetails(table) },
-      { label: t('ERD 열기'), action: () => openErd(table.schema) },
       { label: t('데이터 보기'), action: () => void openTable(table) },
+      { label: tr('구조 보기','View structure'), action: () => void openDetails(table) },
+      { label: tr('관계 보기','View relations'), action: () => void openObject(table, 'relations') },
+      { label: t('ERD 열기'), action: () => void openErd(table.schema) },
       { label: t('SELECT 쿼리 열기'), action: () => addQuery(tableQuery(connection.profile.engine, table.schema, table.name), table.schema) },
       { label: t('테이블 이름 복사'), action: () => void copyText(`${table.schema}.${table.name}`), divider: true },
     ];
@@ -477,8 +476,8 @@ export default function App() {
     return () => { op.current++; };
   }, [active]);
   useEffect(()=>{let cancelled=false;void Promise.all(connections.filter(c=>(fixtureMode||c.session!=='demo')&&!c.session.startsWith('saved:')&&!c.profile.readOnly).map(async c=>(await api.tables(c.session)).map(table=>({session:c.session,engine:c.profile.engine,label:c.profile.name+' / '+table.schema+'.'+table.name,table})))).then(lists=>{if(!cancelled)setCopyTargets(lists.flat());}).catch(()=>{if(!cancelled)setCopyTargets([]);});return()=>{cancelled=true;};},[connections,catalogVersion]);
-  useEffect(()=>{if(connected&&tab.kind==='table'&&tab.selected&&!tab.loaded&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{resultStale:false,result:await api.readTable(active,tab.selected!),loaded:true});});}},[active,tab.id,tab.loaded,tab.kind,tab.selected?.name,tab.selected?.schema]);
-  useEffect(()=>{if(connected&&tab.kind==='details'&&tab.selected&&!tab.loaded&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{details:await api.describeTable(active,tab.selected!),loaded:true});});}},[active,tab.id,tab.loaded]);
+  useEffect(()=>{if(connected&&tab.kind==='table'&&(tab.view??'data')==='data'&&tab.selected&&!tab.loaded&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{resultStale:false,result:await api.readTable(active,tab.selected!),loaded:true});});}},[active,tab.id,tab.loaded,tab.kind,tab.view,tab.selected?.name,tab.selected?.schema]);
+  useEffect(()=>{if(connected&&tab.kind==='table'&&tab.view==='structure'&&tab.selected&&!tab.details.length&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{details:await api.describeTable(active,tab.selected!)});});}},[active,tab.id,tab.view,tab.details.length]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (confirming || renaming) return;
@@ -575,7 +574,7 @@ export default function App() {
   shortcutRef.current = {
     newTab: () => void addQuery(),
     closeTab: () => { if (workspace.connectionTabs.some(item => item.id === tab.id)) void closeTab(tab); },
-    refresh: () => { if (tab.kind === 'table' || tab.kind === 'query') void refreshResults(); else if (tab.kind === 'details' && tab.selected) void openDetails(tab.selected, true); else void refreshTables(); },
+    refresh: () => { if (tab.kind === 'table' && tab.view === 'structure' && tab.selected) void openDetails(tab.selected, true); else if (tab.kind === 'query' || tab.kind === 'table' && (tab.view ?? 'data') === 'data') void refreshResults(); else void refreshTables(); },
     stop: stopQuery,
   };
   async function applyChanges() {
@@ -658,9 +657,9 @@ export default function App() {
   const visibleTables = shownTables.filter(t => `${t.schema}.${t.name}`.toLowerCase().includes(search.toLowerCase()));
   const schemas = allSchemas.filter(schema=>(!chosenSchemas||chosenSchemas.includes(schema))&&(!search||schema.toLowerCase().includes(search.toLowerCase())||visibleTables.some(t=>t.schema===schema)));
   // The breadcrumb and sidebar both follow the active tab's object.
-  const activeSchema = tab.kind === 'schema' || tab.kind === 'erd' ? tab.objectSchema : selected?.schema ?? (tab.kind === 'query' ? tab.querySchema : undefined);
+  const activeSchema = tab.kind === 'schema' ? tab.objectSchema : selected?.schema ?? (tab.kind === 'query' ? tab.querySchema : undefined);
   const crumbSchema = activeSchema || undefined;
-  const crumbObject = tab.kind === 'schema' ? undefined : tab.kind === 'erd' ? 'ERD' : tab.kind === 'query' ? tabName(tab) : selected?.name;
+  const crumbObject = tab.kind === 'schema' ? undefined : tab.kind === 'query' ? tabName(tab) : selected?.name;
   function revealInExplorer() {
     setSidebarOpen(true); setSidebarView('explorer');
     window.setTimeout(() => document.querySelector<HTMLElement>('.tree .active')?.scrollIntoView({ block: 'nearest' }), 0);
@@ -671,6 +670,12 @@ export default function App() {
     const timer = window.setTimeout(() => document.querySelector<HTMLElement>('.tree .active')?.scrollIntoView({ block: 'nearest' }), 0);
     return () => window.clearTimeout(timer);
   }, [tab.id, activeSchema, selected?.name, connected]);
+  // Table and schema tabs switch between views of the same object.
+  const views: [TabView, string][] = tab.kind === 'schema'
+    ? [['objects', tr('테이블 목록','Tables')], ['erd', 'ERD']]
+    : [['data', tr('데이터','Data')], ['structure', tr('구조','Structure')], ['ddl', 'DDL'], ['relations', tr('관계','Relations')]];
+  const currentView = tab.view ?? (tab.kind === 'schema' ? 'objects' : 'data');
+  const viewBar = <div className="object-view-bar" role="group" aria-label={tr('보기','View')}>{views.map(([view, label]) => <Button key={view} variant="ghost" size="bare" className="view-option" aria-pressed={currentView === view} onClick={() => { if (view === 'structure' && tab.selected) void openDetails(tab.selected); else setView(tab.id, view); }}>{label}</Button>)}{tab.kind === 'table' && tab.selected && <><span className="tabs-spacer"/><Button variant="outline" size="sm" onClick={() => void addQuery(tableQuery(connection.profile.engine, tab.selected!.schema, tab.selected!.name), tab.selected!.schema)}><FileCode2 size={14}/>{tr('이 테이블로 새 쿼리','New query for this table')}</Button></>}</div>;
   const selectableConnections = connections.filter(c=>fixtureMode||c.session!=='demo').sort((a,b)=>(a.profile.group??'').localeCompare(b.profile.group??'')||a.profile.name.localeCompare(b.profile.name));
   const currentConnection = selectableConnections.find(c=>c.session===active);
   return <div className="app">
@@ -700,8 +705,8 @@ export default function App() {
       <div className="section-label"><span>{tr("스키마 · 테이블","Schemas · tables")}</span><div className="sidebar-section-actions"><Button variant="ghost" size="bare" className="schema-filter-button" data-active={!!chosenSchemas} title={chosenSchemas?tr(`스키마 필터 사용 중 · ${chosenSchemas.filter(s=>allSchemas.includes(s)).length}/${allSchemas.length}`,`Schema filter on · ${chosenSchemas.filter(s=>allSchemas.includes(s)).length}/${allSchemas.length}`):tr("스키마 선택","Select schemas")} aria-label={tr("스키마 선택","Select schemas")} aria-describedby={chosenSchemas?"schema-filter-count":undefined} onClick={()=>setShowSchemas(true)}><Filter size={14}/>{chosenSchemas&&<span className="filter-count" id="schema-filter-count">{chosenSchemas.filter(s=>allSchemas.includes(s)).length}/{allSchemas.length}</span>}</Button><Button variant="ghost" size="bare" title={t("목록 새로고침")} aria-label={t("목록 새로고침")} disabled={tablesLoading} onClick={() => void refreshTables()}><RefreshCw size={14} className={tablesLoading?'spin':''}/></Button></div></div>
       <label className="search-field"><Search size={14}/><Input aria-label={t("테이블 검색")} placeholder={t("테이블 검색")} value={search} onChange={e => setSearch(e.target.value)}/></label>
       <div className="tree">
-        {schemas.map(schema => <div key={schema}><div className="schema-tree-row"><Button variant="ghost" size="bare" className="schema-expander icon-button" aria-label={t('스키마 펼치기/접기') + ': ' + schema} aria-expanded={!collapsedSchemas.has(schema) || !!search} disabled={!!search} title={search?tr('검색 중에는 일치하는 스키마를 모두 펼칩니다','Matching schemas stay expanded while searching'):undefined} onClick={() => toggleSchema(schema)}>{!collapsedSchemas.has(schema)||search?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</Button><Button variant="ghost" size="bare" className={`tree-schema ${(tab.kind==='schema'||tab.kind==='erd')&&tab.objectSchema===schema?'active':''}`} aria-current={(tab.kind==='schema'||tab.kind==='erd')&&tab.objectSchema===schema?'page':undefined} {...menuFor([{label:t("스키마 상세"),action:()=>openSchema(schema)},{label:t("ERD 열기"),action:()=>openErd(schema)},{label:t("이름 복사"),action:()=>void copyText(schema)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}])} onClick={() => openSchema(schema)}><Layers3 size={14}/>{schema}</Button><Button variant="ghost" size="bare" className="schema-open icon-button" aria-label={t("스키마 상세 이름", {name:schema})} title={t("스키마 상세")} onClick={() => openSchema(schema)}><ArrowRight size={13}/></Button></div>
-          {(!collapsedSchemas.has(schema) || !!search) && visibleTables.filter(t => t.schema === schema).map(t => <Button variant="ghost" size="bare" key={`${t.schema}.${t.name}`} {...menuFor(tableMenu(t))} className={`tree-table ${selected?.name === t.name && selected.schema === t.schema ? 'active' : ''}`} onClick={() => void openDetails(t)}><Table2 size={14}/><span>{t.name}</span>{selected?.name === t.name && selected.schema === t.schema && <span className="table-dot"/>}</Button>)}
+        {schemas.map(schema => <div key={schema}><div className="schema-tree-row"><Button variant="ghost" size="bare" className="schema-expander icon-button" aria-label={t('스키마 펼치기/접기') + ': ' + schema} aria-expanded={!collapsedSchemas.has(schema) || !!search} disabled={!!search} title={search?tr('검색 중에는 일치하는 스키마를 모두 펼칩니다','Matching schemas stay expanded while searching'):undefined} onClick={() => toggleSchema(schema)}>{!collapsedSchemas.has(schema)||search?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</Button><Button variant="ghost" size="bare" className={`tree-schema ${tab.kind==='schema'&&tab.objectSchema===schema?'active':''}`} aria-current={tab.kind==='schema'&&tab.objectSchema===schema?'page':undefined} {...menuFor([{label:t("스키마 상세"),action:()=>openSchema(schema)},{label:t("ERD 열기"),action:()=>openErd(schema)},{label:t("이름 복사"),action:()=>void copyText(schema)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}])} onClick={() => openSchema(schema)}><Layers3 size={14}/>{schema}</Button><Button variant="ghost" size="bare" className="schema-open icon-button" aria-label={t("스키마 상세 이름", {name:schema})} title={t("스키마 상세")} onClick={() => openSchema(schema)}><ArrowRight size={13}/></Button></div>
+          {(!collapsedSchemas.has(schema) || !!search) && visibleTables.filter(t => t.schema === schema).map(t => <Button variant="ghost" size="bare" key={`${t.schema}.${t.name}`} {...menuFor(tableMenu(t))} className={`tree-table ${selected?.name === t.name && selected.schema === t.schema ? 'active' : ''}`} onClick={() => void openObject(t)}><Table2 size={14}/><span>{t.name}</span>{selected?.name === t.name && selected.schema === t.schema && <span className="table-dot"/>}</Button>)}
         </div>)}
         {tablesLoading && !tableList.length ? <p className="empty-tree" role="status"><Loader2 size={13} className="spin"/> {tr('테이블 목록을 불러오는 중…','Loading tables…')}</p>
           : tablesError ? <div className="empty-tree tree-error" role="alert"><p>{tr('테이블 목록을 불러오지 못했습니다.','Could not load tables.')}</p><small title={tablesError}>{tablesError}</small><Button variant="outline" size="xs" onClick={() => void refreshTables()}>{tr('다시 시도','Retry')}</Button></div>
@@ -724,20 +729,20 @@ export default function App() {
             else if(event.altKey&&(event.key==='ArrowLeft'||event.key==='ArrowRight')){event.preventDefault();const index=workspace.connectionTabs.findIndex(tab=>tab.id===item.id);const next=workspace.connectionTabs[index+(event.key==='ArrowRight'?1:-1)];if(next)workspace.reorder(item.id,next.id,event.key==='ArrowRight');}
             else if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') menuFor(tabMenu(item)).onKeyDown(event);
             else navigateTabs(event,item.id);
-          }} className="tab" title={tabName(item)} onClick={() => {if(suppressTabClick.current){suppressTabClick.current=false;return;}void activateTab(item.id);}}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
+          }} className="tab" title={tabName(item)} onClick={() => {if(suppressTabClick.current){suppressTabClick.current=false;return;}void activateTab(item.id);}}>{item.busy ? <Loader2 size={14} className="spin"/> : item.kind === 'schema' && item.view === 'erd' ? <GitBranch size={14}/> : item.kind === 'schema' ? <Layers3 size={14}/> : item.kind === 'table' || item.kind === 'details' ? <Table2 size={14}/> : <FileCode2 size={14}/>}<span>{tabName(item)}</span>{isDirty(item) && <i className="tab-dirty" aria-hidden="true"/>}</Button>
           <Button variant="ghost" size="bare" className="tab-close" aria-label={t('탭 닫기 이름', {name:tabName(item)})} title={t('탭 닫기')} disabled={item.busy} onClick={() => closeTab(item)}><X size={13}/></Button>
         </div>)}
       </div><Button variant="ghost" size="bare" className="tab-add" title={t('새 쿼리') + ' · Ctrl/Cmd+T'} aria-label={t('새 쿼리')} onClick={() => addQuery()}><Plus size={17}/></Button></div>
       {showCommonSql && <CommonSqlDialog key={active} engine={connection.profile.engine} onClose={() => setShowCommonSql(false)} onSelect={sql => { setShowCommonSql(false); void addQuery(sql); }}/>}
-      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button disabled={reconnecting} onClick={()=>void reconnectProfile(connection.profile)}>{reconnecting?tr('연결 중…','Connecting…'):tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'erd' ? <Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
+      {!connected?<div className="workspace-empty"><Database size={28}/><h2>{connection.profile.name}</h2><Button disabled={reconnecting} onClick={()=>void reconnectProfile(connection.profile)}>{reconnecting?tr('연결 중…','Connecting…'):tr('다시 연결','Reconnect')}</Button></div>:!workspace.connectionTabs.length?<div className="workspace-empty"><FileCode2 size={28}/><h2>{tr('열린 탭이 없습니다','No open tabs')}</h2><Button size="sm" onClick={()=>void addQuery()}><Plus size={14}/>{t('새 쿼리')}</Button></div>:tab.kind === 'schema' && tab.view === 'erd' ? <>{viewBar}<Suspense fallback={<div className="object-empty">{t('ERD 생성 중…')}</div>}><ErdPage key={tab.id+catalogVersion} session={active} schema={tab.objectSchema} theme={theme} initial={tab.erd} readOnly={connection.profile.readOnly}
         onBusyChange={value=>workspace.patch(tab.id,{busy:value})}
         canApply={()=>!allTabsRef.current.some(item=>item.session===active&&item.id!==tab.id&&(item.busy||Object.keys(item.draft).length||dataDirtyRef.current[item.id]))}
-        onApplied={()=>{for(const item of allTabsRef.current.filter(item=>item.session===active&&item.id!==tab.id)){if(item.kind==='details'||item.kind==='table')workspace.patch(item.id,{loaded:false});if(item.kind==='erd')workspace.patch(item.id,{erd:null});}setCatalogVersion(v=>v+1);refreshTables();}}
+        onApplied={()=>{for(const item of allTabsRef.current.filter(item=>item.session===active&&item.id!==tab.id)){if(item.kind==='table')workspace.patch(item.id,{loaded:false,details:[]});if(item.kind==='schema')workspace.patch(item.id,{erd:null});}setCatalogVersion(v=>v+1);refreshTables();}}
         storageKey={'woojoo-erd-v1:' + JSON.stringify([connection.profile.engine,connection.profile.host,connection.profile.port,connection.profile.database,connection.profile.username,tab.objectSchema])}
-        onChange={erd => workspace.patch(tab.id,{erd})}/></Suspense> : tab.kind === 'schema' || tab.kind === 'details' ? <ObjectPage key={tab.id} session={active} engine={connection.profile.engine} revision={catalogVersion} onSql={addQuery} readOnly={connection.profile.readOnly} onChanged={structureChanged} changeBlocked={changeBlocked} tab={tab} database={connection.profile.database} tables={tableList} onFilter={setFilter}
+        onChange={erd => workspace.patch(tab.id,{erd})}/></Suspense></> : tab.kind === 'table' && tab.view === 'ddl' && tab.selected ? <>{viewBar}<DdlView session={active} engine={connection.profile.engine} table={tab.selected} revision={catalogVersion} onSql={sql=>void addQuery(sql,tab.selected?.schema)}/></> : tab.kind === 'table' && tab.view === 'relations' && tab.selected ? <>{viewBar}<RelationsView session={active} table={tab.selected} revision={catalogVersion} onOpen={table=>void openObject(table,'relations')} onSchemaErd={schema=>void openErd(schema)}/></> : tab.kind === 'schema' || tab.kind === 'table' && tab.view === 'structure' ? <>{viewBar}<ObjectPage key={tab.id} session={active} engine={connection.profile.engine} revision={catalogVersion} onSql={addQuery} readOnly={connection.profile.readOnly} onChanged={structureChanged} changeBlocked={changeBlocked} tab={tab.kind === 'table' ? {...tab, filter: tab.objectFilter ?? ''} : tab} database={connection.profile.database} tables={tableList} onFilter={value => tab.kind === 'table' ? workspace.patch(tab.id, {objectFilter: value}) : setFilter(value)}
         onRefresh={() => tab.kind === 'schema' ? refreshTables() : tab.selected && void openDetails(tab.selected,true)}
         onSchema={openSchema} onErd={openErd} onDetails={table => void openDetails(table)} onData={table => void openTable(table)}
-        onQuery={table => addQuery(tableQuery(connection.profile.engine,table.schema,table.name),table.schema)} tableMenu={tableMenu} menuFor={menuFor}/> : <>
+        onQuery={table => addQuery(tableQuery(connection.profile.engine,table.schema,table.name),table.schema)} tableMenu={tableMenu} menuFor={menuFor}/></> : <>{tab.kind === 'table' && viewBar}
       <section {...menuFor(() => [
         {label:t('실행'),action:run,disabled:busy||!editorSql.trim()},
         {label:t('선택한 SQL 복사'),action:()=>void copyText(editorSelection.current),disabled:!editorSelection.current},
@@ -750,7 +755,7 @@ export default function App() {
       {selected&&source==='table'&&<div className="data-tool-switch"><Button variant="outline" size="sm" onClick={async()=>{if((dataDirty[tab.id]||edits.length)&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:!previous[tab.id]}));}}>{advanced[tab.id]?tr('간단한 보기','Simple view'):tr('데이터 도구','Data tools')}</Button><span>{advanced[tab.id]?tr('필터 · 페이징 · 행 편집 · 가져오기 · 내보내기','Filter · paging · row editing · import · export'):''}</span></div>}
       {!!scriptResults[tab.id]?.length&&<div className="script-result-tabs">{scriptResults[tab.id].map(item=><Button key={item.index} variant="outline" size="sm" onClick={()=>{if(item.result)workspace.patch(tab.id,{result:item.result,resultStale:false,lastQuery:item.sql,source:'query',queryTable:null,error:''});else workspace.patch(tab.id,{error:item.error??'',resultStale:true});}}>{tr('결과','Result')} {item.index} · {item.error?tr('오류','Error'):tr(`${item.result?.rows.length}행`,`${item.result?.rows.length} rows`)}</Button>)}</div>}
       {advanced[tab.id]&&selected&&source==='table'?<DataWorkbench key={tab.id} session={active} engine={connection.profile.engine} table={selected} readOnly={connection.profile.readOnly} initialResult={result} initialFilters={initialFilters[tab.id]} targets={copyTargets} onBusyChange={value=>workspace.patch(tab.id,{busy:value})} onDirtyChange={dirty=>setDataDirty(previous=>previous[tab.id]===dirty?previous:{...previous,[tab.id]:dirty})} onNavigate={async(table,filter)=>{if(!await leaveData())return;const next=workspace.add(table,tableQuery(connection.profile.engine,table.schema,table.name));setAdvanced(previous=>({...previous,[next.id]:true}));setInitialFilters(previous=>({...previous,[next.id]:filter?[filter]:[]}));}} onChanged={()=>{setCatalogVersion(v=>v+1);}}/>:<section className="results-pane" {...menuFor(resultMenu)}>
-        <div className="result-tabs"><div className="result-tab"><Table2 size={15}/> {t("결과")} <span title={result.truncated?tr(`처음 ${result.rows.length}행만 불러왔습니다`,`Only the first ${result.rows.length} rows were loaded`):undefined}>{result.rows.length}{result.truncated?'+':''}</span></div>{selected && <Button variant="ghost" size="bare" className="subtle-button" onClick={() => void openDetails(selected)}>{t("테이블 상세")}</Button>}<div className="result-meta" data-stale={!!tab.resultStale}>{busy ? <Loader2 size={13} className="spin"/> : tab.resultStale || error ? <X size={13}/> : result.columns.length || lastQuery ? <Check size={13}/> : null}<span aria-live="polite">{busy ? t("처리 중…") + (elapsed >= 1000 ? ` ${(elapsed/1000).toFixed(0)}s` : '') : tab.resultStale || error ? tr("작업 실패","Operation failed") : tr("DB 처리","DB time")+" "+result.elapsedMs+" ms"}</span>{tab.resultStale&&result.columns.length>0&&<span className="stale-result-label" title={lastQuery}>{tr("이전 성공 결과","Previous successful result")} · {result.elapsedMs} ms</span>}<span className="sep">·</span><span>{source === 'table' ? t("테이블 보기") : canEdit?tr("쿼리 결과 · 편집 가능","Query result · editable"):t("쿼리 결과 · 읽기 전용")}</span></div><span className="tabs-spacer"/><Button variant="ghost" size="bare" className="icon-button" title={t("CSV 내보내기")} aria-label={t("CSV 내보내기")} disabled={!result.columns.length} onClick={exportCsv}><ArrowDownToLine size={16}/></Button><Button variant="ghost" size="bare" className="icon-button" title={source === 'query' ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} aria-label={source === "query" ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} disabled={busy || (source === 'table' ? !selected : !lastQuery)} onClick={refreshResults}><RefreshCw size={15}/></Button></div>
+        <div className="result-tabs"><div className="result-tab"><Table2 size={15}/> {t("결과")} <span title={result.truncated?tr(`처음 ${result.rows.length}행만 불러왔습니다`,`Only the first ${result.rows.length} rows were loaded`):undefined}>{result.rows.length}{result.truncated?'+':''}</span></div>{selected && tab.kind !== 'table' && <Button variant="ghost" size="bare" className="subtle-button" onClick={() => void openDetails(selected)}>{t("테이블 상세")}</Button>}<div className="result-meta" data-stale={!!tab.resultStale}>{busy ? <Loader2 size={13} className="spin"/> : tab.resultStale || error ? <X size={13}/> : result.columns.length || lastQuery ? <Check size={13}/> : null}<span aria-live="polite">{busy ? t("처리 중…") + (elapsed >= 1000 ? ` ${(elapsed/1000).toFixed(0)}s` : '') : tab.resultStale || error ? tr("작업 실패","Operation failed") : tr("DB 처리","DB time")+" "+result.elapsedMs+" ms"}</span>{tab.resultStale&&result.columns.length>0&&<span className="stale-result-label" title={lastQuery}>{tr("이전 성공 결과","Previous successful result")} · {result.elapsedMs} ms</span>}<span className="sep">·</span><span>{source === 'table' ? t("테이블 보기") : canEdit?tr("쿼리 결과 · 편집 가능","Query result · editable"):t("쿼리 결과 · 읽기 전용")}</span></div><span className="tabs-spacer"/><Button variant="ghost" size="bare" className="icon-button" title={t("CSV 내보내기")} aria-label={t("CSV 내보내기")} disabled={!result.columns.length} onClick={exportCsv}><ArrowDownToLine size={16}/></Button><Button variant="ghost" size="bare" className="icon-button" title={source === 'query' ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} aria-label={source === "query" ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} disabled={busy || (source === 'table' ? !selected : !lastQuery)} onClick={refreshResults}><RefreshCw size={15}/></Button></div>
         <div className="result-toolbar"><label className="result-filter"><Filter size={14}/><Input aria-label={t("결과 필터")} placeholder={result.truncated ? tr(`결과 검색 (불러온 ${result.rows.length}행)`,`Search loaded ${result.rows.length} rows`) : t("결과 검색")} value={filter} onChange={e => {setFilter(e.target.value);setScroll(0);}}/></label>{result.truncated && (filter || sort) && <span className="truncation-note" role="note"><AlertTriangle size={13}/>{tr(`불러온 ${result.rows.length}행 안에서만 ${filter && sort ? '검색·정렬' : filter ? '검색' : '정렬'}했습니다`,`${filter && sort ? 'Search and sort cover' : filter ? 'Search covers' : 'Sort covers'} only the ${result.rows.length} loaded rows`)}{source === 'table' && selected && <Button variant="link" size="bare" onClick={async()=>{if(edits.length&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:true}));}}>{tr('데이터 도구에서 서버 정렬·필터','Server-side sort and filter in Data tools')}</Button>}</span>}<span className="tabs-spacer"/>{edits.length > 0 && <><Button variant="ghost" size="bare" className="subtle-button" disabled={busy} onClick={() => setDraft({})}><Undo2 size={14}/> {t("취소")} </Button><Button variant="default" size="sm" className="save-button" disabled={busy} onClick={() => setShowReview(true)}><Check size={14}/> {t("변경 검토")} <span>{edits.length}</span></Button></>}</div>
         {error && <div role="alert" className="error-banner"><Terminal size={15}/><span>{error}</span><Button variant="ghost" size="bare" title={t("오류 닫기")} aria-label={t("오류 닫기")} onClick={() => setError('')}><X size={14}/></Button></div>}
         <div className="grid-scroll" ref={gridRef} aria-busy={busy} onScroll={e => setScroll(e.currentTarget.scrollTop)} key={tab.id}>

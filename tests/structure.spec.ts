@@ -30,7 +30,7 @@ test('schema and column CRUD with SQL review and deletion confirmation',async({p
  await expect(page.locator('.tree-table')).toHaveCount(1);await expect(page.getByRole('heading',{name:'public',exact:true})).toBeVisible();
 });
 test('pending data edits block schema modification',async({page})=>{
- await page.goto('/');await page.getByText('Alex Morgan',{exact:true}).dblclick();await page.getByLabel('셀 값').fill('pending');await page.getByRole('button',{name:'변경 대기열에 추가'}).click();await page.locator('.tree-table').click();await page.getByRole('button',{name:'컬럼 추가',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.getByRole('alert')).toContainText('먼저 데이터 탭');
+ await page.goto('/');await page.getByText('Alex Morgan',{exact:true}).dblclick();await page.getByLabel('셀 값').fill('pending');await page.getByRole('button',{name:'변경 대기열에 추가'}).click();await page.locator('.tree-table').click();await page.locator('.object-view-bar').getByRole('button',{name:'구조',exact:true}).click();await page.getByRole('button',{name:'컬럼 추가',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.getByRole('alert')).toContainText('먼저 데이터 탭');
 });
 test('MySQL metadata and reviewed DDL transport report permission errors',async({page})=>{
  await page.addInitScript(()=>{

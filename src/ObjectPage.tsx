@@ -1,4 +1,5 @@
 import { ObjectDefinitions } from './ObjectDefinitions';
+import type { Table as DbTable } from './model';
 import { StructureTools } from './StructureTools';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -68,7 +69,7 @@ export function ObjectPage({ onSql, readOnly, tab, database, session, engine, re
     </header>
     <div className="object-section-bar">
       <div className="object-subtabs" role="tablist" aria-label={schema?(language==='ko'?'스키마 정보':'Schema information'):t('테이블 정보')}>
-        {(schema?['details','tables','views','routines','triggers']:['details','columns','indexes','constraints','views','routines','triggers','ddl']).map(value=>{
+        {(schema?['details','tables','views','routines','triggers']:['details','columns','indexes','constraints','views','routines','triggers']).map(value=>{
           const labels:Record<string,string[]>= {details:['상세','Details'],tables:['테이블','Tables'],columns:['컬럼','Columns'],indexes:['인덱스','Indexes'],constraints:['제약조건','Constraints'],views:['뷰','Views'],routines:['루틴','Routines'],triggers:['트리거','Triggers'],ddl:['DDL','DDL']};
           const count=value==='tables'?allTables.length:value==='columns'?tab.details.length:value==='indexes'||value==='constraints'?objects?.[value].length:undefined;
           return <Button variant="ghost" size="bare" key={value} id={'object-tab-'+tab.id+'-'+value} role="tab" aria-controls={'object-content-'+tab.id} aria-selected={section===value} onClick={()=>setSection(value)}>{labels[value][language==='ko'?0:1]}{count!==undefined&&<span>{count}</span>}</Button>;
@@ -104,5 +105,14 @@ export function ObjectPage({ onSql, readOnly, tab, database, session, engine, re
     </>}
     </div>
     {action&&<StructureDialog key={action.kind+action.column?.name} action={action} session={session} engine={engine} onClose={()=>setAction(null)} onApplied={plan=>void applied(plan)}/>}
+  </section>;
+}
+
+/** The DDL view of a table tab. */
+export function DdlView({ session, engine, table, revision, onSql }: { session: string; engine: Engine; table: DbTable; revision: number; onSql: (sql: string) => void }) {
+  const [actionTarget, setActionTarget] = useState<HTMLDivElement | null>(null);
+  return <section className="object-page compact-object-page ddl-view">
+    <div className="object-section-bar"><span/><div className="object-actions object-section-actions"><div className="object-definition-actions" ref={setActionTarget}/></div></div>
+    <div className="object-table-scroll"><ObjectDefinitions key={table.schema + '.' + table.name + ':' + revision} session={session} engine={engine} schema={table.schema} table={table} section="ddl" actionTarget={actionTarget} onSql={onSql}/></div>
   </section>;
 }

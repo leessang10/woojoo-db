@@ -177,7 +177,7 @@ test('sidebar objects leave executed queries for new and existing tabs', async (
       await page.locator('.rail').getByRole('button', {name:'탐색기',exact:true}).click();
       await page.locator(selector).first().click();
       await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
-      await expect(page.locator('.object-page')).toBeVisible();
+      await expect(page.locator(selector === '.tree-table' ? '.object-view-bar' : '.object-page')).toBeVisible();
     }
   }
 });
