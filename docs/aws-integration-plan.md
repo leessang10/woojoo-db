@@ -1,6 +1,6 @@
 # AWS 작업 영역 통합 계획
 
-> 상태: 계획(구현 전) · 작성일 2026-10-23 · 기준 커밋 `709ff6a`
+> 상태: 0–4단계와 6단계 구현 완료, 5단계(카탈로그·API Runner) 미구현 · 작성일 2026-10-23 · 기준 커밋 `709ff6a`
 >
 > 대상: 별도 앱 **Orbit**(`C:\Users\codecrain\projects\aws-gui`)의 기능을 WooJoo 왼쪽 레일의 **AWS 작업 영역**으로 옮긴다. AWS 기능은 사용자 PC에 설치된 AWS CLI v2와 그 프로필을 그대로 사용하며, WooJoo는 자격 증명을 저장하지 않는다.
 
@@ -228,8 +228,22 @@ src-tauri/src/aws/
 | **테스트** | 실제 AWS 계정 없이 검증 어려움 | Rust 파서 단위 테스트 이전, `#[ignore]` 실환경 테스트(`WOOJOO_TEST_AWS_PROFILE`, 읽기 전용), 프론트는 fixture 모드 Playwright |
 | **Orbit 앱의 향후** | 두 곳에서 같은 기능 유지보수 | 통합 완료(4단계) 후 Orbit은 보관(archive)하는 것을 권장 |
 
-결정이 필요한 것:
+결정 사항 (2026-10-23):
 
-1. 6단계(쓰기 작업)를 WooJoo에 넣을지, 읽기 전용 + RDS 연결 연동까지만 할지.
-2. 인프라 맵 레이아웃 엔진: `elkjs` 유지 vs `dagre` 통일.
-3. AWS 탭을 프로필·리전 바꿀 때 닫을지(현재 계획: 유지하고 탭 제목에 프로필·리전 표시).
+1. 쓰기 작업 포함. 단, Orbit의 범용 API Runner 대신 **허용 목록 작업만** 넣었다(`src-tauri/src/aws/actions.rs`): EC2 시작·중지·재부팅·종료·이름 변경, RDS 시작·중지·재부팅·스냅샷, S3 버전 관리, 로그 보존 기간 변경·해제·그룹 삭제. 검토(대상 계정·명령 표시) → 리소스 이름 입력 → 실행 직전 계정 재확인 → 재시도 없이 한 번 실행. 검토는 5분 뒤 만료되고 한 번만 쓸 수 있다.
+2. 인프라 맵 레이아웃은 `dagre`로 통일(`src/aws/topology-layout.ts`), `elkjs`는 넣지 않았다.
+3. 프로필·리전을 바꿔도 열린 AWS 탭은 유지한다. 탭은 연 시점의 프로필·리전에 묶이고, 현재 선택과 다르면 탭에 리전을 함께 표시한다.
+
+## 8. 구현 결과
+
+| 단계 | 상태 | 주요 파일 |
+|---|---|---|
+| 0. 실행기 정리 | 완료 | `src-tauri/src/aws/cli.rs`(동시 3개·40초·8 MiB·오류 코드·`aws_cancel`), `discovery.rs` |
+| 1. 영역 셸 | 완료 | `src/App.tsx`(`WORK_AREAS`·영역별 단축키·DB 화면은 숨김 유지), `src/aws/AwsWorkspace.tsx` |
+| 2. 리소스 목록 | 완료 | `src/aws/ResourceList.tsx`, `src-tauri/src/aws/resources.rs` |
+| 3. 상세·탐색·RDS 연결 | 완료 | `src/aws/ResourceDetail.tsx`, `AwsConnection.tsx`(`initial` 프리셋) |
+| 4. 인프라 맵 | 완료 | `src/aws/TopologyView.tsx`, `topology-data.ts`(Orbit 이식), `src-tauri/src/aws/topology.rs`; 내보내기는 ERD의 `exportDiagram`·`save_erd_export` 재사용 |
+| 5. 카탈로그·API Runner | 미구현 | 후속 작업 |
+| 6. 쓰기 작업 | 완료(허용 목록) | `src-tauri/src/aws/actions.rs`, `src/aws/ResourceActions.tsx` |
+
+테스트: Rust 단위 테스트(`cargo test aws`), 실환경 읽기 전용 테스트(`WOOJOO_TEST_AWS_PROFILE=<프로필> cargo test aws -- --ignored`), `src/aws/aws-model.test.ts`, `tests/aws-workspace.spec.ts`(목록·상세·S3/로그·쓰기 검토·RDS 연결·인프라 맵·SSO 만료).

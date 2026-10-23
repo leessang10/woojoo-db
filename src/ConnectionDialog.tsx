@@ -5,7 +5,7 @@ import { Cloud, Database, Loader2, LockKeyhole, Play, X } from 'lucide-react';
 import { ModalSurface } from '@/components/ModalSurface';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AwsConnection } from './AwsConnection';
+import { AwsConnection, type AwsPreset } from './AwsConnection';
 import { rdsEngine, type RdsInstance } from './aws';
 import { useLanguage } from './i18n';
 import type { Engine, Profile } from './model';
@@ -16,9 +16,9 @@ function switchEngine(p:Profile,engine:Engine):Profile{
  const keep=<K extends keyof typeof before>(key:K)=>p[key]===''||p[key]===before[key]||(key==='port'&&!p.port)?after[key]:p[key];
  return {...p,engine,port:keep('port') as number,username:keep('username') as string,database:engine==='sqlite'||p.engine==='sqlite'?after.database:keep('database') as string,name:keep('name') as string,password:''};
 }
-export function ConnectionDialog({onClose,onConnected,initialProfile,onSave,onPasswordForgotten,saveDisabled=false}:{onClose:()=>void;onConnected:(p:Profile,id:string)=>void|Promise<void>;initialProfile?:Profile;onSave?:(p:Profile)=>void|Promise<void>;onPasswordForgotten?:(id:string)=>void;saveDisabled?:boolean}) {
+export function ConnectionDialog({onClose,onConnected,initialProfile,initialAws,onSave,onPasswordForgotten,saveDisabled=false}:{onClose:()=>void;onConnected:(p:Profile,id:string)=>void|Promise<void>;initialProfile?:Profile;initialAws?:AwsPreset;onSave?:(p:Profile)=>void|Promise<void>;onPasswordForgotten?:(id:string)=>void;saveDisabled?:boolean}) {
  const {t,language}=useLanguage(); const tr=(ko:string,en:string)=>language==='ko'?ko:en;
- const [mode,setMode]=useState<'direct'|'aws'>('direct'),[rdsSelected,setRdsSelected]=useState(false);
+ const [mode,setMode]=useState<'direct'|'aws'>(initialAws&&api.desktop?'aws':'direct'),[rdsSelected,setRdsSelected]=useState(false);
  const [profile,setProfile]=useState<Profile>(initialProfile ?? {id:crypto.randomUUID(),name:'Local PostgreSQL',engine:'postgres',host:'localhost',port:5432,database:'postgres',username:'postgres',password:'',tls:true});
  const [loading,setLoading]=useState(false),[message,setMessageText]=useState(''),[messageKind,setMessageKind]=useState<'info'|'success'|'error'>('info');
  const setMessage=(text:string,kind:'info'|'success'|'error'='error')=>{setMessageText(text);setMessageKind(kind);};
@@ -66,7 +66,7 @@ export function ConnectionDialog({onClose,onConnected,initialProfile,onSave,onPa
    <Button type="button" variant={mode==='aws'?'secondary':'ghost'} size="sm" aria-pressed={mode==='aws'} disabled={loading||!api.desktop} onClick={()=>{if(mode!=='aws'){setMode('aws');setRdsSelected(false);setMessage('');}}}><Cloud size={14}/>AWS RDS</Button>
   </div>
   <div className={mode==='aws'&&rdsSelected?'aws-connection-grid':''}>
-  {mode==='aws'&&<AwsConnection disabled={loading} onSelect={selectRds}/>}
+  {mode==='aws'&&<AwsConnection disabled={loading} onSelect={selectRds} initial={initialAws}/>}
   <fieldset className="connection-fields" disabled={loading}>
    {mode==='direct'?<div className="engine-options">{(['postgres','mysql','mariadb','sqlite'] as Engine[]).map(engine=><Button type="button" variant="ghost" size="bare" key={engine} className={profile.engine===engine?'active':''} onClick={()=>{setMessage('');setProfile(p=>switchEngine(p,engine));}}><Database size={20}/>{engine==='sqlite'?'SQLite':engine==='postgres'?'PostgreSQL':engine==='mysql'?'MySQL':'MariaDB'}</Button>)}</div>:rdsSelected&&<p className="connection-engine">{profile.engine==='postgres'?'PostgreSQL':profile.engine==='mysql'?'MySQL':'MariaDB'}</p>}
    {(mode==='direct'||rdsSelected)&&<>

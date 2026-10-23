@@ -5,24 +5,29 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { useLanguage } from './i18n';
 import { awsCliInfo, awsEnvironment, awsRdsInstances, awsError, type AwsCliInfo, type AwsEnvironment, type RdsInstance } from './aws';
-export function AwsConnection({disabled,onSelect}:{disabled:boolean;onSelect:(instance:RdsInstance|null,region:string)=>void}){
+export type AwsPreset={profile:string;region:string;instance:string};
+export function AwsConnection({disabled,onSelect,initial}:{disabled:boolean;onSelect:(instance:RdsInstance|null,region:string)=>void;initial?:AwsPreset}){
  const {t,language}=useLanguage();const tr=(ko:string,en:string)=>language==='ko'?ko:en;
  const [info,setInfo]=useState<AwsCliInfo|null>(null),[profile,setProfile]=useState(''),[env,setEnv]=useState<AwsEnvironment|null>(null),[region,setRegion]=useState('');
  const [instances,setInstances]=useState<RdsInstance[]|null>(null),[selected,setSelected]=useState(''),[loading,setLoading]=useState(''),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[retry,setRetry]=useState(0),[rdsRefresh,setRdsRefresh]=useState(0);
  const callback=useRef(onSelect);callback.current=onSelect;const request=useRef(0);
+ // An instance opened from the AWS work area is selected once, then the dialog behaves as usual.
+ const preset=useRef(initial);
  useEffect(()=>{
   let cancelled=false;setLoading('cli');setError('');setInfo(null);setProfile('');setEnv(null);setRegion('');setInstances(null);setSelected('');callback.current(null,'');request.current++;
-  awsCliInfo().then(value=>{if(!cancelled)setInfo(value);}).catch(reason=>{if(!cancelled)setError(awsError(reason));}).finally(()=>{if(!cancelled)setLoading('');});
+  awsCliInfo().then(value=>{if(cancelled)return;setInfo(value);if(preset.current&&value.profiles.includes(preset.current.profile))setProfile(preset.current.profile);else preset.current=undefined;}).catch(reason=>{if(!cancelled)setError(awsError(reason));}).finally(()=>{if(!cancelled)setLoading('');});
   return()=>{cancelled=true;request.current++;};
  },[refresh]);
  useEffect(()=>{
   if(!profile)return;let cancelled=false;setLoading('profile');setError('');setEnv(null);setRegion('');setInstances(null);setSelected('');callback.current(null,'');request.current++;
-  awsEnvironment(profile).then(value=>{if(!cancelled){setEnv(value);setRegion(value.region);}}).catch(reason=>{if(!cancelled)setError(awsError(reason));}).finally(()=>{if(!cancelled)setLoading('');});
+  awsEnvironment(profile).then(value=>{if(!cancelled){setEnv(value);if(preset.current?.profile!==profile)preset.current=undefined;setRegion(preset.current?.region||value.region);}}).catch(reason=>{if(!cancelled){preset.current=undefined;setError(awsError(reason));}}).finally(()=>{if(!cancelled)setLoading('');});
   return()=>{cancelled=true;request.current++;};
  },[profile,retry]);
  async function discover(){
   const token=++request.current;setLoading('rds');setError('');setInstances(null);setSelected('');callback.current(null,region);
-  try{const rows=await awsRdsInstances(profile,region.trim());if(token===request.current)setInstances(rows);}
+  try{const rows=await awsRdsInstances(profile,region.trim());if(token!==request.current)return;setInstances(rows);
+   const wanted=preset.current&&rows.find(item=>item.id===preset.current!.instance);preset.current=undefined;
+   if(wanted&&wanted.supported&&wanted.host&&wanted.port&&wanted.status==='available'){setSelected(wanted.id);callback.current(wanted,region.trim());}}
   catch(reason){if(token===request.current)setError(awsError(reason));}
   finally{if(token===request.current)setLoading('');}
  }

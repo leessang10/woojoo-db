@@ -1,0 +1,83 @@
+/* AWS work area. Builds on the shared sidebar, tab, grid and panel styles. */
+.main[hidden]{display:none}
+.aws-cli-version{margin-left:auto;font-size:11px;font-weight:400;color:var(--muted-foreground)}
+.aws-context{display:flex;flex-direction:column;gap:10px;padding:0 12px}
+.aws-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted-foreground)}
+.aws-field input{height:30px;font-size:12px}
+.aws-account{min-height:18px;font-size:12px;color:var(--muted-foreground)}.aws-account strong{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+.aws-note{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;line-height:1.6;color:var(--muted-foreground)}
+.aws-context .aws-error{margin:0;border-radius:4px}
+.aws-nav{display:flex;flex-direction:column;flex:1;overflow:auto}
+.aws-nav .aws-nav-item{padding-left:16px}
+.aws-sidebar-foot{margin:0;padding:12px 16px;font-size:11px;line-height:1.5;color:var(--muted-foreground);border-top:1px solid var(--line)}
+.aws-tab-scope{margin-left:4px;font-size:10px;color:var(--muted-foreground)}
+.aws-tab-panel{display:flex;flex-direction:column;flex:1;min-height:0}.aws-tab-panel[hidden]{display:none}
+.aws-list,.aws-detail,.aws-topology{display:flex;flex-direction:column;flex:1;min-height:0}
+.aws-toolbar{flex-wrap:wrap;gap:8px;padding-top:4px;padding-bottom:4px}
+.aws-count,.aws-updated{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.aws-grid tbody tr{cursor:default}.aws-grid tbody tr:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.aws-grid tbody tr[data-selected=true] td{background:var(--selection)}
+.aws-grid td svg{vertical-align:-2px;color:var(--muted-foreground)}
+.aws-grid .aws-folder{cursor:pointer}
+.aws-state{display:inline-flex;align-items:center;gap:6px}.aws-state::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--muted-foreground)}
+.aws-state[data-state=running]::before,.aws-state[data-state=available]::before{background:var(--good)}
+.aws-state[data-state=stopped]::before,.aws-state[data-state=terminated]::before,.aws-state[data-state=failed]::before{background:#d64541}
+.aws-state[data-state=pending]::before,.aws-state[data-state=stopping]::before,.aws-state[data-state=starting]::before,.aws-state[data-state=modifying]::before,.aws-state[data-state=rebooting]::before,.aws-state[data-state=backing-up]::before{background:var(--changed-line)}
+.aws-error{align-items:center}.aws-error .aws-login-hint{display:inline-block;margin-top:6px;font:11px Consolas,monospace;user-select:all}
+.aws-detail-heading{display:flex;align-items:center;gap:8px;padding:18px 24px 14px;border-bottom:1px solid var(--line)}
+.aws-detail-heading small{font-size:11px;color:var(--muted-foreground)}
+.aws-detail-heading h1{margin:4px 0 0;font-size:17px;font-weight:600;overflow-wrap:anywhere}
+.aws-detail-body{overflow:auto;padding:16px 24px}.aws-detail-body[hidden],.aws-browse[hidden]{display:none}
+.aws-browse{display:flex;flex-direction:column;flex:1;min-height:0}
+.aws-snapshot-note{margin:0 0 14px;font-size:11px;color:var(--muted-foreground)}
+.aws-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;margin:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--line)}
+.aws-facts>div{min-width:0;padding:9px 12px;background:var(--surface)}
+.aws-facts dt{font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aws-facts dd{margin:4px 0 0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.aws-subheading{margin:18px 0 8px;font-size:12px;font-weight:600}
+.aws-json{flex:1;min-height:0;margin:0;padding:16px 24px;overflow:auto;font:12px/1.6 'Cascadia Code',Consolas,monospace;background:var(--editor);white-space:pre}
+.aws-path{display:flex;align-items:center;flex-wrap:wrap;min-width:0}.aws-path-part{display:inline-flex;align-items:center;color:var(--muted-foreground)}
+.aws-path-form input{width:240px;height:28px;font-size:12px}
+.aws-pattern{width:320px;max-width:100%;height:30px;font-size:12px}
+.aws-log-list{padding:0}
+.aws-log-event{padding:8px 16px;border-bottom:1px solid var(--line)}
+.aws-log-event header{display:flex;gap:12px;font-size:11px;color:var(--muted-foreground)}.aws-log-event header span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aws-log-event time{flex-shrink:0;font-variant-numeric:tabular-nums}
+.aws-log-event pre{margin:4px 0 0;font:12px/1.55 'Cascadia Code',Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.aws-panel-body{display:flex;flex-direction:column;gap:10px;padding:4px 12px 16px;overflow:auto}
+.aws-panel-body h2{margin:0;font-size:14px;font-weight:600;overflow-wrap:anywhere}.aws-panel-body>small{font-size:11px;color:var(--muted-foreground)}
+.aws-panel-body .aws-facts{grid-template-columns:1fr}
+.aws-panel-actions{display:flex;flex-wrap:wrap;gap:6px}
+.aws-panel-empty{padding:40px 16px 0;line-height:1.6}
+.aws-warnings{margin:0;padding:8px 16px;font-size:12px;border-bottom:1px solid var(--line);color:var(--changed-line)}
+.aws-warnings ul{margin:6px 0 0;padding-left:18px;max-height:120px;overflow:auto;color:var(--muted-foreground)}
+.aws-topology-body{display:flex;flex:1;min-height:0}
+.aws-topology-canvas{position:relative;flex:1;min-width:0}
+.aws-topology-inspector{display:flex;flex-direction:column;gap:6px;width:300px;flex-shrink:0;padding:12px;overflow:auto;border-left:1px solid var(--line);background:var(--surface)}
+.aws-topology-inspector h3{margin:0;font-size:14px;overflow-wrap:anywhere}.aws-topology-inspector p{margin:0;font-size:12px;color:var(--muted-foreground)}
+.aws-topology-inspector code{font-size:11px;overflow-wrap:anywhere;color:var(--muted-foreground)}
+.aws-topology-inspector .aws-json{padding:10px;border-radius:4px;max-height:none}
+.aws-inspector-heading{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted-foreground)}
+.aws-topology .react-flow{background:var(--background)}
+.infra-card{display:flex;flex-direction:column;gap:3px;width:100%;height:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font-size:12px;overflow:hidden}
+.infra-card small{font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--muted-foreground)}
+.infra-card strong{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.infra-card span:not(.infra-icon){font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.infra-card code{font-size:10px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.infra-icon{display:flex;color:var(--brand)}
+.infra-ec2 .infra-icon{color:#e8913a}.infra-rds .infra-icon{color:#4f8fdc}.infra-s3 .infra-icon{color:#4ca66b}.infra-elb .infra-icon,.infra-target .infra-icon{color:#9b6ce0}
+.react-flow__node.selected .infra-card{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand)}
+.react-flow__node.infra-group{border:1px dashed var(--line);border-radius:10px;background:color-mix(in srgb,var(--surface) 45%,transparent)}
+.react-flow__node.infra-vpc{border-color:color-mix(in srgb,var(--brand) 55%,var(--line))}
+.infra-group-label{padding:10px 14px;font-size:11px;font-weight:600;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.infra-edge path{stroke:var(--muted-foreground)}
+.aws-main[data-environment=production] .topbar{box-shadow:inset 0 -2px #d64541}
+/* Write actions: review before running. */
+.aws-actions{display:flex;flex-wrap:wrap;gap:6px}
+.aws-action-modal{width:560px}
+.aws-action-command{margin:12px 0;padding:10px 12px;border-radius:4px;background:var(--editor);font:12px/1.6 'Cascadia Code',Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.aws-action-modal .aws-confirm-phrase{font:12px Consolas,monospace;user-select:all;color:var(--text)}
+.aws-action-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.aws-action-row{display:flex;align-items:center;gap:16px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--surface)}.aws-action-row:last-child{border-bottom:0}
+.aws-action-row>div{flex:1;min-width:0}.aws-action-row strong{font-size:13px;font-weight:600}.aws-action-row p{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--muted-foreground)}
+.aws-action-row[data-danger=true] strong{color:var(--error-text)}

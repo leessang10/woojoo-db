@@ -3,7 +3,9 @@ import { CommonSqlDialog } from './CommonSqlDialog';
 import { useConfirm } from './components/ConfirmProvider';
 import { HistoryPanel, type ExecutionEntry } from './HistoryPanel';
 import { listen } from '@tauri-apps/api/event';
-import { ScrollText } from 'lucide-react';
+import { Cloud, ScrollText } from 'lucide-react';
+import { AwsWorkspace, type AwsCommands } from './aws/AwsWorkspace';
+import type { AwsPreset } from './AwsConnection';
 import { invoke } from '@tauri-apps/api/core';
 import DataWorkbench from './DataWorkbench';
 import { MaintenanceDialog } from './MaintenanceDialog';
@@ -46,11 +48,14 @@ const initialProfile: Profile = { id: 'demo', name: 'Woojoo playground', engine:
 type Connection = { profile: Profile; session: string };
 const initialTab = createTab('demo', 0, { schema: 'public', name: 'users' }, tableQuery('postgres', 'public', 'users'));
 type Notice = { text: string; kind: 'success' | 'info' | 'error' };
-// Each rail item is a work area with its own sidebar explorer; AWS joins this list.
-type WorkArea = 'database';
+// Each rail item is a work area with its own sidebar explorer, tabs and right panel.
+type WorkArea = 'database' | 'aws';
 const WORK_AREAS: { id: WorkArea; icon: typeof Database; label: [string, string]; title: [string, string] }[] = [
   { id: 'database', icon: Database, label: ['데이터베이스', 'Databases'], title: ['데이터베이스 · 연결과 스키마', 'Databases · connections and schemas'] },
+  { id: 'aws', icon: Cloud, label: ['AWS', 'AWS'], title: ['AWS · 로컬 AWS CLI로 리소스 조회', 'AWS · resources through your local AWS CLI'] },
 ];
+const AREA_KEY = 'woojoo-work-area';
+const readArea = (): WorkArea => { try { return localStorage.getItem(AREA_KEY) === 'aws' ? 'aws' : 'database'; } catch { return 'database'; } };
 const COLLAPSED_KEY = 'woojoo-collapsed-schemas-v1';
 function readCollapsed(): Record<string, string[]> {
   try { const value = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}'); return value && typeof value === 'object' ? value : {}; }
@@ -133,8 +138,15 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommonSql, setShowCommonSql] = useState(false);
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
-  // The rail picks a work area (databases now, AWS later) and the sidebar shows that area's explorer.
-  const [area, setArea] = useState<WorkArea>('database');
+  // The rail picks a work area and the sidebar shows that area's explorer.
+  const [area, setArea] = useState<WorkArea>(readArea);
+  const areaRef = useRef(area); areaRef.current = area;
+  useEffect(() => { try { localStorage.setItem(AREA_KEY, area); } catch { /* Session-only preference. */ } }, [area]);
+  // The AWS area mounts on its first visit and then stays mounted, hidden, to keep its tabs.
+  const [awsVisited, setAwsVisited] = useState(area === 'aws');
+  useEffect(() => { if (area === 'aws') setAwsVisited(true); }, [area]);
+  const awsCommands = useRef<AwsCommands>({});
+  const [awsPreset, setAwsPreset] = useState<AwsPreset>();
   // Query history sits in a right-hand panel beside the database workspace.
   const [historyOpen, setHistoryOpen] = useState(() => { try { return localStorage.getItem('woojoo-history-panel') === 'open'; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem('woojoo-history-panel', historyOpen ? 'open' : 'closed'); } catch { /* Session-only preference. */ } }, [historyOpen]);
@@ -510,6 +522,16 @@ export default function App() {
         return;
       }
       const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
+      if (areaRef.current === 'aws') {
+        // SQL shortcuts belong to the database area; AWS tabs only refresh, close and toggle panels.
+        if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
+        else if (mod && event.altKey && key === 'b') { event.preventDefault(); awsCommands.current.togglePanel?.(); }
+        else if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); }
+        else if (mod && key === 'w') { event.preventDefault(); awsCommands.current.closeTab?.(); }
+        else if (event.key === 'F5') { event.preventDefault(); awsCommands.current.refresh?.(); }
+        else if (event.key === 'Escape') setShowHelp(false);
+        return;
+      }
       if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
       else if (mod && event.altKey && key === 'b') { event.preventDefault(); setHistoryOpen(open => !open); }
       else if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); }
@@ -709,7 +731,7 @@ export default function App() {
       {WORK_AREAS.map(({ id, icon: Icon, label, title }) => <Button key={id} variant="ghost" size="bare" className={`rail-button ${sidebarOpen && area === id ? 'selected' : ''}`} aria-pressed={sidebarOpen && area === id} aria-label={tr(...label)} title={tr(...title)} onClick={() => showArea(id)}><Icon size={21}/></Button>)}
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} aria-label={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
-    {sidebarOpen && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
+    {sidebarOpen && area === 'database' && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
       <div className="workspace-brand"><span>Woojoo</span></div>
       {area === 'database' && <>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
@@ -739,7 +761,7 @@ export default function App() {
           : <p className="empty-tree"> {t("표시할 테이블이 없습니다.")} </p>)}
       </div></>}</>}
     </aside>}
-    <main className="main" data-environment={!emptyWorkspace&&connected?connection.profile.environment:undefined}>
+    <main className="main" hidden={area !== 'database'} data-environment={!emptyWorkspace&&connected?connection.profile.environment:undefined}>
       <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" className="icon-button sidebar-toggle" aria-label={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기')} title={t(sidebarOpen ? '사이드바 접기' : '사이드바 펼치기') + ' · Ctrl/Cmd+B'} aria-expanded={sidebarOpen} aria-controls="database-sidebar" onClick={toggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>{!emptyWorkspace&&<nav className="breadcrumb-path" aria-label={tr('현재 위치','Location')}><Database size={14}/><Button variant="ghost" size="bare" className="crumb-link" title={tr('탐색기에서 보기','Show in explorer')} onClick={revealInExplorer}>{connection.profile.name}</Button><ChevronRight size={13}/>{tab.kind === 'history' ? <strong aria-current="page">{crumbObject}</strong> : crumbSchema ?<Button variant="ghost" size="bare" className="crumb-link" aria-current={!crumbObject?'page':undefined} title={tr('스키마 열기','Open schema')} onClick={()=>void openSchema(crumbSchema)}>{crumbSchema}</Button> : <span className="crumb-muted" title={connection.profile.engine === 'postgres' ? tr('스키마를 생략한 이름은 연결의 search_path(보통 public)에서 찾습니다.','Unqualified names resolve through the connection search_path (usually public).') : tr('스키마를 생략한 이름은 연결의 기본 데이터베이스에서 찾습니다.','Unqualified names resolve in the connection default database.')}>{tr('기본 스키마','Default schema')}</span>}{crumbObject&&tab.kind!=='history'&&<><ChevronRight size={13}/><strong aria-current="page">{crumbObject}</strong></>}</nav>}</div><div className="topbar-right">{!emptyWorkspace&&<span className="connection-status" data-connected={connected} title={connected?(connection.profile.engine==='sqlite'?connection.profile.database:`${connection.profile.username}@${connection.profile.host}:${connection.profile.port}/${connection.profile.database}`):undefined}><span className={`live-dot ${connected?'':'offline'}`} aria-hidden="true"/>{!connected&&<strong>{tr('연결 끊김','Disconnected')}</strong>}<span>{[engineLabel(connection.profile.engine),connection.profile.engine==='sqlite'?connection.profile.database.split(/[\\/]/).pop():connection.profile.host,connection.profile.engine==='sqlite'?null:connection.profile.tls?'TLS':tr('TLS 없음','No TLS')].filter(Boolean).join(' · ')}</span></span>}{!emptyWorkspace&&production&&<span className="env-banner" data-environment="production" role="note"><AlertTriangle size={13}/>PRODUCTION</span>}{!emptyWorkspace&&connection.profile.environment==='staging'&&<span className="env-banner" data-environment="staging">STAGING</span>}{!emptyWorkspace&&connection.profile.readOnly&&<span className="env-banner" data-environment="readonly">{tr('읽기 전용','Read-only')}</span>}<Button variant="ghost" size="bare" className="subtle-button" onClick={() => setShowConnect(true)}><Plus size={14}/> {t("연결 추가")} </Button><Button variant="ghost" size="bare" className="icon-button history-toggle-button" aria-label={tr('쿼리 기록','Query history')} title={tr('쿼리 기록 패널','Query history panel') + ' · Ctrl/Cmd+Alt+B'} aria-pressed={historyOpen} aria-controls="history-sidebar" onClick={() => setHistoryOpen(open => !open)}><ScrollText size={17}/></Button></div></header>
       <>
       {emptyWorkspace?<div className="workspace-empty"><Database size={28}/><h1>{tr("첫 데이터베이스를 연결하세요","Connect your first database")}</h1>{!api.desktop&&<p className="connection-availability">{tr("실제 DB 연결은 데스크톱 앱에서 사용할 수 있습니다.","Use the desktop app to connect to a database.")}</p>}<div className="empty-connection-actions">{!connections.some(c=>c.session!=='demo')&&<Button size="sm" disabled={creatingLocal||!api.desktop} title={!api.desktop?tr('데스크톱 앱에서 사용할 수 있습니다.','Available in the desktop app.'):undefined} onClick={()=>void createLocalDatabase()}>{creatingLocal?<Loader2 size={14} className="spin"/>:<Database size={14}/>} {tr('로컬 SQLite 만들기','Create local SQLite')}</Button>}<Button variant="outline" size="sm" disabled={creatingLocal} onClick={()=>{setEditProfile(undefined);setShowConnect(true);}}><Plus size={14}/>{t("새 연결")}</Button></div>{localError&&<p className="local-connection-error" role="alert">{localError}</p>}</div>:<>
@@ -814,7 +836,8 @@ export default function App() {
       </>}
       </>
     </main>
-    {historyOpen && <aside className="history-sidebar" id="history-sidebar"><HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} panelScope={emptyWorkspace ? 'all' : 'connection'} onOpen={entry => void openExecution(entry)} onShowAll={emptyWorkspace ? undefined : () => void openHistory()} onClose={() => setHistoryOpen(false)}/></aside>}
+    {historyOpen && area === 'database' && <aside className="history-sidebar" id="history-sidebar"><HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} panelScope={emptyWorkspace ? 'all' : 'connection'} onOpen={entry => void openExecution(entry)} onShowAll={emptyWorkspace ? undefined : () => void openHistory()} onClose={() => setHistoryOpen(false)}/></aside>}
+    {awsVisited && <AwsWorkspace visible={area === 'aws'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={awsCommands} theme={theme} onConnectRds={preset => { setEditProfile(undefined); setAwsPreset(preset); setShowConnect(true); }}/>}
     {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
       <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>
       <p className="modal-description">{tr('체크한 스키마만 사이드바에 표시합니다. 열린 탭에는 영향을 주지 않습니다.','Only checked schemas appear in the sidebar. Open tabs are preserved.')}</p>
@@ -831,7 +854,7 @@ export default function App() {
     {showMaintenance&&<MaintenanceDialog session={active} engine={connection.profile.engine} profile={connection.profile} onClose={()=>setShowMaintenance(false)} onRestored={()=>{setCatalogVersion(v=>v+1);refreshTables();}}/>}
     {contextMenu && <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)}/> }
     {notice && <div role={notice.kind === 'error' ? 'alert' : 'status'} className="toast" data-kind={notice.kind}>{notice.kind === 'error' ? <CircleAlert size={16}/> : notice.kind === 'info' ? <Info size={16}/> : <Check size={16}/>}<span>{notice.text}</span>{notice.kind === 'error' && <Button variant="ghost" size="bare" className="toast-close" aria-label={t('닫기')} title={t('닫기')} onClick={() => setNoticeState(null)}><X size={14}/></Button>}</div>}
-    {showConnect && <ConnectionDialog initialProfile={editProfile} onClose={() => {setShowConnect(false);setEditProfile(undefined);}} onSave={saveProfile} saveDisabled={!!editProfile&&connections.some(c=>c.profile.id===editProfile.id&&!c.session.startsWith('saved:'))} onPasswordForgotten={passwordForgotten} onConnected={acceptConnection}/>}
+    {showConnect && <ConnectionDialog initialProfile={editProfile} initialAws={awsPreset} onClose={() => {setShowConnect(false);setEditProfile(undefined);setAwsPreset(undefined);}} onSave={saveProfile} saveDisabled={!!editProfile&&connections.some(c=>c.profile.id===editProfile.id&&!c.session.startsWith('saved:'))} onPasswordForgotten={passwordForgotten} onConnected={async(profile,session)=>{await acceptConnection(profile,session);setAwsPreset(undefined);setArea('database');}}/>}
     {editing && <ModalSurface title={t("셀 편집")} onClose={() => setEditing(null)} locked={false}><div className="modal cell-modal" role="dialog" aria-modal="true" aria-label={t("셀 편집")}><div className="modal-heading"><h2> {t("셀 편집")} </h2><Button variant="ghost" size="bare" onClick={() => setEditing(null)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{selected?.name} / <strong>{editing.col}</strong> {t("· 행")} {editing.index + 1}</p><Textarea aria-label={t("셀 값")} autoFocus value={editing.value} disabled={editing.isNull} onChange={e => setEditing({...editing,value:e.target.value})} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value})); setEditing(null); } }}/><p className="field-hint">{tr('Ctrl/Cmd+Enter: 대기열에 추가 · Esc: 취소','Ctrl/Cmd+Enter: stage · Esc: cancel')}</p><label className="checkbox-label"><Input type="checkbox" checked={editing.isNull} onChange={e => setEditing({...editing,isNull:e.target.checked})}/> {t("NULL로 설정")} </label><div className="modal-actions"><Button variant="outline" size="sm" className="secondary-button" onClick={() => setEditing(null)}> {t("취소")} </Button><Button variant="default" size="sm" className="primary-button" onClick={() => {setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value}));setEditing(null);}}> {t("변경 대기열에 추가")} </Button></div></div></ModalSurface>}
     {showReview && <ModalSurface title={t("변경 사항 검토")} onClose={() => setShowReview(false)} locked={busy}><div className="modal review-modal" role="dialog" aria-modal="true" aria-label={t("변경 사항 검토")}><div className="modal-heading"><h2> {t("변경 사항 검토")} </h2><Button variant="ghost" size="bare" disabled={busy} onClick={() => setShowReview(false)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{t('검토 설명', {table: `${selected?.schema}.${selected?.name}`, count: edits.length})} {active === 'demo' ? t("데모 데이터에만 반영됩니다.") : t("모든 변경을 하나의 트랜잭션으로 적용합니다.")}</p>{production&&<p className="production-warning" role="note"><AlertTriangle size={14}/>{tr(`운영(PRODUCTION) 연결 "${connection.profile.name}"에 적용합니다.`,`These changes go to the PRODUCTION connection "${connection.profile.name}".`)}</p>}<div className="review-list">{edits.map((edit,i) => <div className="review-row" key={i}><small>{result.columns.filter(c => c.primary).map(c => `${c.name} = ${edit.original[c.name]}`).join(', ')}</small>{Object.entries(edit.changes).map(([col,val]) => <div key={col}><strong>{col}</strong><del>{edit.original[col] ?? 'NULL'}</del><ArrowRight size={14}/><ins>{val ?? 'NULL'}</ins></div>)}</div>)}</div>{error && <p className="dialog-error">{error}</p>}<div className="modal-actions"><Button variant="outline" size="sm" disabled={busy} className="secondary-button" onClick={() => setShowReview(false)}> {t("돌아가기")} </Button><Button variant="default" size="sm" disabled={busy} className="primary-button" onClick={() => void applyChanges()}>{busy ? t("적용 중...") : t('행 적용', {count: edits.length})}</Button></div></div></ModalSurface>}
     {showSettings && <SettingsDialog theme={theme} onThemeChange={next => { saveTheme(next); setTheme(next); }} sidebarOpen={sidebarOpen} onSidebarChange={setSidebarOpen} onClose={() => setShowSettings(false)}/> }

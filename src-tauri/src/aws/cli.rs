@@ -157,16 +157,26 @@ pub async fn run_owned(args: Vec<String>, request: Option<&str>) -> Result<Strin
         RUNNING.lock().unwrap().insert(id.to_owned(), tx);
         rx
     });
-    let result = execute(path, args, cancelled).await;
+    let result = execute(path, args, cancelled, "2").await;
     if let Some(id) = request {
         RUNNING.lock().unwrap().remove(id);
     }
     result
 }
+/// Runs a change once: a retried write could apply twice, and it is never cancelled midway.
+pub async fn run_write(args: Vec<String>) -> Result<String, String> {
+    let path = cli_path().ok_or("AWS_CLI_NOT_FOUND")?;
+    let _slot = timeout(Duration::from_secs(5), SLOTS.acquire())
+        .await
+        .map_err(|_| "AWS_BUSY")?
+        .map_err(|_| "AWS_BUSY")?;
+    execute(path, args, None, "1").await
+}
 async fn execute(
     path: PathBuf,
     args: Vec<String>,
     cancelled: Option<oneshot::Receiver<()>>,
+    attempts: &str,
 ) -> Result<String, String> {
     let mut command = Command::new(path);
     command
@@ -175,7 +185,7 @@ async fn execute(
         .env("AWS_CLI_AUTO_PROMPT", "off")
         // Windows locales (e.g. CP949) are not UTF-8; keep Unicode names intact.
         .env("AWS_CLI_OUTPUT_ENCODING", "UTF-8")
-        .env("AWS_MAX_ATTEMPTS", "2")
+        .env("AWS_MAX_ATTEMPTS", attempts)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
