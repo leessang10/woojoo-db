@@ -727,12 +727,10 @@ export default function App() {
   const currentConnection = selectableConnections.find(c=>c.session===active);
   return <div className="app">
     <aside className="rail">
-      <span className="brand-mark" aria-label="Woojoo">W</span>
       {WORK_AREAS.map(({ id, icon: Icon, label, title }) => <Button key={id} variant="ghost" size="bare" className={`rail-button ${sidebarOpen && area === id ? 'selected' : ''}`} aria-pressed={sidebarOpen && area === id} aria-label={tr(...label)} title={tr(...title)} onClick={() => showArea(id)}><Icon size={21}/></Button>)}
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} aria-label={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
     {sidebarOpen && area === 'database' && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
-      <div className="workspace-brand"><span>Woojoo</span></div>
       {area === 'database' && <>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
       <div className="connections">{selectableConnections.length>0&&<ConnectionSwitcher connections={selectableConnections} active={active} onSelect={id=>{editorSelection.current='';void selectConnection(id);}} onAdd={()=>setShowConnect(true)}>{currentConnection ? (()=>{const c=currentConnection;return <Button variant="ghost" size="bare" key={c.session} {...menuFor([

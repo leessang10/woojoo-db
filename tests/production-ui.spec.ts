@@ -44,8 +44,7 @@ test('sidebar header is compact and its add action aligns with its label', async
   const layout = await page.locator('.section-label').first().evaluate(element => {
     const rect=element.getBoundingClientRect(), button=element.querySelector('button')!.getBoundingClientRect();
     const sidebar=element.closest('.sidebar')!, box=sidebar.getBoundingClientRect();
-    const brand=sidebar.querySelector('.workspace-brand')!.getBoundingClientRect();
-    return { gap:rect.top-brand.bottom, inset:box.right-button.right, center:Math.abs(rect.y+rect.height/2-button.y-button.height/2), overflow:sidebar.scrollWidth>sidebar.clientWidth };
+    return { gap:rect.top-box.top, inset:box.right-button.right, center:Math.abs(rect.y+rect.height/2-button.y-button.height/2), overflow:sidebar.scrollWidth>sidebar.clientWidth };
   });
   expect(layout.gap).toBeLessThanOrEqual(8);
   expect(layout.inset).toBeLessThanOrEqual(16);

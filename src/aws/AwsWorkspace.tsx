@@ -89,8 +89,7 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   // Same element positions whether shown or hidden, so the main pane never remounts.
   return <>
     {visible && sidebarOpen && <aside className="sidebar aws-sidebar" id="aws-sidebar" aria-label={tr('AWS 탐색기', 'AWS explorer')}>
-      <div className="workspace-brand"><span>AWS</span>{info?.installed && <small className="aws-cli-version" title={info.version}>{info.version.split(' ')[0]}</small>}</div>
-      <div className="section-label"><span>{tr('계정', 'Account')}</span><Button variant="ghost" size="bare" title={tr('AWS CLI 다시 확인', 'Check AWS CLI again')} aria-label={t('AWS CLI 다시 확인')} disabled={checking || !desktop} onClick={() => { setInfo(null); setInfoError(''); setCliCheck(value => value + 1); }}><RefreshCw size={14} className={checking ? 'spin' : ''}/></Button></div>
+      <div className="section-label"><span>{tr('계정', 'Account')}{info?.installed && <small className="aws-cli-version" title={info.version}>{info.version.split(' ')[0]}</small>}</span><Button variant="ghost" size="bare" title={tr('AWS CLI 다시 확인', 'Check AWS CLI again')} aria-label={t('AWS CLI 다시 확인')} disabled={checking || !desktop} onClick={() => { setInfo(null); setInfoError(''); setCliCheck(value => value + 1); }}><RefreshCw size={14} className={checking ? 'spin' : ''}/></Button></div>
       <div className="aws-context">
         {!desktop ? <p className="aws-note">{tr('AWS 작업 영역은 데스크톱 앱에서 사용할 수 있습니다.', 'The AWS work area is available in the desktop app.')}</p>
           : checking && !info ? <p className="aws-note" role="status"><Loader2 size={13} className="spin"/> {tr('AWS CLI 확인 중…', 'Checking AWS CLI…')}</p>

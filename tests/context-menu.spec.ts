@@ -54,7 +54,7 @@ test('context menu stays inside the viewport and dismisses outside', async ({ pa
   const bounds = await menu.boundingBox();
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(960);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(700);
-  await page.locator('.workspace-brand').click();
+  await page.locator('.sidebar .section-label').first().click({ position: { x: 4, y: 4 } });
   await expect(menu).not.toBeVisible();
   await page.getByRole('button', { name: '새 쿼리', exact: true }).click();
   await page.locator('.result-footer').click({ button: 'right' });
