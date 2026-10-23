@@ -10,6 +10,13 @@ async function chooseOption(trigger, value) {
   await trigger.click();
   await trigger.page().getByRole('option').and(trigger.page().locator(`[data-value=${JSON.stringify(value)}]`)).click();
 }
+/** Language lives in Settings; open it, pick the language and close it again. */
+async function chooseLanguage(page, value) {
+  await page.keyboard.press('Control+,');
+  await chooseOption(page.getByLabel('언어 / Language'), value);
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+}
 
 const executable = path.resolve(process.argv[2] ?? 'src-tauri/target/release/woojoo-db.exe');
 const port = 9226;
@@ -43,7 +50,7 @@ try {
   await expect(page.locator('.workspace-brand')).toHaveText('Woojoo', {timeout:20000});
   expect(new URL(page.url()).hostname).toBe('tauri.localhost');
   expect(await page.evaluate(() => !!window.__TAURI_INTERNALS__)).toBe(true);
-  await chooseOption(page.getByLabel('언어 / Language'), 'ko');
+  await chooseLanguage(page, 'ko');
 
   const databasePath=path.join(profile,'erd.sqlite3');
   const id=await page.evaluate(async database=>{

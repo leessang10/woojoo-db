@@ -1,4 +1,4 @@
-import { chooseOption } from './select-control';
+import { chooseLanguage } from './select-control';
 import { test, expect } from './fixtures';
 
 test('schema list opens searchable table details and returns to existing editable data', async ({ page }) => {
@@ -46,7 +46,7 @@ test('schema list opens searchable table details and returns to existing editabl
 test('object pages translate and SELECT opens a separate query tab', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
-  await chooseOption(page.getByLabel('언어 / Language'), 'en');
+  await chooseLanguage(page, 'en');
   await page.locator('.tree-table').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Table details' }).click();
   await expect(page.getByRole('columnheader', { name: 'Nullable' })).toBeVisible();

@@ -1,4 +1,4 @@
-import { chooseOption } from './select-control';
+import { chooseLanguage } from './select-control';
 import { test, expect } from './fixtures';
 
 test('sidebar can be collapsed, restored by keyboard, and remembers its state', async ({ page }) => {
@@ -19,7 +19,7 @@ test('English covers workspace, dialogs, errors and persists without changing SQ
   await page.goto('/');
   await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
   const sql = await page.locator('.cm-content').innerText();
-  await chooseOption(page.getByLabel('언어 / Language'), 'en');
+  await chooseLanguage(page, 'en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeVisible();
   await expect(page.locator('.cm-content')).toHaveText(sql, { useInnerText: true });
@@ -35,9 +35,11 @@ test('English covers workspace, dialogs, errors and persists without changing SQ
   await expect(page.locator('.help-content')).not.toContainText(/[가-힣]/);
   await page.keyboard.press('Escape');
   await page.reload();
+  await page.keyboard.press('Control+,');
   await expect(page.getByLabel('언어 / Language')).toHaveAttribute('data-value', 'en');
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeVisible();
-  await chooseOption(page.getByLabel('언어 / Language'), 'ko');
+  await chooseLanguage(page, 'ko');
   await expect(page.getByRole('button', { name: '실행', exact: true })).toBeVisible();
 });
 

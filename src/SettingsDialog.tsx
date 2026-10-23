@@ -30,7 +30,7 @@ export function SettingsDialog({ theme, onThemeChange, sidebarOpen, onSidebarCha
           </NativeSelect>
         </label>
         <label className="settings-row"><span>{t('언어')}</span>
-          <NativeSelect size="sm" aria-label={t('언어')} value={language} onChange={event => setLanguage(event.target.value as 'ko' | 'en')}>
+          <NativeSelect size="sm" aria-label="언어 / Language" value={language} onChange={event => setLanguage(event.target.value as 'ko' | 'en')}>
             <NativeSelectOption value="ko">한국어</NativeSelectOption>
             <NativeSelectOption value="en">English</NativeSelectOption>
           </NativeSelect>

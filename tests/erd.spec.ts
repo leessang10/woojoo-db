@@ -1,4 +1,4 @@
-import { chooseOption } from './select-control';
+import { chooseLanguage, chooseOption } from './select-control';
 import { test, expect } from './fixtures';
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -114,7 +114,7 @@ test('real FK transport generates editable relations with PK/FK filtering and re
   await dialog.getByRole('button',{name:'관계 추가',exact:true}).click();
   await expect(page.locator('.react-flow__edge')).toHaveCount(2);
   await page.getByRole('button', { name: '라이트 모드로 전환' }).click();
-  await chooseOption(page.getByLabel('언어 / Language'), 'en');
+  await chooseLanguage(page, 'en');
   await expect(page.getByLabel('Relationship name')).toHaveValue('Manual relation');
   await page.setViewportSize({ width: 960, height: 700 });
   await page.locator('.erd-toolbar').getByRole('button', { name: 'Fit view', exact: true }).click();

@@ -45,7 +45,7 @@
  .object-section-bar{padding:14px 24px}.object-subtabs{gap:4px;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:3px}.object-subtabs button{border:0;padding:5px 10px;font-size:11px;border-radius:4px}.object-subtabs button[aria-selected=true]{background:var(--background);box-shadow:0 1px 3px #0002;color:var(--text)}
  .object-search-row{padding-left:24px}.object-search-row .search-field{margin:0}.object-table-scroll{padding:0 24px 24px}.object-table th{padding:10px;font-size:11px}.object-table td{padding:10px;font-size:12px}.object-row-actions button{font-size:11px;margin-left:8px;text-decoration:none}
  .modal{border:1px solid var(--line);border-radius:12px;background:var(--background);padding:24px;box-shadow:0 20px 80px #0004;max-height:calc(100dvh - 48px);overflow:auto}.modal h2{font-size:18px;font-weight:600;letter-spacing:-.025em}.modal-heading{margin-bottom:16px}.modal-description,.connection-availability,.credential-note{line-height:1.65;font-size:12px}.modal label{font-size:12px;font-weight:500;color:var(--text);gap:7px}.modal-actions{padding-top:18px;margin-top:22px;gap:8px}.modal input,.modal textarea,.modal select{border-radius:6px}.modal .checkbox-label{font-weight:400;font-size:12px}
- select{height:32px;border:1px solid var(--input);border-radius:6px;padding:0 28px 0 9px;background:var(--background);font-size:12px}.language-select{height:27px;font-size:12px}
+ select{height:32px;border:1px solid var(--input);border-radius:6px;padding:0 28px 0 9px;background:var(--background);font-size:12px}
  .column-draft{padding:16px;background:var(--surface);border-radius:8px}.column-draft-heading{color:var(--muted-foreground);font-size:11px}.ddl-preview{background:var(--surface);border-radius:7px;padding:14px}
  .engine-options button{border-radius:7px;font-size:12px}.engine-options button.active{border-color:var(--ring);background:var(--selection);color:var(--brand)}
  .erd-toolbar{background:var(--surface);padding:10px 16px}.erd-inspector{background:var(--surface)}.erd-inspector input,.erd-inspector select{font-size:12px}.erd-table-node{border-radius:8px}
@@ -382,3 +382,9 @@ p.empty-tree{flex-direction:row;align-items:center}
 
 /* Large data pages skip layout for rows outside the viewport. */
 .dw-grid tbody tr{content-visibility:auto;contain-intrinsic-size:auto 36px}
+
+/* Top bar connection status: plain text, not a button-like badge. */
+.connection-status{display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:340px;font-size:12px;color:var(--muted-foreground);white-space:nowrap}
+.connection-status>span:last-child{overflow:hidden;text-overflow:ellipsis}
+.connection-status .live-dot{margin:0;flex-shrink:0}
+.connection-status strong{color:var(--foreground);font-weight:600}
