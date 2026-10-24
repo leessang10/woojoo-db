@@ -61,7 +61,7 @@ export function RequestPanel({ tab, variables, result, theme, dirty, onChange, o
       {sending
         ? <Button type="submit" variant="outline" size="sm" className="api-send"><Square size={13}/>{tr('취소', 'Cancel')}</Button>
         : <Button type="submit" size="sm" className="api-send" disabled={!spec.url.trim()} title={tr('보내기', 'Send') + ' · Ctrl/Cmd+Enter'}><Send size={13}/>{tr('보내기', 'Send')}</Button>}
-      <Button type="button" variant="outline" size="sm" title={tr('저장', 'Save') + ' · Ctrl/Cmd+S'} onClick={onSave}><Save size={13}/>{tr('저장', 'Save')}{dirty && <span className="api-dirty" aria-label={tr('저장 안 됨', 'Unsaved')}/>}</Button>
+      <Button type="button" variant="default" size="sm" title={tr('저장', 'Save') + ' · Ctrl/Cmd+S'} onClick={onSave}><Save size={13}/>{tr('저장', 'Save')}{dirty && <span className="api-dirty" aria-label={tr('저장 안 됨', 'Unsaved')}/>}</Button>
     </form>
     {missing.length > 0 && <p className="api-missing" role="status"><AlertTriangle size={13}/>{tr('정의되지 않은 변수', 'Undefined variables')}: {missing.map(name => `{{${name}}}`).join(', ')}</p>}
     <div className="api-split" ref={area} style={{ gridTemplateRows: `minmax(80px,${split}fr) 6px minmax(80px,${1 - split}fr)` }}>
@@ -102,7 +102,7 @@ export function RequestPanel({ tab, variables, result, theme, dirty, onChange, o
               <label>{tr('위치', 'Add to')}<NativeSelect size="sm" value={auth.in} onChange={event => setAuth({ in: event.target.value as 'header' | 'query' })}>
                 <NativeSelectOption value="header">{tr('헤더', 'Header')}</NativeSelectOption><NativeSelectOption value="query">{tr('쿼리 파라미터', 'Query params')}</NativeSelectOption>
               </NativeSelect></label></>}
-            {auth.kind !== 'none' && <p className="api-hint">{tr('헤더 탭에 Authorization이 있으면 그 값이 우선합니다. 값은 로컬 SQLite 파일에 평문으로 저장되니 민감한 값은 환경 변수로 두세요.', 'An Authorization header on the Headers tab wins. Values are stored in plain text in the local SQLite file; keep secrets in environment variables.')}</p>}
+            {auth.kind !== 'none' && <p className="api-hint">{tr('Authorization 헤더가 우선합니다. 인증 값은 이 PC에 암호화 없이 저장됩니다.', 'The Authorization header takes precedence. Credentials are stored unencrypted on this PC.')}</p>}
           </div>}
           {section === 'options' && <div className="api-form">
             <label>{tr('시간 제한 (초)', 'Timeout (seconds)')}<Input type="number" min={1} max={600} value={Math.round(spec.options.timeoutMs / 1000)} onChange={event => patch({ options: { ...spec.options, timeoutMs: Math.min(600, Math.max(1, Number(event.target.value) || 30)) * 1000 } })}/></label>

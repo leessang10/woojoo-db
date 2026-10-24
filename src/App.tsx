@@ -1,9 +1,12 @@
+import { SortableTable } from './components/SortableTable';
+import { compareValues } from './lib/table-sort';
+import { SidebarTitle } from './components/SidebarTitle';
 import { ConnectionSwitcher } from './ConnectionSwitcher';
 import { CommonSqlDialog } from './CommonSqlDialog';
 import { useConfirm } from './components/ConfirmProvider';
 import { HistoryPanel, type ExecutionEntry } from './HistoryPanel';
 import { listen } from '@tauri-apps/api/event';
-import { Cloud, ScrollText, Waypoints } from 'lucide-react';
+import { Cloud, ScrollText, Waypoints, Container as ContainerIcon } from 'lucide-react';
 import { AwsWorkspace, type AwsCommands } from './aws/AwsWorkspace';
 import { ApiWorkspace, type ApiCommands } from './http/ApiWorkspace';
 import type { AwsPreset } from './AwsConnection';
@@ -39,6 +42,8 @@ import { createTab, isDirty, useWorkspaceTabs, type TabView, type WorkspaceTab }
 import { AlertTriangle, ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileCode2, Filter, Info, KeyRound, Layers3, Loader2, Plus, RefreshCw, Search, Settings2, Square, Table2, Terminal, Undo2, X } from 'lucide-react';
 import * as api from './api';
 import { collectEdits, csv, tableQuery, type Profile, type Table, type Result } from './model';
+const DockerWorkspace = lazy(() => import('./docker/DockerWorkspace').then(module => ({ default: module.DockerWorkspace })));
+const RedisWorkspace = lazy(() => import('./redis/RedisWorkspace').then(module => ({ default: module.RedisWorkspace })));
 
 // Development tests explicitly opt into in-memory fixtures.
 const fixtureMode = import.meta.env.DEV && (() => {
@@ -50,14 +55,16 @@ type Connection = { profile: Profile; session: string };
 const initialTab = createTab('demo', 0, { schema: 'public', name: 'users' }, tableQuery('postgres', 'public', 'users'));
 type Notice = { text: string; kind: 'success' | 'info' | 'error' };
 // Each rail item is a work area with its own sidebar explorer, tabs and right panel.
-type WorkArea = 'database' | 'aws' | 'api';
+type WorkArea = 'database' | 'aws' | 'api' | 'docker' | 'redis';
 const WORK_AREAS: { id: WorkArea; icon: typeof Database; label: [string, string]; title: [string, string] }[] = [
   { id: 'database', icon: Database, label: ['데이터베이스', 'Databases'], title: ['데이터베이스 · 연결과 스키마', 'Databases · connections and schemas'] },
   { id: 'aws', icon: Cloud, label: ['AWS', 'AWS'], title: ['AWS · 로컬 AWS CLI로 리소스 조회', 'AWS · resources through your local AWS CLI'] },
   { id: 'api', icon: Waypoints, label: ['API', 'API'], title: ['API · 로컬 HTTP 요청 테스트', 'API · local HTTP request testing'] },
+  { id: 'docker', icon: ContainerIcon, label: ['Docker', 'Docker'], title: ['Docker · 리소스 관계도', 'Docker · resource topology'] },
+  { id: 'redis', icon: Layers3, label: ['Redis', 'Redis'], title: ['Redis · 키, 캐시, 큐 탐색', 'Redis · keys, cache and queues'] },
 ];
 const AREA_KEY = 'woojoo-work-area';
-const readArea = (): WorkArea => { try { const value = localStorage.getItem(AREA_KEY); return value === 'aws' || value === 'api' ? value : 'database'; } catch { return 'database'; } };
+const readArea = (): WorkArea => { try { const value = localStorage.getItem(AREA_KEY); return value === 'aws' || value === 'api' || value === 'docker' || value === 'redis' ? value : 'database'; } catch { return 'database'; } };
 const COLLAPSED_KEY = 'woojoo-collapsed-schemas-v1';
 function readCollapsed(): Record<string, string[]> {
   try { const value = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}'); return value && typeof value === 'object' ? value : {}; }
@@ -153,6 +160,10 @@ export default function App() {
   const awsCommands = useRef<AwsCommands>({});
   const [apiVisited, setApiVisited] = useState(area === 'api');
   useEffect(() => { if (area === 'api') setApiVisited(true); }, [area]);
+  const [dockerVisited, setDockerVisited] = useState(area === 'docker');
+  useEffect(() => { if (area === 'docker') setDockerVisited(true); }, [area]);
+  const [redisVisited, setRedisVisited] = useState(area === 'redis');
+  useEffect(() => { if (area === 'redis') setRedisVisited(true); }, [area]);
   const apiCommands = useRef<ApiCommands>({});
   const [awsPreset, setAwsPreset] = useState<AwsPreset>();
   // Query history sits in a right-hand panel beside the database workspace.
@@ -430,10 +441,11 @@ export default function App() {
     if(!refresh&&!await leaveData())return;
 
     const target = refresh ? tab : workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name));
+    setView(target.id, 'data');
     await performFor(target.id, async () => {
       const data = await api.readTable(active, table);
       const sql = tableQuery(connection.profile.engine, table.schema, table.name);
-      workspace.patch(target.id, { selected: table, source: 'table', view: 'data', result: data, resultStale:false, draft: {}, filter: '', sort: null, scroll: 0, editorSql: sql, initialSql: sql, loaded: true, lastQuery: '' });
+      workspace.patch(target.id, { selected: table, source: 'table', result: data, resultStale:false, draft: {}, filter: '', sort: null, scroll: 0, editorSql: sql, initialSql: sql, loaded: true, lastQuery: '' });
     });
   }
   function changeBlocked(table: Table) {
@@ -513,7 +525,7 @@ export default function App() {
   }, [active]);
   useEffect(()=>{let cancelled=false;void Promise.all(connections.filter(c=>(fixtureMode||c.session!=='demo')&&!c.session.startsWith('saved:')&&!c.profile.readOnly).map(async c=>(await api.tables(c.session)).map(table=>({session:c.session,engine:c.profile.engine,label:c.profile.name+' / '+table.schema+'.'+table.name,table})))).then(lists=>{if(!cancelled)setCopyTargets(lists.flat());}).catch(()=>{if(!cancelled)setCopyTargets([]);});return()=>{cancelled=true;};},[connections,catalogVersion]);
   useEffect(()=>{if(connected&&tab.kind==='table'&&(tab.view??'data')==='data'&&tab.selected&&!tab.loaded&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{resultStale:false,result:await api.readTable(active,tab.selected!),loaded:true});});}},[active,tab.id,tab.loaded,tab.kind,tab.view,tab.selected?.name,tab.selected?.schema]);
-  useEffect(()=>{if(connected&&tab.kind==='table'&&tab.view==='structure'&&tab.selected&&!tab.details.length&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{details:await api.describeTable(active,tab.selected!)});});}},[active,tab.id,tab.view,tab.details.length]);
+  useEffect(()=>{if(connected&&tab.kind==='table'&&tab.view==='structure'&&tab.selected&&!tab.details.length&&!pending.current.has(tab.id)){void performFor(tab.id,async()=>{workspace.patch(tab.id,{details:await api.describeTable(active,tab.selected!)});});}},[active,tab.id,tab.view,tab.details.length,tab.loaded]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (confirming || renaming) return;
@@ -530,6 +542,11 @@ export default function App() {
         return;
       }
       const mod = event.ctrlKey || event.metaKey, key = event.key.toLowerCase();
+      if (areaRef.current === 'docker') {
+        if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
+        else if (mod && key === 'b') { event.preventDefault(); toggleSidebar(); }
+        return;
+      }
       if (areaRef.current === 'aws') {
         // SQL shortcuts belong to the database area; AWS tabs only refresh, close and toggle panels.
         if (mod && event.key === ',') { event.preventDefault(); setShowSettings(true); }
@@ -714,7 +731,7 @@ export default function App() {
     }
     return { row, index };
   }).filter(({ row }) => !filter || Object.values(row).some(v => v?.toLowerCase().includes(filter.toLowerCase())));
-  if (sort) filtered.sort((a, b) => (a.row[sort.name] ?? '').localeCompare(b.row[sort.name] ?? '', undefined, { numeric: true }) * (sort.desc ? -1 : 1));
+  if (sort) filtered.sort((a, b) => compareValues(a.row[sort.name], b.row[sort.name]) * (sort.desc ? -1 : 1));
   const start = Math.max(0, Math.floor(scroll / 39) - 6);
   const visible = filtered.slice(start, start + 40);
   useEffect(()=>{let cancelled=false;setCompletionSchema({});if(!connected)return;const chosen=schemaFilters[connection.profile.id];const tables=chosen?tableList.filter(table=>chosen.includes(table.schema)):tableList;let cursor=0;const fields:Record<string,string[]>={};const worker=async()=>{while(!cancelled&&cursor<tables.length){const table=tables[cursor++];try{const cols=await api.describeTable(active,table);if(cancelled)return;fields[table.schema+'.'+table.name]=cols.map(c=>c.name);if(tables.filter(t=>t.name===table.name).length===1)fields[table.name]=cols.map(c=>c.name);setCompletionSchema({...fields});}catch{/* A metadata failure must not prevent SQL editing. */}}};void Promise.all(Array.from({length:Math.min(3,tables.length)},worker));return()=>{cancelled=true;};},[active,tableList,catalogVersion,JSON.stringify(schemaFilters[connection.profile.id]??null)]);
@@ -753,6 +770,7 @@ export default function App() {
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} aria-label={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
     {sidebarOpen && area === 'database' && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
+      <SidebarTitle icon={Database} title="Database"/>
       {area === 'database' && <>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
       <div className="connections">{selectableConnections.length>0&&<ConnectionSwitcher connections={selectableConnections} active={active} onSelect={id=>{editorSelection.current='';void selectConnection(id);}} onAdd={()=>setShowConnect(true)}>{currentConnection ? (()=>{const c=currentConnection;return <Button variant="ghost" size="bare" key={c.session} {...menuFor([
@@ -825,12 +843,12 @@ export default function App() {
         <div className="result-toolbar"><label className="result-filter"><Filter size={14}/><Input aria-label={t("결과 필터")} placeholder={result.truncated ? tr(`결과 검색 (불러온 ${result.rows.length}행)`,`Search loaded ${result.rows.length} rows`) : t("결과 검색")} value={filter} onChange={e => {setFilter(e.target.value);setScroll(0);}}/></label>{result.truncated && (filter || sort) && <span className="truncation-note" role="note"><AlertTriangle size={13}/>{tr(`불러온 ${result.rows.length}행 안에서만 ${filter && sort ? '검색·정렬' : filter ? '검색' : '정렬'}했습니다`,`${filter && sort ? 'Search and sort cover' : filter ? 'Search covers' : 'Sort covers'} only the ${result.rows.length} loaded rows`)}{source === 'table' && selected && <Button variant="link" size="bare" onClick={async()=>{if(edits.length&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:true}));}}>{tr('데이터 도구에서 서버 정렬·필터','Server-side sort and filter in Data tools')}</Button>}</span>}<span className="tabs-spacer"/>{edits.length > 0 && <><Button variant="ghost" size="bare" className="subtle-button" disabled={busy} onClick={() => setDraft({})}><Undo2 size={14}/> {t("취소")} </Button><Button variant="default" size="sm" className="save-button" disabled={busy} onClick={() => setShowReview(true)}><Check size={14}/> {t("변경 검토")} <span>{edits.length}</span></Button></>}</div>
         {error && <div role="alert" className="error-banner"><Terminal size={15}/><span>{error}</span><Button variant="ghost" size="bare" title={t("오류 닫기")} aria-label={t("오류 닫기")} onClick={() => setError('')}><X size={14}/></Button></div>}
         <div className="grid-scroll" ref={gridRef} aria-busy={busy} onScroll={e => setScroll(e.currentTarget.scrollTop)} key={tab.id}>
-          <table className="data-grid" onKeyDown={gridKey} aria-describedby="grid-keys"><thead><tr><th className="row-number">#</th>{result.columns.map(c => <th key={c.name} tabIndex={0} {...menuFor([
+          <table className="data-grid" onKeyDown={gridKey} aria-describedby="grid-keys"><thead><tr><th className="row-number">#</th>{result.columns.map(c => <th key={c.name} aria-sort={sort?.name === c.name ? (sort.desc ? "descending" : "ascending") : "none"} tabIndex={0} {...menuFor([
               {label:t('열 이름 복사'),action:()=>void copyText(c.name)},
               {label:t('오름차순 정렬'),action:()=>{setSort({name:c.name,desc:false});setScroll(0);}},
               {label:t('내림차순 정렬'),action:()=>{setSort({name:c.name,desc:true});setScroll(0);}},
               {label:t('정렬 해제'),action:()=>{setSort(null);setScroll(0);},disabled:!sort},
-            ])} onClick={() => {setSort({name:c.name, desc:sort?.name === c.name && !sort.desc});setScroll(0);}} ><div>{c.primary ? <KeyRound size={12} className="key-icon"/> : <span className="type-icon">{c.dataType.includes('int') ? '#' : 'T'}</span>}<strong>{c.name}</strong>{sort?.name === c.name && <span>{sort.desc ? '↓' : '↑'}</span>}<span className="col-type">{c.dataType}</span></div></th>)}</tr></thead><tbody>
+            ])} onClick={() => {setSort(sort?.name !== c.name ? {name:c.name,desc:false} : !sort.desc ? {name:c.name,desc:true} : null);setScroll(0);}} ><div>{c.primary ? <KeyRound size={12} className="key-icon"/> : <span className="type-icon">{c.dataType.includes('int') ? '#' : 'T'}</span>}<strong>{c.name}</strong><span className="table-sort-arrow" aria-hidden="true">{sort?.name === c.name ? (sort.desc ? '↓' : '↑') : '↕'}</span><span className="col-type">{c.dataType}</span></div></th>)}</tr></thead><tbody>
             {start > 0 && <tr className="spacer-row" style={{height:start * 39}}><td colSpan={result.columns.length + 1}/></tr>}
             {visible.map(({row, index}) => <tr key={index} {...menuFor([{label:t("행 복사"),action:()=>void copyText(result.columns.map(c=>row[c.name] ?? "NULL").join("\t"))}])}><td className="row-number">{index + 1}</td>{result.columns.map(col => {
               const key = `${index}:${col.name}`, changed = key in draft && draft[key] !== result.rows[index][col.name], value = key in draft ? draft[key] : row[col.name];
@@ -858,6 +876,8 @@ export default function App() {
     </main>
     {historyOpen && area === 'database' && <aside className="history-sidebar" id="history-sidebar"><HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} panelScope={emptyWorkspace ? 'all' : 'connection'} onOpen={entry => void openExecution(entry)} onShowAll={emptyWorkspace ? undefined : () => void openHistory()} onClose={() => setHistoryOpen(false)}/></aside>}
     {apiVisited && <ApiWorkspace visible={area === 'api'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={apiCommands} theme={theme}/>}
+    {dockerVisited && <Suspense fallback={area === 'docker' ? <main className="main" aria-busy="true">Docker…</main> : null}><DockerWorkspace visible={area === 'docker'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} theme={theme}/></Suspense>}
+    {redisVisited && <Suspense fallback={area === 'redis' ? <main className="main" aria-busy="true">Redis…</main> : null}><RedisWorkspace visible={area === 'redis'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} theme={theme}/></Suspense>}
     {awsVisited && <AwsWorkspace visible={area === 'aws'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={awsCommands} theme={theme} onConnectRds={preset => { setEditProfile(undefined); setAwsPreset(preset); setShowConnect(true); }}/>}
     {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
       <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>
@@ -879,7 +899,7 @@ export default function App() {
     {editing && <ModalSurface title={t("셀 편집")} onClose={() => setEditing(null)} locked={false}><div className="modal cell-modal" role="dialog" aria-modal="true" aria-label={t("셀 편집")}><div className="modal-heading"><h2> {t("셀 편집")} </h2><Button variant="ghost" size="bare" onClick={() => setEditing(null)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{selected?.name} / <strong>{editing.col}</strong> {t("· 행")} {editing.index + 1}</p><Textarea aria-label={t("셀 값")} autoFocus value={editing.value} disabled={editing.isNull} onChange={e => setEditing({...editing,value:e.target.value})} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value})); setEditing(null); } }}/><p className="field-hint">{tr('Ctrl/Cmd+Enter: 대기열에 추가 · Esc: 취소','Ctrl/Cmd+Enter: stage · Esc: cancel')}</p><label className="checkbox-label"><Input type="checkbox" checked={editing.isNull} onChange={e => setEditing({...editing,isNull:e.target.checked})}/> {t("NULL로 설정")} </label><div className="modal-actions"><Button variant="outline" size="sm" className="secondary-button" onClick={() => setEditing(null)}> {t("취소")} </Button><Button variant="default" size="sm" className="primary-button" onClick={() => {setDraft(d => ({...d,[`${editing.index}:${editing.col}`]:editing.isNull ? null : editing.value}));setEditing(null);}}> {t("변경 대기열에 추가")} </Button></div></div></ModalSurface>}
     {showReview && <ModalSurface title={t("변경 사항 검토")} onClose={() => setShowReview(false)} locked={busy}><div className="modal review-modal" role="dialog" aria-modal="true" aria-label={t("변경 사항 검토")}><div className="modal-heading"><h2> {t("변경 사항 검토")} </h2><Button variant="ghost" size="bare" disabled={busy} onClick={() => setShowReview(false)} aria-label={t("닫기")}><X size={20}/></Button></div><p className="modal-description">{t('검토 설명', {table: `${selected?.schema}.${selected?.name}`, count: edits.length})} {active === 'demo' ? t("데모 데이터에만 반영됩니다.") : t("모든 변경을 하나의 트랜잭션으로 적용합니다.")}</p>{production&&<p className="production-warning" role="note"><AlertTriangle size={14}/>{tr(`운영(PRODUCTION) 연결 "${connection.profile.name}"에 적용합니다.`,`These changes go to the PRODUCTION connection "${connection.profile.name}".`)}</p>}<div className="review-list">{edits.map((edit,i) => <div className="review-row" key={i}><small>{result.columns.filter(c => c.primary).map(c => `${c.name} = ${edit.original[c.name]}`).join(', ')}</small>{Object.entries(edit.changes).map(([col,val]) => <div key={col}><strong>{col}</strong><del>{edit.original[col] ?? 'NULL'}</del><ArrowRight size={14}/><ins>{val ?? 'NULL'}</ins></div>)}</div>)}</div>{error && <p className="dialog-error">{error}</p>}<div className="modal-actions"><Button variant="outline" size="sm" disabled={busy} className="secondary-button" onClick={() => setShowReview(false)}> {t("돌아가기")} </Button><Button variant="default" size="sm" disabled={busy} className="primary-button" onClick={() => void applyChanges()}>{busy ? t("적용 중...") : t('행 적용', {count: edits.length})}</Button></div></div></ModalSurface>}
     {showSettings && <SettingsDialog theme={themePreference} onThemeChange={chooseTheme} sidebarOpen={sidebarOpen} onSidebarChange={setSidebarOpen} onClose={() => setShowSettings(false)}/> }
-    {showHelp && <ModalSurface title={t("도움말")} onClose={() => setShowHelp(false)} locked={false}><div className="modal help-modal" role="dialog" aria-modal="true" aria-label={t("도움말")}><div className="modal-heading"><h2> {t("도움말")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHelp(false)} aria-label={t("닫기")}><X size={20}/></Button></div><div className="help-content"><table className="shortcut-table"><caption>{tr('단축키','Keyboard shortcuts')} · {tr('Mac에서는 Ctrl 대신 Cmd','Use Cmd instead of Ctrl on macOS')}</caption><tbody>{([
+    {showHelp && <ModalSurface title={t("도움말")} onClose={() => setShowHelp(false)} locked={false}><div className="modal help-modal" role="dialog" aria-modal="true" aria-label={t("도움말")}><div className="modal-heading"><h2> {t("도움말")} </h2><Button variant="ghost" size="bare" onClick={() => setShowHelp(false)} aria-label={t("닫기")}><X size={20}/></Button></div><div className="help-content"><SortableTable className="shortcut-table"><caption>{tr('단축키','Keyboard shortcuts')} · {tr('Mac에서는 Ctrl 대신 Cmd','Use Cmd instead of Ctrl on macOS')}</caption><thead><tr><th>{tr('단축키','Shortcut')}</th><th>{tr('동작','Action')}</th></tr></thead><tbody>{([
         ['Ctrl + Enter', tr('선택한 SQL 또는 커서가 있는 구문 실행','Run the selection or the statement at the cursor')],
         ['Ctrl + Shift + Enter', tr('편집기 전체를 스크립트로 실행','Run the whole editor as a script')],
         ['Esc', tr('실행 중인 쿼리 중지 · 대화상자 닫기','Stop the running query · close dialogs')],
@@ -892,6 +912,6 @@ export default function App() {
         ['F2', tr('탭 이름 변경 (탭에 포커스)','Rename the focused tab')],
         ['Alt + ← / →', tr('탭 순서 이동','Move the focused tab')],
         ['Shift + F10', tr('컨텍스트 메뉴','Context menu')],
-      ] as const).map(([keys,label])=><tr key={keys}><td><kbd>{keys}</kbd></td><td>{label}</td></tr>)}</tbody></table><p><strong> {t("결과 편집")} </strong> {t("테이블 보기에서 셀 더블클릭 → 변경 검토 → 적용. 기본키와 생성 열은 수정할 수 없습니다.")} </p><p><strong> {t("연결")} </strong> {tr("PostgreSQL·MySQL·MariaDB·SQLite에 연결합니다. 프로필과 SQL 탭을 저장합니다. 비밀번호는 선택 시 Windows 자격 증명 관리자에 암호화하여 저장하며, 다음 실행 시 마지막 연결에 자동 접속합니다.","Connect to PostgreSQL, MySQL, MariaDB or SQLite. Profiles and SQL tabs are saved. Passwords can be encrypted in Windows Credential Manager to reconnect to the last connection on startup.")} </p><p><strong> {t("쿼리 실행")} </strong> {tr("스크립트 실행·매개변수·수동 커밋을 지원합니다. 테이블의 데이터 도구에서 페이징과 가져오기·내보내기를 사용할 수 있습니다.","Scripts, parameters and manual commit are available. Open Data tools for paging, import and export.")} </p></div><Button variant="default" size="sm" className="primary-button full" onClick={() => setShowHelp(false)}> {t("확인")} </Button></div></ModalSurface>}
+      ] as const).map(([keys,label])=><tr key={keys}><td><kbd>{keys}</kbd></td><td>{label}</td></tr>)}</tbody></SortableTable><p><strong> {t("결과 편집")} </strong> {t("테이블 보기에서 셀 더블클릭 → 변경 검토 → 적용. 기본키와 생성 열은 수정할 수 없습니다.")} </p><p><strong> {t("연결")} </strong> {tr("PostgreSQL·MySQL·MariaDB·SQLite에 연결합니다. 프로필과 SQL 탭을 저장합니다. 비밀번호는 선택 시 Windows 자격 증명 관리자에 암호화하여 저장하며, 다음 실행 시 마지막 연결에 자동 접속합니다.","Connect to PostgreSQL, MySQL, MariaDB or SQLite. Profiles and SQL tabs are saved. Passwords can be encrypted in Windows Credential Manager to reconnect to the last connection on startup.")} </p><p><strong> {t("쿼리 실행")} </strong> {tr("스크립트 실행·매개변수·수동 커밋을 지원합니다. 테이블의 데이터 도구에서 페이징과 가져오기·내보내기를 사용할 수 있습니다.","Scripts, parameters and manual commit are available. Open Data tools for paging, import and export.")} </p></div><Button variant="default" size="sm" className="primary-button full" onClick={() => setShowHelp(false)}> {t("확인")} </Button></div></ModalSurface>}
   </div>;
 }

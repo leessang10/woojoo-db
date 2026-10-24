@@ -6,7 +6,9 @@ mod journal;
 mod credentials;
 mod local_database;
 mod aws;
+mod docker;
 mod http;
+mod redis;
 mod data;
 mod db;
 mod export;
@@ -19,15 +21,19 @@ mod erd_changes;
 
 /// Set by the UI while closing would lose pending edits or open transactions.
 static CLOSE_GUARD: AtomicBool = AtomicBool::new(false);
+static EXIT_STARTED: AtomicBool = AtomicBool::new(false);
+static EXIT_READY: AtomicBool = AtomicBool::new(false);
 #[tauri::command]
 fn set_close_guard(enabled: bool) { CLOSE_GUARD.store(enabled, Ordering::SeqCst); }
 #[tauri::command]
 fn close_window(window: tauri::Window) -> Result<(), String> {
+    if docker::storage::busy() { return Err("Docker disk maintenance is still running".into()); }
     CLOSE_GUARD.store(false, Ordering::SeqCst);
     window.destroy().map_err(|error| error.to_string())
 }
 
 fn main() {
+    if let Some(code) = docker::storage::helper_entry() { std::process::exit(code); }
     tauri::Builder::default()
         .manage(db::State::default())
         .setup(|app| {
@@ -37,10 +43,12 @@ fn main() {
             app.manage(store);
             let requests=tauri::async_runtime::block_on(http::store::Store::open(&directory.join("api-client.sqlite3"))).map_err(std::io::Error::other)?;
             app.manage(requests);
+            app.manage(redis::State::new(directory.join("redis-workspace-v1.json")).map_err(std::io::Error::other)?);
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if docker::storage::busy() { api.prevent_close(); return; }
                 if CLOSE_GUARD.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.emit("close-requested", ());
@@ -48,8 +56,44 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            redis::redis_workspace_load,
+            redis::redis_profile_save,
+            redis::redis_profile_delete,
+            redis::redis_view_save,
+            redis::redis_view_delete,
+            redis::redis_connect,
+            redis::redis_test_connection,
+            redis::redis_disconnect,
+            redis::redis_forget_password,
+            redis::redis_scan,
+            redis::redis_key_metadata,
+            redis::redis_read_value,
+            redis::redis_queue_inspect,
+            redis::redis_server_info,
+            redis::redis_cancel,
             set_close_guard,
             close_window,
+            docker::docker_contexts,
+            docker::engine::docker_start_desktop,
+            docker::docker_snapshot,
+            docker::docker_action,
+            docker::docker_resource_remove,
+            docker::storage::docker_storage_inspect,
+            docker::storage::docker_storage_pick,
+            docker::storage::docker_storage_stop,
+            docker::storage::docker_storage_trim,
+            docker::storage::docker_storage_compact,
+            docker::docker_container_rename,
+            docker::compose::compose_list,
+            docker::compose::compose_import,
+            docker::compose::compose_create,
+            docker::compose::compose_read,
+            docker::compose::compose_preview,
+            docker::compose::compose_save,
+            docker::compose::compose_action,
+            docker::compose::compose_forget,
+            docker::logs::docker_logs_start,
+            docker::logs::docker_logs_stop,
             local_database::create_local_database,
             journal::execution_list,
             journal::execution_detail,
@@ -111,10 +155,29 @@ fn main() {
             structure::execute_ddl,
             db::read_erd,
             export::save_erd_export,
+            export::save_environment_export,
             db::run_query,
             db::apply_edits,
             db::set_result_limit
         ])
-        .run(tauri::generate_context!())
-        .expect("Woojoo 실행 실패");
+        .build(tauri::generate_context!())
+        .expect("Woojoo 실행 실패")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if docker::storage::busy() { api.prevent_exit(); return; }
+                if !EXIT_READY.load(Ordering::SeqCst) {
+                    // Tauri exits the process directly; detached subprocess tasks must finish first.
+                    api.prevent_exit();
+                    if !EXIT_STARTED.swap(true, Ordering::SeqCst) {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            app.state::<redis::State>().shutdown().await;
+                            docker::logs::shutdown().await;
+                            EXIT_READY.store(true, Ordering::SeqCst);
+                            app.exit(code.unwrap_or(0));
+                        });
+                    }
+                }
+            }
+        });
 }

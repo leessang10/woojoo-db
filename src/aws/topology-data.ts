@@ -48,6 +48,7 @@ export async function collectTopology(
   active: () => boolean,
   progress: (value: string) => void,
   includeRelationships = true,
+  onSnapshot?: (inventory: Inventory) => void,
 ): Promise<Inventory> {
   const result: Inventory = {
     ...context,
@@ -77,6 +78,7 @@ export async function collectTopology(
             ? batch.flatMap((r) => r.Instances ?? [])
             : batch),
         );
+        onSnapshot?.(snapshotInventory(result));
         token = data.NextToken;
         if (!token) break;
         if (seen.has(token)) {
@@ -94,14 +96,19 @@ export async function collectTopology(
   }
   result.collectedAt = new Date().toISOString();
   return includeRelationships
-    ? hydrateTopology(result, read, active, progress)
+    ? hydrateTopology(result, read, active, progress, onSnapshot)
     : result;
+}
+// Collection keeps mutating its arrays; published snapshots must remain independent.
+function snapshotInventory(inventory: Inventory): Inventory {
+  return { ...inventory, items: Object.fromEntries(Object.entries(inventory.items).map(([key, rows]) => [key, [...rows]])), details: { ...inventory.details }, warnings: [...inventory.warnings] };
 }
 export async function hydrateTopology(
   inventory: Inventory,
   read: Read,
   active: () => boolean,
   progress: (value: string) => void,
+  onSnapshot?: (inventory: Inventory) => void,
 ): Promise<Inventory> {
   const result = {
     ...inventory,
@@ -136,6 +143,7 @@ export async function hydrateTopology(
         const data = await read(kind, resource);
         check();
         result.details[`${kind}:${resource}`] = data;
+        onSnapshot?.(snapshotInventory(result));
         if (
           kind === "bucketLocation" &&
           bucketRegion(data) === context.region
@@ -145,6 +153,7 @@ export async function hydrateTopology(
             resource,
           );
           check();
+          onSnapshot?.(snapshotInventory(result));
         }
       } catch (error) {
         check();

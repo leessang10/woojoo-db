@@ -1,3 +1,4 @@
+import { SidebarTitle } from '../components/SidebarTitle';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, Folder, FolderPlus, History, Import, PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Search, Settings2, Trash2, Waypoints, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -232,6 +233,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
 
   return <>
     {visible && sidebarOpen && <aside className="sidebar api-sidebar" id="api-sidebar" aria-label={tr('API 탐색기', 'API explorer')}>
+      <SidebarTitle icon={Waypoints} title="API"/>
       <div className="section-label"><span>{tr('환경', 'Environment')}</span><Button variant="ghost" size="bare" title={tr('환경 변수 관리', 'Manage environments')} aria-label={tr('환경 변수 관리', 'Manage environments')} onClick={() => setEditingEnvironments(true)}><Settings2 size={14}/></Button></div>
       <div className="api-env-picker">
         <NativeSelect size="sm" aria-label={tr('사용할 환경', 'Active environment')} value={workspace.activeEnvironment ?? ''} onChange={event => void chooseEnvironment(event.target.value)}>
@@ -263,12 +265,11 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         })}
         {!workspace.requests.length && !workspace.collections.length && !loadError && <p className="api-tree-empty">{tr('저장한 요청이 없습니다. 요청을 만든 뒤 Ctrl/Cmd+S로 저장하세요.', 'No saved requests yet. Build a request and save it with Ctrl/Cmd+S.')}</p>}
       </nav>
-      <p className="aws-sidebar-foot">{tr('요청·환경·기록은 이 PC의 SQLite 파일에만 저장됩니다. 계정·동기화·AI 기능은 없습니다.', 'Requests, environments and history are stored only in a SQLite file on this PC. No accounts, sync or AI.')}</p>
     </aside>}
     {renderMain()}
     {visible && panelOpen && <aside className="history-sidebar api-history" id="api-history" aria-label={tr('요청 기록', 'Request history')}>
       <div className="history-heading"><span>{tr('요청 기록', 'HISTORY')}</span><span className="history-heading-actions">
-        <Button variant="ghost" size="bare" className="history-icon" aria-label={tr('기록 지우기', 'Clear history')} title={tr('기록 지우기', 'Clear history')} onClick={() => void clearHistory()}><Trash2 size={14}/></Button>
+        <Button variant="destructive" size="icon-sm" className="history-icon" aria-label={tr('기록 지우기', 'Clear history')} title={tr('기록 지우기', 'Clear history')} onClick={() => void clearHistory()}><Trash2 size={14}/></Button>
         <Button variant="ghost" size="bare" className="history-icon" aria-label={tr('패널 닫기', 'Close panel')} title={tr('패널 닫기', 'Close panel')} onClick={() => setPanelOpen(false)}><X size={14}/></Button>
       </span></div>
       <label className="search-field"><Search size={13}/><input value={historySearch} placeholder={tr('URL 검색', 'Search URLs')} aria-label={tr('기록 검색', 'Search history')} onChange={event => setHistorySearch(event.target.value)}/></label>
@@ -299,9 +300,9 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         <Button variant="ghost" size="bare" className="icon-button history-toggle-button" aria-label={tr('요청 기록 패널', 'Request history panel')} title={tr('요청 기록 패널', 'Request history panel') + ' · Ctrl/Cmd+Alt+B'} aria-pressed={panelOpen} aria-controls="api-history" onClick={() => setPanelOpen(open => !open)}>{panelOpen ? <PanelRight size={17}/> : <History size={17}/>}</Button>
       </div></header>
       {!tabs.length ? <div className="workspace-empty"><Waypoints size={28}/><h1>{tr('API 요청을 보내 보세요', 'Send an API request')}</h1>
-        <p className="connection-availability">{tr('가볍고 빠른 로컬 API 클라이언트입니다. 요청·환경·기록은 이 PC의 SQLite에만 저장됩니다.', 'A light, fast local API client. Requests, environments and history stay in SQLite on this PC.')}</p>
+        <p className="connection-availability">{tr('요청을 만들거나 cURL을 가져와 시작하세요.', 'Create a request or import cURL to get started.')}</p>
         <div className="empty-connection-actions">
-          <Button variant="outline" size="sm" onClick={() => newTab()}><Plus size={14}/>{tr('새 요청', 'New request')}</Button>
+          <Button variant="default" size="sm" onClick={() => newTab()}><Plus size={14}/>{tr('새 요청', 'New request')}</Button>
           <Button variant="outline" size="sm" onClick={() => setCurl('')}><Import size={14}/>{tr('cURL 가져오기', 'Import cURL')}</Button>
           <Button variant="outline" size="sm" onClick={() => setEditingEnvironments(true)}><Settings2 size={14}/>{tr('환경 변수', 'Environments')}</Button>
         </div>

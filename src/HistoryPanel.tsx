@@ -1,3 +1,4 @@
+import { SortableTable } from './components/SortableTable';
 import { Fragment, useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -128,7 +129,7 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
     </div>
     {errorBanner}
     <div className="history-table-scroll" aria-busy={busy}>
-      <table className="history-table">
+      <SortableTable className="history-table">
         <thead><tr><th className="history-col-toggle"/><th className="history-col-status">{tr('상태', 'Status')}</th><th className="history-col-time">{tr('실행 시각', 'Started')}</th><th>SQL</th>{scope === 'all' && <th className="history-col-name">{tr('연결', 'Connection')}</th>}<th className="history-col-name">{tr('데이터베이스', 'Database')}</th><th className="history-col-number">{tr('소요 시간', 'Duration')}</th><th className="history-col-actions"/></tr></thead>
         <tbody>{page.entries.map(entry => {
           const missing = !profileIds.includes(entry.profileId), open_ = expanded === entry.id;
@@ -136,11 +137,11 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
             <tr className="history-entry" data-status={entry.status} data-expanded={open_}>
               <td><Button variant="ghost" size="bare" className="history-toggle" aria-expanded={open_} aria-label={tr('상세 보기', 'Show details')} onClick={() => toggle(entry)}>{open_ ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}</Button></td>
               <td><span className="history-status-cell">{statusIcon(entry)}{labels[entry.status] ?? entry.status}</span></td>
-              <td className="history-time" title={new Date(entry.startedAt).toLocaleString(locale)}>{new Date(entry.startedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+              <td data-sort-value={entry.startedAt} className="history-time" title={new Date(entry.startedAt).toLocaleString(locale)}>{new Date(entry.startedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
               <td className="history-sql-cell"><span className="history-sql">{entry.sql}</span></td>
               {scope === 'all' && <td className="history-muted">{entry.connectionName || '—'}</td>}
               <td className="history-muted">{entry.database || '—'}</td>
-              <td className="history-col-number">{duration(entry)}</td>
+              <td data-sort-value={entry.durationMs} className="history-col-number">{duration(entry)}</td>
               <td className="history-col-actions"><Button variant="ghost" size="bare" className="history-icon history-open" disabled={missing} aria-label={tr('새 쿼리 탭에서 열기', 'Open in a new query tab')} title={missing ? missingTitle : tr('새 쿼리 탭에서 열기', 'Open in a new query tab')} onClick={() => void open(entry)}><FileCode2 size={14}/></Button><Button variant="ghost" size="bare" className="history-icon" aria-label={tr('SQL 복사', 'Copy SQL')} title={tr('SQL 복사', 'Copy SQL')} onClick={() => void copy(entry)}><Copy size={14}/></Button></td>
             </tr>
             {open_ && <tr className="history-detail-row"><td/><td colSpan={scope === 'all' ? 7 : 6}>
@@ -150,7 +151,7 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
             </td></tr>}
           </Fragment>;
         })}</tbody>
-      </table>
+      </SortableTable>
       {empty}
     </div>
     {more}

@@ -5586,7 +5586,9 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tokio",
+ "tokio-rustls",
  "uuid",
+ "webpki-roots 1.0.10",
  "windows-sys 0.61.2",
  "zeroize",
 ]

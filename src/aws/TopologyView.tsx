@@ -29,9 +29,9 @@ function ResourceNode({ data }: NodeProps<Node<Data>>) {
 }
 const GroupNode = ({ data }: NodeProps<Node<Data>>) => <div className="infra-group-label" title={data.resource.id}>{data.label}</div>;
 const nodeTypes = { resource: ResourceNode, group: GroupNode };
-function FitView({ version }: { version: number }) {
+function FitView({ fitted }: { fitted: { current: boolean } }) {
   const ready = useNodesInitialized(), flow = useReactFlow();
-  useEffect(() => { if (!ready) return; const frame = requestAnimationFrame(() => void flow.fitView({ padding: 0.15, duration: 200 })); return () => cancelAnimationFrame(frame); }, [ready, version, flow]);
+  useEffect(() => { if (!ready || fitted.current) return; const frame = requestAnimationFrame(() => { fitted.current = true; void flow.fitView({ padding: 0.15 }); }); return () => cancelAnimationFrame(frame); }, [ready, fitted, flow]);
   return null;
 }
 
@@ -43,12 +43,15 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
   const [inventory, setInventory] = useState<Inventory>();
   const [nodes, setNodes] = useState<Node<Data>[]>([]), [edges, setEdges] = useState<Edge[]>([]);
   const [mode, setMode] = useState<ViewMode>('simple'), [busy, setBusy] = useState(false), [progress, setProgress] = useState(''), [error, setError] = useState(''), [message, setMessage] = useState('');
-  const [warnings, setWarnings] = useState<string[]>([]), [selected, setSelected] = useState<InfraNode>(), [version, setVersion] = useState(0), [exporting, setExporting] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]), [selected, setSelected] = useState<InfraNode>(), [exporting, setExporting] = useState(false);
+  const fitted = useRef(false), pending = useRef<Inventory | undefined>(undefined), publishTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const epoch = useRef(0), running = useRef(new Set<string>()), canvas = useRef<HTMLDivElement>(null);
   const flow = useReactFlow();
+  function clearPublish() { clearTimeout(publishTimer.current); publishTimer.current = undefined; pending.current = undefined; }
+  function flushPublish() { const snapshot = pending.current; clearPublish(); if (snapshot) setInventory(snapshot); }
   function stop() { for (const request of running.current) void awsCancel(request); running.current.clear(); }
   async function collect() {
-    const id = ++epoch.current; stop();
+    const id = ++epoch.current; stop(); clearPublish();
     const active = () => epoch.current === id;
     setBusy(true); setError(''); setMessage(''); setSelected(undefined);
     try {
@@ -57,16 +60,20 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
         try { return await awsTopologyQuery({ profile: tab.profile, region: tab.region, kind: kind as TopologyKind, resource, nextToken, request }); }
         finally { running.current.delete(request); }
       };
-      const result = await collectTopology(read, { account: '', profile: tab.profile, region: tab.region }, active, value => { if (active()) setProgress(value); });
-      if (active()) setInventory(result);
+      const result = await collectTopology(read, { account: '', profile: tab.profile, region: tab.region }, active, value => { if (active()) setProgress(value); }, true, snapshot => {
+        if (!active()) return;
+        pending.current = snapshot;
+        if (publishTimer.current === undefined) publishTimer.current = setTimeout(() => { if (active()) flushPublish(); }, 750);
+      });
+      if (active()) { clearPublish(); setInventory(result); }
     } catch (reason) {
       if (active()) setError(String(reason instanceof Error ? reason.message : reason));
     } finally {
-      if (active()) { setBusy(false); setProgress(''); }
+      if (active()) { flushPublish(); setBusy(false); setProgress(''); }
     }
   }
   useEffect(() => { void collect(); }, [revision]);
-  useEffect(() => () => { epoch.current++; stop(); }, []);
+  useEffect(() => () => { epoch.current++; stop(); clearPublish(); }, []);
   useEffect(() => {
     if (!inventory) return;
     let active = true;
@@ -80,7 +87,6 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
         return { id: r.id, parentId: r.parent, extent: r.parent ? 'parent' as const : undefined, type: group ? 'group' : 'resource', position: { x: position.x, y: position.y }, style: { width: position.width, height: position.height }, className: group ? `infra-group infra-${r.kind}` : '', data: { resource: r, mode, label: `${r.kind.toUpperCase()} · ${r.name}${mode === 'detail' ? ` · ${r.subtitle}` : ''}` }, ariaLabel: `${r.kind}: ${r.name}. ${r.subtitle}` };
       }));
       setEdges(graph.edges.map(edge => ({ ...edge, label: mode === 'icons' ? undefined : edge.relation, sourceHandle: edge.relation === 'access logs' ? 'logs-out' : undefined, targetHandle: edge.relation === 'access logs' ? 'logs-in' : undefined, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, className: 'infra-edge' })));
-      setVersion(value => value + 1);
     }).catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; };
   }, [inventory, mode]);
@@ -107,7 +113,7 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
       {message && <span className="aws-updated" role="status">{message}</span>}
       <Button variant="outline" size="sm" disabled={!nodes.length || exporting || busy} onClick={() => void exportImage('png')}><Download size={14}/>PNG</Button>
       <Button variant="outline" size="sm" disabled={!nodes.length || exporting || busy} onClick={() => void exportImage('pdf')}><Download size={14}/>PDF</Button>
-      {busy ? <Button variant="outline" size="sm" onClick={() => { epoch.current++; stop(); setBusy(false); setProgress(''); }}><X size={14}/>{tr('중지', 'Stop')}</Button>
+      {busy ? <Button variant="outline" size="sm" onClick={() => { epoch.current++; stop(); flushPublish(); setBusy(false); setProgress(''); }}><X size={14}/>{tr('중지', 'Stop')}</Button>
         : <Button variant="ghost" size="bare" className="icon-button" aria-label={tr('다시 수집', 'Collect again')} title={tr('다시 수집', 'Collect again') + ' · F5'} onClick={() => void collect()}><RefreshCw size={15}/></Button>}
     </div>
     <AwsError error={error} profile={tab.profile} onRetry={() => void collect()}/>
@@ -115,7 +121,7 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
     <div className="aws-topology-body">
       <div className="aws-topology-canvas" ref={canvas}>
         {nodes.length > 0 ? <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} colorMode={theme} nodesDraggable={false} nodesConnectable={false} edgesFocusable={false} minZoom={0.05} onNodeClick={(_, node) => setSelected(node.data.resource)} onPaneClick={() => setSelected(undefined)} proOptions={{ hideAttribution: true }}>
-          <FitView version={version}/><Background/><Controls showInteractive={false}/><MiniMap pannable zoomable/>
+          <FitView fitted={fitted}/><Background/><Controls showInteractive={false}/><MiniMap pannable zoomable/>
         </ReactFlow> : !busy && inventory && <div className="empty-result"><Network size={28}/><h3>{tr('표시할 인프라가 없습니다', 'No infrastructure to show')}</h3><p>{tr(`${tab.region} 리전에서 VPC·EC2·RDS·ELB·S3를 찾지 못했습니다.`, `No VPC, EC2, RDS, ELB or S3 found in ${tab.region}.`)}</p></div>}
         {busy && !nodes.length && <div className="empty-result" role="status"><Loader2 size={22} className="spin"/><p>{tr('VPC·서브넷·EC2·RDS·ELB·S3 정보를 모으는 중…', 'Collecting VPC, subnet, EC2, RDS, ELB and S3 data…')}</p></div>}
       </div>

@@ -1,3 +1,4 @@
+import { SortableTable } from './components/SortableTable';
 import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -48,9 +49,9 @@ export function ObjectDefinitions({actionTarget,session,engine,schema,table,sect
           {section==='views'&&actionTarget&&createPortal(<Button variant="outline" size="sm" onClick={()=>onSql(`CREATE VIEW ${objectIdentifier(engine,schema)}.${objectIdentifier(engine,'new_view')} AS\nSELECT ...;`)}>{tr('새 뷰 SQL','New view SQL')}</Button>,actionTarget)}
         </div>
         <Input className="object-definition-search" aria-label={tr('객체 검색','Search objects')} placeholder={tr('검색','Search')} value={filter} onChange={event=>setFilter(event.target.value)}/>
-        <table className="object-table"><thead><tr><th>{tr('이름','Name')}</th><th>{tr('종류','Type')}</th><th>{tr('정의','Definition')}</th></tr></thead>
+        <SortableTable className="object-table"><thead><tr><th>{tr('이름','Name')}</th><th>{tr('종류','Type')}</th><th>{tr('정의','Definition')}</th></tr></thead>
           <tbody>{shown.map(item=><tr key={item.kind+item.name+item.identity}><td>{item.name}</td><td>{item.kind.toUpperCase()}</td><td><Button variant="outline" size="sm" disabled={busy} onClick={()=>void open(item)}>{tr('SQL 편집기로 열기','Open in SQL editor')}</Button></td></tr>)}</tbody>
-        </table>
+        </SortableTable>
         {!busy&&!error&&!shown.length&&<div className="object-empty">{tr(engine==='sqlite'&&section==='routines'?'SQLite는 루틴을 지원하지 않습니다.':'일치하는 결과가 없습니다.',engine==='sqlite'&&section==='routines'?'SQLite does not support routines.':'No matching results.')}</div>}
       </>}
       {busy&&<div className="object-empty" role="status">{tr('불러오는 중…','Loading…')}</div>}

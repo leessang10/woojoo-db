@@ -1,13 +1,13 @@
-import { cloneElement, useRef, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, useRef, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { Dialog as Primitive } from 'radix-ui';
 import { Dialog, DialogPortal, DialogOverlay, DialogTitle } from '@/components/ui/dialog';
 
 // Preserve form semantics and existing localized headings while Radix owns focus and dismissal.
-export function ModalSurface({children,title,onClose,locked=false}:{children:ReactElement<{children?:ReactNode;className?:string}>;title:string;onClose:()=>void;locked?:boolean}) {
+export function ModalSurface({children,title,onClose,locked=false,initialFocusRef}:{children:ReactElement<{children?:ReactNode;className?:string}>;title:string;onClose:()=>void;locked?:boolean;initialFocusRef?:RefObject<HTMLElement|null>}) {
  const trigger=useRef(document.activeElement instanceof HTMLElement?document.activeElement:null);
  return <Dialog open onOpenChange={open=>{if(!open&&!locked)onClose();}}><DialogPortal><DialogOverlay/>
   <Primitive.Content asChild aria-describedby={undefined} onOpenAutoFocus={event=>{
-    const auto=document.querySelector<HTMLElement>('[data-modal-content] [autofocus]');if(auto){event.preventDefault();auto.focus();}
+    const auto=initialFocusRef?.current??document.querySelector<HTMLElement>('[data-modal-content] [autofocus]');if(auto){event.preventDefault();auto.focus();}
   }} onCloseAutoFocus={event=>{event.preventDefault();if(trigger.current?.isConnected)trigger.current.focus({preventScroll:true});}}
   onEscapeKeyDown={event=>{if(locked)event.preventDefault();}}
   onInteractOutside={event=>event.preventDefault()} data-modal-content data-slot="dialog-content"

@@ -127,6 +127,18 @@ fn display(args: &[String]) -> String {
     format!("aws {} {} --cli-input-json '{}'", args[0], args[1], args.last().map(String::as_str).unwrap_or(""))
 }
 
+fn termination_phrase(raw: &Value, id: &str) -> Result<String, String> {
+    let instance = raw["Reservations"].as_array().into_iter().flatten()
+        .flat_map(|reservation| reservation["Instances"].as_array().into_iter().flatten())
+        .find(|instance| instance["InstanceId"].as_str() == Some(id))
+        .ok_or("AWS_NOT_FOUND")?;
+    Ok(instance["Tags"].as_array().into_iter().flatten()
+        .find(|tag| tag["Key"].as_str() == Some("Name"))
+        .and_then(|tag| tag["Value"].as_str())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or(id).to_owned())
+}
+
 /// Off until Settings turns AWS changes on; checked again before a reviewed change runs.
 static ENABLED: AtomicBool = AtomicBool::new(false);
 #[tauri::command]
@@ -147,7 +159,14 @@ pub async fn aws_prepare_action(query: ActionQuery) -> Result<Review, String> {
     let args = arguments(&query)?;
     let account = account(&query.profile, &query.region).await?;
     // Typing the resource name confirms which resource changes; the review names the account.
-    let phrase = query.resource.clone();
+    let phrase = if query.action == Action::Ec2Terminate {
+        let mut lookup = scoped("ec2", "describe-instances", &query.profile, &query.region)?;
+        lookup.extend(["--cli-input-json".into(), json!({"InstanceIds": [&query.resource]}).to_string()]);
+        let raw = run_owned(lookup, None).await?;
+        termination_phrase(&parse(&raw)?, &query.resource)?
+    } else {
+        query.resource.clone()
+    };
     let review = uuid::Uuid::new_v4().to_string();
     let mut pending = PENDING.lock().unwrap();
     pending.retain(|_, p| p.created.elapsed() < REVIEW_TTL);
@@ -192,6 +211,18 @@ pub fn aws_cancel_action(review: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn termination_requires_the_current_name_or_id_when_unnamed() {
+        let response = json!({"Reservations": [{"Instances": [
+            {"InstanceId": "i-named", "Tags": [{"Key": "Name", "Value": "production-web"}]},
+            {"InstanceId": "i-unnamed"},
+            {"InstanceId": "i-empty", "Tags": [{"Key": "Name", "Value": "  "}]}
+        ]}]});
+        assert_eq!(termination_phrase(&response, "i-named").unwrap(), "production-web");
+        assert_eq!(termination_phrase(&response, "i-unnamed").unwrap(), "i-unnamed");
+        assert_eq!(termination_phrase(&response, "i-empty").unwrap(), "i-empty");
+        assert_eq!(termination_phrase(&response, "i-missing").unwrap_err(), "AWS_NOT_FOUND");
+    }
     fn query(action: Action, resource: &str, value: Option<&str>) -> ActionQuery {
         ActionQuery { profile: "dev".into(), region: "ap-northeast-2".into(), action, resource: resource.into(), value: value.map(str::to_owned) }
     }

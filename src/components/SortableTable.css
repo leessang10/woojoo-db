@@ -1,0 +1,6 @@
+.sortable-heading{cursor:pointer;user-select:none;position:relative;padding-right:24px!important}
+.sortable-heading:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+.table-sort-arrow{font-size:12px;line-height:1;display:inline-block;margin-left:6px;color:var(--muted-foreground)}
+.sortable-heading>.table-sort-arrow{position:absolute;right:8px;top:50%;transform:translateY(-50%)}
+[aria-sort=ascending] .table-sort-arrow,[aria-sort=descending] .table-sort-arrow{color:var(--brand);opacity:1}
+[aria-sort=none] .table-sort-arrow{opacity:.45}

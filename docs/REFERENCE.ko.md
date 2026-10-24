@@ -2,6 +2,8 @@
 
 > 고급 기능, 제한 사항과 전용 DB 테스트 환경을 위한 참고 문서입니다.
 
+Redis 전용 작업 공간은 [Redis 사용 안내](REDIS.ko.md)를 참고하세요.
+
 # Woojoo DB
 
 PostgreSQL · MySQL · MariaDB · SQLite를 위한 Tauri 2 데스크톱 클라이언트.

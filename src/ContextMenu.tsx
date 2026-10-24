@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef } from 'react';
 import { useLanguage } from './i18n';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-export type MenuItem = { label: string; action: () => void; disabled?: boolean; divider?: boolean };
+export type MenuItem = { label: string; action: () => void; disabled?: boolean; divider?: boolean; destructive?: boolean };
 export type MenuState = { x: number; y: number; items: MenuItem[]; trigger: HTMLElement };
 export function ContextMenu({menu,onClose}:{menu:MenuState;onClose:()=>void}) {
  const {t}=useLanguage();const ref=useRef<HTMLDivElement>(null),close=useRef(onClose);close.current=onClose;
@@ -13,7 +13,7 @@ export function ContextMenu({menu,onClose}:{menu:MenuState;onClose:()=>void}) {
    onCloseAutoFocus={event=>{event.preventDefault();if(menu.trigger.isConnected&&!document.querySelector('[role="alertdialog"]'))menu.trigger.focus({preventScroll:true});}}
    onFocusCapture={event=>{if(event.target===ref.current){const first=ref.current.querySelector<HTMLElement>('[role=menuitem]:not([data-disabled])');first?.focus();}}}
    onKeyDown={event=>{event.stopPropagation();if(event.key==='Tab'){event.preventDefault();onClose();}}}>
-    {menu.items.map((item,index)=><Fragment key={index}>{item.divider&&<DropdownMenuSeparator/>}<DropdownMenuItem className="text-xs py-2" disabled={item.disabled} onSelect={()=>{onClose();menu.trigger.focus({preventScroll:true});item.action();}}>{item.label}</DropdownMenuItem></Fragment>)}
+    {menu.items.map((item,index)=><Fragment key={index}>{item.divider&&<DropdownMenuSeparator/>}<DropdownMenuItem variant={item.destructive ? "destructive" : "default"} className="text-xs py-2" disabled={item.disabled} onSelect={()=>{onClose();menu.trigger.focus({preventScroll:true});item.action();}}>{item.label}</DropdownMenuItem></Fragment>)}
   </DropdownMenuContent>
  </DropdownMenu>;
 }

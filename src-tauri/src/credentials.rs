@@ -29,8 +29,8 @@ pub struct Status {
     pub available: bool,
 }
 
-#[derive(Default)]
 pub(crate) struct Store {
+    namespace: &'static str,
     memory: HashMap<String, Credential>,
     revisions: HashMap<String, u64>,
 }
@@ -42,11 +42,17 @@ fn target(id: &str) -> Result<String, String> {
     Ok(format!("Woojoo/Database/{id}"))
 }
 
+impl Default for Store { fn default() -> Self { Self { namespace: "Database", memory: HashMap::new(), revisions: HashMap::new() } } }
 impl Store {
+    pub fn redis() -> Self { Self { namespace: "Redis", ..Self::default() } }
+    fn target(&self, id: &str) -> Result<String, String> { target(id).map(|_| format!("Woojoo/{}/{id}", self.namespace)) }
+    pub fn cache(&mut self, id: &str, identity: Identity, password: &str, revision: u64) -> Result<(), String> {
+        self.target(id)?; if self.revision(id) == revision { if self.namespace == "Redis" && self.memory.len() >= 500 && !self.memory.contains_key(id) { if let Some(old) = self.memory.keys().next().cloned() { self.memory.remove(&old); } } self.memory.insert(id.into(), Credential { identity, password: password.into() }); } Ok(())
+    }
     pub fn revision(&self, id: &str) -> u64 { *self.revisions.get(id).unwrap_or(&0) }
 
     pub fn status(&self, id: &str, identity: &Identity) -> Result<Status, String> {
-        let saved = vault::read(&target(id)?)?.is_some_and(|c| c.identity == *identity);
+        let saved = vault::read(&self.target(id)?)?.is_some_and(|c| c.identity == *identity);
         let cached = self.memory.get(id).is_some_and(|c| c.identity == *identity);
         Ok(Status { supported: cfg!(windows), saved, available: saved || cached })
     }
@@ -55,14 +61,14 @@ impl Store {
         if let Some(c) = self.memory.get(id).filter(|c| c.identity == *identity) {
             return Ok(Some(c.password.clone()));
         }
-        Ok(vault::read(&target(id)?)?.filter(|c| c.identity == *identity).map(|c| c.password.clone()))
+        Ok(vault::read(&self.target(id)?)?.filter(|c| c.identity == *identity).map(|c| c.password.clone()))
     }
 
     // Call only after authentication succeeds. A concurrent forget wins over an
     // in-flight connection, so deleted credentials cannot be silently recreated.
     pub fn remember(&mut self, id: &str, identity: Identity, password: &str, persist: bool, revision: u64) -> Result<(), String> {
         if self.revision(id) != revision { return Ok(()); }
-        let target = target(id)?;
+        let target = self.target(id)?;
         let credential = Credential { identity, password: password.into() };
         if persist { vault::write(&target, &credential)?; }
         else { vault::delete(&target)?; }
@@ -71,7 +77,7 @@ impl Store {
     }
 
     pub fn forget(&mut self, id: &str) -> Result<(), String> {
-        let target = target(id)?;
+        let target = self.target(id)?;
         self.memory.remove(id);
         *self.revisions.entry(id.into()).or_default() += 1;
         vault::delete(&target)
@@ -199,4 +205,14 @@ mod tests {
         restarted.forget(&id).unwrap();
         assert!(!restarted.status(&id, &identity()).unwrap().available);
     }
+}
+
+
+
+#[cfg(test)]
+mod redis_namespace_tests {
+ use super::*;
+ #[test] fn redis_targets_are_separate_and_database_targets_are_unchanged(){assert_eq!(Store::default().target("same").unwrap(),"Woojoo/Database/same");assert_eq!(Store::redis().target("same").unwrap(),"Woojoo/Redis/same");assert!(Store::redis().target("../bad").is_err());}
+ #[cfg(windows)]
+ #[test] fn redis_memory_cache_does_not_delete_saved_vault_entry(){let id=format!("test-{}",uuid::Uuid::new_v4());let identity=Identity{engine:"redis".into(),host:"localhost".into(),port:6379,database:"0".into(),username:"".into(),tls:false};let mut store=Store::redis();store.remember(&id,identity.clone(),"saved-secret",true,0).unwrap();let result=(||{store.cache(&id,identity.clone(),"temporary-secret",0).unwrap();assert_eq!(store.resolve(&id,&identity).unwrap().as_deref(),Some("temporary-secret"));assert_eq!(Store::redis().resolve(&id,&identity).unwrap().as_deref(),Some("saved-secret"));})();store.forget(&id).unwrap();result}
 }

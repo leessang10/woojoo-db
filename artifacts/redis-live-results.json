@@ -1,0 +1,21 @@
+{
+  "container": "woojoo-redis-verify-e5126b28-725f-4e16-b63f-cad29611a65d",
+  "checks": [
+    "Packaged UI connection test + password AUTH + SELECT DB 3",
+    "UI typed value: user:1001",
+    "UI typed value: cache:catalog",
+    "UI typed value: queue:emails",
+    "UI typed value: online:users",
+    "UI typed value: leaderboard:weekly",
+    "UI typed value: events:orders",
+    "UI cache TTL 1–5 minute bucket excludes persistent and longer-lived keys",
+    "UI saved queue: queue:emails",
+    "UI saved queue: events:orders",
+    "Queue data, pending summary and group position unchanged after observation",
+    "Explicit UI disconnect"
+  ],
+  "version": "7.2.16",
+  "image": "sha256:f8548b29a1f1cb358b5fcfec1e0126beab57ad15776c1e87623f865579f16c5a",
+  "passed": true,
+  "containerRemoved": true
+}
