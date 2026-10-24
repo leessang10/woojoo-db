@@ -12,6 +12,9 @@ export type DockerContext = { name: string; endpoint: string; current: boolean; 
 export type Kind = 'container' | 'image' | 'port' | 'volume' | 'bind' | 'tmpfs' | 'network';
 export type GraphNode = { id: string; kind: Kind; label: string; detail: string; resourceId: string; container?: Container };
 export type GraphEdge = { id: string; source: string; target: string; label: string };
+export function isDefaultNetwork(node: Pick<GraphNode, 'kind' | 'label'>): boolean {
+  return node.kind === 'network' && ['bridge', 'host', 'none'].includes(node.label);
+}
 export type Topology = { nodes: GraphNode[]; edges: GraphEdge[] };
 export const nodeId = (context: string, kind: Kind, id: string) => JSON.stringify([context, kind, id]);
 export const text = (language: string, ko: string, en: string) => language === 'ko' ? ko : en;
@@ -38,7 +41,7 @@ export function buildGraph(s: Snapshot, project: string, language: string): Topo
   const nodes = new Map<string, GraphNode>(); const edges: GraphEdge[] = [];
   const add = (kind: Kind, id: string, label: string, detail: string, container?: Container) => {
     const key = nodeId(s.context, kind, id);
-    nodes.set(key, { id: key, kind, label, detail, resourceId: id, container }); return key;
+    nodes.set(key, { id: key, kind, label, detail: isDefaultNetwork({ kind, label }) ? text(language, '기본 네트워크 · 삭제 불가', 'Default network · cannot be deleted') : detail, resourceId: id, container }); return key;
   };
   const edge = (source: string, target: string, label: string) => edges.push({ id: JSON.stringify([source, target, label, edges.length]), source, target, label });
   const containers = s.containers.filter(c => project === '*' || c.project === project);

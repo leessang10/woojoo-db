@@ -1,22 +1,21 @@
-import { Play, Square, RotateCw } from 'lucide-react';
+import { Play, Square, RotateCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { buildGraph, kindLabel, statusLabel, text, tone, type GraphNode, type Snapshot } from './model';
+import { buildGraph, isDefaultNetwork, kindLabel, statusLabel, text, tone, type GraphNode, type Snapshot } from './model';
 type Props = { node: GraphNode | undefined; snapshot: Snapshot; language: string; disabled: boolean; busy: boolean; onAction: (action: string) => void; onSelect: (id: string) => void; onRemove: () => void; onEdit: () => void; onRename: (name: string) => void };
 export function DockerDetails({ node, snapshot, language, disabled, busy, onAction, onSelect, onRemove, onEdit, onRename }: Props) {
   const tr = (ko: string, en: string) => text(language, ko, en);
   const [name, setName] = useState('');
   useEffect(() => setName(node?.container?.name || ''), [node?.id, node?.container?.name]);
-  if (!node) return <aside className="docker-details"><h2>{tr('리소스 상세', 'Resource details')}</h2><p>{tr('노드를 선택하면 연결된 리소스와 실행 상태를 볼 수 있습니다.', 'Select a node to inspect its connections and state.')}</p><p>{tr('선은 생성·마운트·포트 공개·네트워크 소속을 뜻합니다. 실제 통신 성공을 보장하지 않습니다.', 'Edges indicate creation, mounts, published ports and network membership, not successful communication.')}</p></aside>;
+  if (!node) return null;
   const c = node.container;
   const all = buildGraph(snapshot, '*', language);
   const neighbors = new Set(all.edges.filter(e => e.source === node.id || e.target === node.id).flatMap(e => [e.source, e.target])); neighbors.delete(node.id);
   const resource = [...snapshot.volumes, ...snapshot.networks, ...snapshot.images].find(r => r.id === node.resourceId);
   return <aside className="docker-details" aria-label={tr('리소스 상세', 'Resource details')}>
-    <span className="docker-eyebrow">{kindLabel(node.kind, language)}</span><h2>{node.label}</h2>
+    <div className="docker-details-heading"><span className="docker-eyebrow">{kindLabel(node.kind, language)}</span><Button variant="ghost" size="icon-sm" aria-label={tr('상세 닫기', 'Close details')} onClick={() => onSelect('')}><X size={14}/></Button></div><h2>{node.label}</h2>
     {c?.project && <Button size="sm" variant="outline" disabled={busy} onClick={onEdit}>{tr('Compose 설정 수정', 'Edit Compose configuration')}</Button>}
     {c && !c.project && <><label>{tr('컨테이너 이름', 'Container name')}<input className="docker-rename-input" value={name} onChange={e => setName(e.target.value)}/></label><Button size="sm" variant="outline" disabled={disabled || busy || !name || name === c.name} onClick={() => onRename(name)}>{tr('이름 변경', 'Rename')}</Button><p>{tr('포트·이미지·마운트 변경은 컨테이너 재생성이 필요합니다. Compose 프로젝트로 구성해 관리하세요.', 'Changing ports, images or mounts requires recreating the container. Manage these settings through a Compose project.')}</p></>}
-    {['container', 'image', 'volume', 'network'].includes(node.kind) && <Button size="sm" variant="outline" disabled={disabled || busy} onClick={onRemove}>{tr('리소스 삭제', 'Delete resource')}</Button>}
     {c ? <>
       <p className="docker-state" data-tone={tone(c)}>{statusLabel(c, language)}</p>
       <div className="docker-action-row">
@@ -38,5 +37,6 @@ export function DockerDetails({ node, snapshot, language, disabled, busy, onActi
     <h3>{tr('연결된 리소스', 'Connected resources')}</h3>
     {all.nodes.filter(n => neighbors.has(n.id)).map(n => <Button key={n.id} variant="ghost" size="sm" className="docker-neighbor" onClick={() => onSelect(n.id)}>{n.label}{n.container?.project && <small>{n.container.project}</small>}</Button>)}
     {!neighbors.size && <p>{snapshot.complete ? tr('현재 컨테이너 참조 없음. 삭제 안전성을 뜻하지 않습니다.', 'No current container reference. This does not establish deletion safety.') : tr('일부 조회가 실패하여 참조 상태를 알 수 없습니다.', 'References are unverified because some queries failed.')}</p>}
+    <div className="docker-danger-zone">{['container', 'image', 'volume', 'network'].includes(node.kind) && <Button size="sm" variant="destructive" disabled={disabled || busy || isDefaultNetwork(node)} onClick={onRemove}>{tr('리소스 삭제', 'Delete resource')}</Button>}</div>
   </aside>;
 }

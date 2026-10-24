@@ -1,3 +1,4 @@
+import { chooseOption } from './select-control';
 import { test, expect, type Page } from './fixtures';
 const id = 'a'.repeat(64);
 async function setup(page: Page, scenario = 'normal') {
@@ -37,7 +38,7 @@ async function setup(page: Page, scenario = 'normal') {
           if (w.dockerFail) throw 'DOCKER_ENGINE_UNAVAILABLE';
           if (scenario === 'delayed' && args.context === 'local') await new Promise(resolve => setTimeout(resolve, 700));
           return { context: args.context, complete: scenario !== 'partial', warnings: scenario === 'partial' ? ['volume: denied'] : [],
-            images: [{ id: 'img', name: 'postgres:16', project: '', detail: '248 MB' }], volumes: [{ id: 'data', name: 'app_data', project: 'app', detail: '/docker/volumes/data' }, { id: 'old', name: 'old_volume', project: 'old-project', detail: '' }], networks: [{ id: 'net', name: 'app_default', project: 'app', detail: 'bridge' }],
+            images: [{ id: 'img', name: 'postgres:16', project: '', detail: '248 MB' }], volumes: [{ id: 'data', name: 'app_data', project: 'app', detail: '/docker/volumes/data' }, { id: 'old', name: 'old_volume', project: 'old-project', detail: '' }], networks: [{ id: 'net', name: 'app_default', project: 'app', detail: 'bridge' }, ...(scenario === 'default-networks' ? ['bridge', 'host', 'none'].map(name => ({id:name,name,project:'',detail:name})) : [])],
             containers: [{ id, name: args.context === 'remote' ? 'remote-db' : 'local-db', imageId: 'img', image: 'postgres:16', project: scenario === 'standalone' ? '' : 'app', service: 'db', state: 'running', health: '', exitCode: 0, oom: false, error: '', finishedAt: '', restartCount: 2, healthOutput: '', networkMode: 'app_default', ports: [{ privatePort: '5432/tcp', hostIp: '127.0.0.1', hostPort: '15432' }, { privatePort: '80/tcp', hostIp: '', hostPort: '' }], mounts: [{ kind: 'volume', name: 'data', source: '/docker/data', target: '/data', rw: true }, { kind: 'bind', name: '', source: '/host/uploads', target: '/app/uploads', rw: false }], networks: [{ id: 'net', name: 'app_default', ip: '172.18.0.2' }] }] };
         }
         if (command === 'docker_logs_start') {
@@ -79,22 +80,31 @@ test('project graph explains port/storage relationships and unknown health witho
   await expectAllLogsStopped(page);
 });
 
-test('starts local Docker Desktop once and loads the graph when ready', async ({ page }) => {
+test('starts local Docker Desktop once and loads the graph when ready', async ({ page }, testInfo) => {
   await setup(page, 'engine-off');
   const start = page.getByRole('button', { name: 'Docker 켜기', exact: true });
-  await expect(start).toBeVisible(); await start.click();
+  await expect(start).toBeVisible();
+  await expect(page.locator('.docker-maintenance > button')).toHaveText(['디스크 공간 회수', 'Docker 켜기']);
+  await expect(page.locator('.docker-workspace')).not.toContainText('Docker 엔진에 연결할 수 없습니다');
+  await expect(page.locator('.docker-workspace')).not.toContainText('Docker 엔진이 실행 중인지 확인');
+  await page.screenshot({path:testInfo.outputPath('docker-engine-off.png')});
+  await start.click();
   await expect(page.getByRole('button', { name: 'Docker 시작 중…', exact: true })).toBeDisabled();
   await expect(page.getByLabel('Docker 연결 대상')).toBeDisabled();
   await expect(page.locator('.docker-node.kind-container')).toContainText('local-db');
   expect((await calls(page, 'docker_start_desktop')).map((c: any) => c.args)).toEqual([{ context: 'local' }]);
   await expect(start).toHaveCount(0);
+  await expect(page.getByRole('button', {name:'Docker 실행 중',exact:true})).toBeDisabled();
+  await expect(page.locator('.docker-engine-dot')).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('docker-engine-running.png')});
+  await expect(page.getByText('Docker 엔진이 준비되었습니다. 리소스를 불러옵니다.')).toHaveCount(0);
 });
 
 test('does not offer local engine startup for a remote context', async ({ page }) => {
   await setup(page, 'engine-off');
   await expect(page.getByRole('button', { name: 'Docker 켜기', exact: true })).toBeVisible();
-  await page.getByLabel('Docker 연결 대상').selectOption('remote');
-  await expect(page.getByRole('alert')).toContainText('Docker 엔진에 연결할 수 없습니다');
+  await chooseOption(page.getByLabel('Docker 연결 대상'), 'remote');
+  await expect(page.getByText('연결 오류', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Docker 켜기', exact: true })).toHaveCount(0);
 });
 
@@ -128,7 +138,7 @@ test('hiding the area stops a subscription even if startup completes late', asyn
 
 test('context changes discard late responses and scope subsequent requests', async ({ page }) => {
   await setup(page, 'delayed');
-  await page.getByLabel('Docker 연결 대상').selectOption('remote');
+  await chooseOption(page.getByLabel('Docker 연결 대상'), 'remote');
   await expect(page.locator('.docker-node.kind-container')).toContainText('remote-db');
   await expect(page.locator('.docker-node.kind-container')).not.toContainText('local-db');
   await selectDb(page, 'remote-db');
@@ -161,7 +171,7 @@ test('filtering and panning preserve the position of a hidden dragged node', asy
   await page.mouse.move(box.x + box.width / 2, box.y + 20); await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + 70, box.y + 80, { steps: 10 }); await page.mouse.up();
   const position = await node.evaluate(el => (el as HTMLElement).style.transform);
-  await page.getByLabel('리소스 검색', { exact: true }).fill('postgres:16');
+  await page.getByLabel('리소스 검색', { exact: true }).fill('/host/uploads');
   await expect(node).toHaveCount(0);
   const canvas = await page.locator('.react-flow__pane').boundingBox();
   if (!canvas) throw new Error('Canvas missing');
@@ -179,7 +189,7 @@ test('browser demo is explicit and works in English and light mode', async ({ pa
   await expect(page.locator('.docker-banner')).toContainText(/데모 데이터|Demo data/);
   await expect(page.locator('.docker-node.kind-container')).toHaveCount(2);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await expect(page.getByRole('heading', { name: 'Resource details' })).toBeVisible();
+  await expect(page.locator('.docker-details')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('docker-light.png'), animations: 'disabled' });
   await page.getByRole('button', { name: /Switch to dark mode/ }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -190,7 +200,9 @@ test('browser demo is explicit and works in English and light mode', async ({ pa
 
 test('Compose import validates before apply and preserves reviewed context and project', async ({ page }, testInfo) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Compose 불러오기', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Compose 불러오기', exact: true })).toHaveCount(0);
+  await page.locator('.docker-project-heading').getByRole('button', { name: '새 프로젝트', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Compose 불러오기', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('C:/projects/app/compose.yml', { exact: false })).toBeVisible();
   await dialog.getByRole('button', { name: '검증·미리보기' }).click();
@@ -231,10 +243,11 @@ test('Compose wizard generates a persistent service and never starts it on save'
   expect(await calls(page, 'compose_action')).toHaveLength(0);
 });
 
-test('resource removal requires confirmation and retains exact context and id', async ({ page }) => {
+test('resource removal requires confirmation and retains exact context and id', async ({ page }, testInfo) => {
   await setup(page); await selectDb(page);
   await page.locator('.docker-details').getByRole('button', { name: '리소스 삭제' }).click();
   await expect(page.getByRole('alertdialog')).toContainText('연결된 볼륨은 보존');
+  await page.getByRole('alertdialog').screenshot({ path: testInfo.outputPath('container-remove-copy.png') });
   await page.getByRole('alertdialog').getByRole('button', { name: '삭제', exact: true }).click();
   await expect.poll(() => calls(page, 'docker_resource_remove')).toEqual([{ command: 'docker_resource_remove', args: { context: 'local', kind: 'container', id } }]);
 });
@@ -296,7 +309,7 @@ test('stopping Docker for disk maintenance requires its own confirmation', async
 
 test('remote context cannot offer local disk compaction', async ({ page }) => {
   await setup(page);
-  await page.getByRole('combobox', { name: 'Docker 연결 대상' }).selectOption('remote');
+  await chooseOption(page.getByRole('combobox', { name: 'Docker 연결 대상' }), 'remote');
   await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('로컬 Windows Docker WSL 연결');
@@ -319,4 +332,141 @@ test('zero reclaimed bytes is reported honestly after a successful compaction', 
   await page.getByRole('alertdialog').getByRole('button', { name: '공간 회수', exact: true }).click();
   await expect(dialog.locator('.storage-result')).toContainText('0 B 회수');
   await expect(dialog.locator('.storage-result')).toContainText('실제 디스크 사용량은 줄지 않았습니다');
+});
+
+test('connection recovery stays reachable when the sidebar is collapsed', async ({ page }, testInfo) => {
+  await setup(page, 'engine-off');
+  await expect(page.locator('.docker-maintenance').getByRole('button', { name: 'Docker 켜기', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('docker-connection.png') });
+  await page.getByRole('button', { name: '사이드바 전환' }).click();
+  await expect(page.locator('#docker-sidebar')).toBeHidden();
+  await page.getByRole('button', { name: '사이드바 전환' }).click();
+  await page.getByRole('button', { name: 'Docker 켜기', exact: true }).click();
+  await expect(page.locator('.docker-node.kind-container')).toBeVisible();
+});
+
+test('resource filter uses the shared popup and keeps deletion separate', async ({ page }, testInfo) => {
+  await setup(page);
+  await chooseOption(page.getByRole('combobox', { name: '리소스 종류' }), 'container');
+  await expect(page.locator('.docker-node')).toHaveCount(1);
+  await selectDb(page);
+  await expect(page.locator('.docker-danger-zone').getByRole('button', { name: '리소스 삭제' })).toHaveAttribute('data-variant', 'destructive');
+  await expect(page.locator('.docker-maintenance').getByRole('button', { name: '디스크 공간 회수' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('docker-actions.png') });
+});
+
+test('details only open for a selection and closing preserves the project', async ({ page }) => {
+  await setup(page);
+  await expect(page.locator('.docker-node.kind-container')).toBeVisible();
+  await expect(page.locator('.docker-details')).toHaveCount(0);
+  await expect(page.locator('.docker-connection-heading').getByRole('button', { name: '연결 목록 새로고침' })).toBeVisible();
+  await expect(page.locator('.docker-connection')).not.toContainText('npipe:');
+  await selectDb(page);
+  await expect(page.locator('.docker-details')).toBeVisible();
+  await page.getByRole('button', { name: '상세 닫기' }).click();
+  await expect(page.locator('.docker-details')).toHaveCount(0);
+  await expect(page.locator('#docker-sidebar').getByRole('button', { name: 'app', exact: false })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('resource context menu targets the clicked node and canvas menu handles keyboard commands', async ({ page }) => {
+  await setup(page);
+  const container = page.locator('.docker-node.kind-container');
+  await container.click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: '시작', exact: true })).toBeDisabled();
+  await page.getByRole('menuitem', { name: '재시작', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('local / local-db');
+  await page.getByRole('alertdialog').getByRole('button', { name: '취소', exact: true }).click();
+  expect(await calls(page, 'docker_action')).toHaveLength(0);
+  const canvas = page.locator('.docker-canvas');
+  await canvas.focus(); await page.keyboard.press('Shift+F10');
+  await expect(page.getByRole('menuitem', { name: '배치 초기화' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+});
+
+test('project overview expands dependencies and supports focus, list and minimap controls', async ({ page }, testInfo) => {
+  await setup(page);
+  await page.locator('#docker-sidebar').getByRole('button', { name: '전체 리소스', exact: true }).click();
+  await expect(page.locator('.docker-project-group')).not.toHaveCount(0);
+  await expect(page.locator('.docker-node.kind-image')).toHaveCount(0);
+  await page.getByRole('button', { name: 'app 리소스 펼치기', exact: true }).click();
+  await expect(page.locator('.docker-node.kind-image')).toBeVisible();
+  await page.getByRole('button', { name: '미니맵', exact: true }).click();
+  await expect(page.locator('.react-flow__minimap')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('docker-overview.png') });
+  await selectDb(page);
+  await page.getByRole('button', { name: '연결된 항목만', exact: true }).click();
+  await expect(page.locator('.docker-node').filter({ hasText: 'old_volume' })).toHaveCount(0);
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.getByRole('button', { name: '연결된 항목만', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const table = page.getByRole('table', { name: 'Docker 리소스 목록' });
+  await expect(table.getByRole('row').filter({ hasText: 'local-db' })).toHaveAttribute('aria-selected', 'true');
+  await chooseOption(page.getByRole('combobox', { name: '리소스 종류' }), 'container');
+  await chooseOption(page.getByRole('combobox', { name: '상태 필터' }), 'stopped');
+  await expect(page.getByText('조건에 맞는 리소스가 없습니다.')).toBeVisible();
+  await chooseOption(page.getByRole('combobox', { name: '상태 필터' }), 'running');
+  await expect(table.getByText('local-db', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('docker-list.png') });
+  await page.getByRole('button', { name: '라이트 모드로 전환' }).click();
+  await expect(page.locator('#docker-sidebar').getByRole('button', { name: /^app / })).toHaveCSS('color', 'rgb(32, 33, 38)');
+  await page.screenshot({ path: testInfo.outputPath('docker-list-light.png'), animations: 'disabled' });
+  await table.getByRole('row').filter({ hasText: 'local-db' }).focus();
+  await page.keyboard.press('Shift+F10');
+  await expect(page.getByRole('menuitem', { name: '로그 보기' })).toBeVisible();
+});
+
+test('resource menus do not enable mutations on incomplete snapshots', async ({ page }) => {
+  await setup(page, 'partial');
+  await page.locator('.docker-node.kind-container').click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: '재시작', exact: true })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: '리소스 삭제', exact: true })).toBeDisabled();
+  expect(await calls(page, 'docker_action')).toHaveLength(0);
+});
+
+test('context deletion uses the clicked volume instead of the selected container', async ({ page }) => {
+  await setup(page); await selectDb(page);
+  await page.getByRole('button', { name: '화면 맞춤', exact: true }).click();
+  await page.locator('.docker-node.kind-volume').click({ button: 'right' });
+  const remove = page.getByRole('menuitem', { name: '리소스 삭제', exact: true });
+  await expect(remove).toHaveAttribute('data-variant', 'destructive');
+  await remove.click();
+  await expect(page.getByRole('alertdialog')).toContainText('볼륨 안의 데이터가 영구 삭제됩니다.');
+  await page.getByRole('alertdialog').getByRole('button', { name: '삭제', exact: true }).click();
+  await expect.poll(() => calls(page, 'docker_resource_remove')).toEqual([{ command: 'docker_resource_remove', args: { context: 'local', kind: 'volume', id: 'data' } }]);
+});
+
+test('Docker list headers cycle sorting and restore resource order', async ({ page }) => {
+ await setup(page);
+ await page.getByRole('button',{name:'목록',exact:true}).click();
+ const table=page.getByRole('table',{name:'Docker 리소스 목록'});
+ const original=await table.locator('tbody tr').allTextContents();
+ expect(original.length).toBeGreaterThan(1);
+ const header=table.getByRole('columnheader').first();
+ await header.click(); await expect(header).toHaveAttribute('aria-sort','ascending');
+ await header.click(); await expect(header).toHaveAttribute('aria-sort','descending');
+ await header.click(); await expect(header).toHaveAttribute('aria-sort','none');
+ expect(await table.locator('tbody tr').allTextContents()).toEqual(original);
+});
+
+test('default networks are labeled and cannot be removed from details or menus', async ({page},testInfo)=>{
+ await setup(page,'default-networks');
+ await page.locator('#docker-sidebar').getByRole('button',{name:'전체 리소스',exact:true}).click();
+ await page.getByRole('button',{name:'목록',exact:true}).click();
+ const table=page.getByRole('table',{name:'Docker 리소스 목록'});
+ for(const name of ['bridge','host','none']){
+  const row=table.getByRole('row').filter({has:page.getByRole('cell',{name,exact:true})});
+  await expect(row).toContainText('기본 네트워크');
+  await row.click();
+  await expect(page.locator('.docker-details')).toContainText('기본 네트워크 · 삭제 불가');
+  await expect(page.locator('.docker-details').getByRole('button',{name:'리소스 삭제'})).toBeDisabled();
+  await row.click({button:'right'});
+  await expect(page.getByRole('menuitem',{name:'리소스 삭제'})).toBeDisabled();
+  await page.keyboard.press('Escape');
+ }
+ const custom=table.getByRole('row').filter({has:page.getByRole('cell',{name:'app_default',exact:true})});
+ await custom.click();
+ await expect(page.locator('.docker-details').getByRole('button',{name:'리소스 삭제'})).toBeEnabled();
+ expect(await calls(page,'docker_resource_remove')).toHaveLength(0);
+ await table.getByRole('cell',{name:'none',exact:true}).click();
+ await page.screenshot({path:testInfo.outputPath('default-networks.png')});
 });
