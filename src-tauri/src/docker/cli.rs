@@ -85,7 +85,7 @@ pub async fn run(context: Option<&str>, args: &[&str], seconds: u64) -> Result<S
         .map_err(|_| "DOCKER_BUSY")?;
     execute(command(context, args)?, Duration::from_secs(seconds), LIMIT).await
 }
-async fn execute(mut command: Command, duration: Duration, limit: u64) -> Result<String, String> {
+pub(super) async fn execute(mut command: Command, duration: Duration, limit: u64) -> Result<String, String> {
     let mut child = command.spawn().map_err(|_| "DOCKER_CLI_START_FAILED")?;
     let stdout = child.stdout.take().ok_or("DOCKER_PIPE_FAILED")?;
     let stderr = child.stderr.take().ok_or("DOCKER_PIPE_FAILED")?;

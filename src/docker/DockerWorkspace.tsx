@@ -12,6 +12,8 @@ import { DockerGraph } from './Graph';
 import { DockerDetails } from './Details';
 import { DockerLogs } from './Logs';
 import { demoSnapshot } from './demo';
+import { ComposeManager } from './ComposeManager';
+import { invoke } from '@tauri-apps/api/core';
 import './docker.css';
 
 function read(key: string, fallback = '') { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }
@@ -25,6 +27,7 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
   const [selected, setSelected] = useState(''), [filter, setFilter] = useState(''), [kind, setKind] = useState<Kind | ''>('');
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [loading, setLoading] = useState(false), [actionBusy, setActionBusy] = useState(false);
   const [contextError, setContextError] = useState('');
+  const [editProject, setEditProject] = useState(''), [editRevision, setEditRevision] = useState(0);
   const [engineStarting, setEngineStarting] = useState(false); const engineStartLock = useRef(false);
   const [revision, setRevision] = useState(0), [contextRevision, setContextRevision] = useState(0), [checked, setChecked] = useState(0), [demo, setDemo] = useState(false);
   const latest = useRef({ context, visible }); latest.current = { context, visible };
@@ -108,6 +111,27 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
     } catch (e) { if (latest.current.context === targetContext) setNotice(errorMessage(e, language)); }
     finally { actionLock.current = false; setActionBusy(false); if (latest.current.context === targetContext) setRevision(v => v + 1); }
   }
+  async function removeResource() {
+    if (!node || !ready.current || actionLock.current || !['container', 'image', 'volume', 'network'].includes(node.kind)) return;
+    const target = node, targetContext = context;
+    actionLock.current = true; setActionBusy(true);
+    try {
+      const detail = target.kind === 'volume' ? tr('볼륨 안의 데이터가 영구 삭제됩니다.', 'Data inside this volume will be permanently deleted.') : target.kind === 'container' ? tr('컨테이너 내부 데이터가 삭제됩니다. 연결된 볼륨은 보존합니다. 실행 중이면 먼저 중지하세요.', 'Container-local data is deleted. Mounted volumes are preserved. Stop the container first if running.') : tr('사용 중인 리소스는 삭제할 수 없습니다.', 'Resources in use cannot be removed.');
+      if (!await requestConfirm(`${targetContext} / ${target.label}\n${detail}`, { title: tr('리소스 삭제', 'Delete resource'), confirmLabel: tr('삭제', 'Delete'), destructive: true })) return;
+      if (latest.current.context !== targetContext || !ready.current) return;
+      await invoke('docker_resource_remove', { context: targetContext, kind: target.kind, id: target.resourceId });
+      setSelected(''); setNotice(tr('리소스를 삭제했습니다.', 'Resource removed.'));
+    } catch (e) { setNotice(errorMessage(e, language)); }
+    finally { actionLock.current = false; setActionBusy(false); setRevision(v => v + 1); }
+  }
+  async function renameContainer(name: string) {
+    const target = node?.container, targetContext = context;
+    if (!target || !ready.current || actionLock.current) return;
+    actionLock.current = true; setActionBusy(true);
+    try { await invoke('docker_container_rename', { context: targetContext, id: target.id, name }); }
+    catch (e) { setNotice(errorMessage(e, language)); }
+    finally { actionLock.current = false; setActionBusy(false); setRevision(v => v + 1); }
+  }
   useEffect(() => {
     if (!visible) return;
     const key = (event: KeyboardEvent) => { if (event.key === 'F5') { event.preventDefault(); if (!pollBusy.current) setRevision(v => v + 1); } };
@@ -119,6 +143,7 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
     <main className="docker-workspace" data-testid="docker-workspace">
       <header className="topbar"><div className="breadcrumb"><Button variant="ghost" size="bare" aria-label={tr('사이드바 전환', 'Toggle sidebar')} onClick={onToggleSidebar}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button><ContainerIcon size={16}/><strong>Docker</strong><span>{context} / {project === '*' ? tr('전체 리소스', 'All resources') : project || tr('독립 실행', 'Standalone')}</span></div><Button variant="outline" size="sm" disabled={!context || loading || demo || actionBusy} onClick={() => setRevision(v => v + 1)}><RefreshCw size={14} className={loading ? 'spin' : ''}/>{tr('새로고침', 'Refresh')}</Button></header>
       {demo && <div className="docker-banner">{tr('데모 데이터 · 실제 Docker 연결이 아닙니다.', 'Demo data · not connected to Docker.')}</div>}
+      {desktop && <ComposeManager context={context} language={language} theme={theme} disabled={demo || actionBusy || engineStarting} onChanged={() => setRevision(v => v + 1)} editProject={editProject} editRevision={editRevision}/>}
       {contextError && <div role="alert" className="docker-banner docker-warning">{errorMessage(contextError, language)}</div>}
       {error && <div role="alert" className="docker-banner docker-warning docker-engine-error"><p>{errorMessage(error, language).split('\n')[0]}</p>{checked > 0 && <strong>{tr('마지막 조회 결과입니다. 현재 상태를 확인할 수 없습니다.', 'Showing old data. Current state is unknown.')}</strong>}{canStartEngine && <Button size="sm" disabled={engineStarting} onClick={() => void startEngine()}>{engineStarting ? <Loader2 size={14} className="spin"/> : <Power size={14}/>}{engineStarting ? tr('Docker 시작 중…', 'Starting Docker…') : tr('Docker 켜기', 'Start Docker')}</Button>}<details><summary>{tr('오류 상세', 'Error details')}</summary><pre>{error}</pre></details></div>}
       {engineStarting && <div role="status" className="docker-banner">{tr('Docker Desktop을 시작하고 엔진이 준비될 때까지 기다립니다. 최대 약 2분이 걸릴 수 있습니다.', 'Starting Docker Desktop and waiting for the engine. This can take about two minutes.')}</div>}
@@ -127,7 +152,7 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
         <div className="docker-toolbar"><Search size={14}/><Input aria-label={tr('리소스 검색', 'Search resources')} placeholder={tr('이름·포트·경로 검색', 'Search name, port or path')} value={filter} onChange={e => setFilter(e.target.value)}/><select aria-label={tr('리소스 종류', 'Resource type')} value={kind} onChange={e => setKind(e.target.value as Kind | '')}><option value="">{tr('모든 종류', 'All types')}</option>{(['container', 'image', 'port', 'volume', 'bind', 'tmpfs', 'network'] as Kind[]).map(k => <option key={k} value={k}>{kindLabel(k, language)}</option>)}</select><span>{filtered.nodes.length} {tr('개 리소스', 'resources')}</span><small>{tr('마지막 확인', 'Last checked')} {checked ? new Date(checked).toLocaleTimeString(language === 'ko' ? 'ko-KR' : 'en-US') : '—'}</small></div>
         {!!snapshot.warnings.length && <details className="docker-banner docker-warning"><summary>{tr('일부 리소스를 확인하지 못했습니다. 실행 동작이 비활성화되었습니다.', 'Some resources could not be verified. Actions are disabled.')}</summary>{snapshot.warnings.map((w, i) => <p key={i}>{w}</p>)}</details>}
         {filtered.omitted > 0 && <div className="docker-banner">{tr(`${filtered.omitted}개 생략 · 검색이나 종류 필터로 범위를 좁히세요.`, `${filtered.omitted} omitted · narrow the search or type filter.`)}</div>}
-        <div className="docker-body"><div className="docker-visual"><DockerGraph key={`${context}:${project}`} graph={filtered} selected={selected} onSelect={select} language={language} theme={theme} storageKey={`woojoo-docker-layout:${context}:${project}`}/><details className="docker-resource-list"><summary>{tr('리소스 목록 / 범례', 'Resource list / legend')}</summary><div>{filtered.nodes.map(n => <Button key={n.id} variant="ghost" size="sm" aria-pressed={selected === n.id} onClick={() => select(n.id)}>{kindLabel(n.kind, language)} · {n.label}</Button>)}</div></details></div><DockerDetails node={node} snapshot={snapshot} language={language} disabled={!ready.current} busy={actionBusy} onAction={action => void act(action)} onSelect={select}/></div>
+        <div className="docker-body"><div className="docker-visual"><DockerGraph key={`${context}:${project}`} graph={filtered} selected={selected} onSelect={select} language={language} theme={theme} storageKey={`woojoo-docker-layout:${context}:${project}`}/><details className="docker-resource-list"><summary>{tr('리소스 목록 / 범례', 'Resource list / legend')}</summary><div>{filtered.nodes.map(n => <Button key={n.id} variant="ghost" size="sm" aria-pressed={selected === n.id} onClick={() => select(n.id)}>{kindLabel(n.kind, language)} · {n.label}</Button>)}</div></details></div><DockerDetails node={node} snapshot={snapshot} language={language} disabled={!ready.current} busy={actionBusy} onAction={action => void act(action)} onSelect={select} onRename={name => void renameContainer(name)} onRemove={() => void removeResource()} onEdit={() => { setEditProject(node?.container?.project || project); setEditRevision(v => v + 1); }}/></div>
         {node?.container && <DockerLogs context={context} id={node.container.id} name={node.label} language={language} demo={demo}/>}
       </>}
     </main>

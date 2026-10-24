@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod engine;
+pub mod compose;
 pub mod logs;
 use serde_json::{json, Value};
 use std::{
@@ -199,6 +200,22 @@ async fn snapshot(context: String, resources: bool) -> Result<Value, String> {
 }
 
 static ACTIONS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+#[tauri::command]
+pub async fn docker_resource_remove(context: String, kind: String, id: String) -> Result<(), String> {
+    cli::validate(&context)?;
+    cli::validate(&id)?;
+    if !["container", "image", "volume", "network"].contains(&kind.as_str()) { return Err("DOCKER_INVALID_RESOURCE".into()); }
+    if kind == "container" { cli::id(&id)?; }
+    // No force / volume flags: the engine refuses removal while resources are in use.
+    cli::run(Some(&context), &[&kind, "rm", &id], 45).await?;
+    Ok(())
+}
+#[tauri::command]
+pub async fn docker_container_rename(context: String, id: String, name: String) -> Result<(), String> {
+    cli::validate(&context)?; cli::id(&id)?;
+    if name.is_empty() || name.len() > 128 || !name.as_bytes()[0].is_ascii_alphanumeric() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b)) { return Err("Invalid container name".into()); }
+    cli::run(Some(&context), &["container", "rename", &id, &name], 30).await?; Ok(())
+}
 struct ActionGuard(String);
 impl Drop for ActionGuard {
     fn drop(&mut self) {
