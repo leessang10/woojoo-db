@@ -1,3 +1,4 @@
+import { SidebarTitle } from '../components/SidebarTitle';
 import { lazy, Suspense, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { AlertTriangle, Archive, ChevronRight, Cloud, Database, FileText, Loader2, Network, PanelLeftClose, PanelLeftOpen, PanelRight, RefreshCw, Server, X, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -91,6 +92,7 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   // Same element positions whether shown or hidden, so the main pane never remounts.
   return <>
     {visible && sidebarOpen && <aside className="sidebar aws-sidebar" id="aws-sidebar" aria-label={tr('AWS 탐색기', 'AWS explorer')}>
+      <SidebarTitle icon={Cloud} title="AWS"/>
       <div className="section-label"><span>{tr('계정', 'Account')}{info?.installed && <small className="aws-cli-version" title={info.version}>{info.version.split(' ')[0]}</small>}</span><Button variant="ghost" size="bare" title={tr('AWS CLI 다시 확인', 'Check AWS CLI again')} aria-label={t('AWS CLI 다시 확인')} disabled={checking || !desktop} onClick={() => { setInfo(null); setInfoError(''); setCliCheck(value => value + 1); }}><RefreshCw size={14} className={checking ? 'spin' : ''}/></Button></div>
       <div className="aws-context">
         {!desktop ? <p className="aws-note">{tr('AWS 작업 영역은 데스크톱 앱에서 사용할 수 있습니다.', 'The AWS work area is available in the desktop app.')}</p>
@@ -112,10 +114,9 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         {AWS_SERVICES.map(service => { const Icon = SERVICE_ICONS[service]; const current = active?.kind !== 'topology' && active?.service === service && active.profile === profile && active.region === region; return <Button key={service} variant="ghost" size="bare" className={`tree-table aws-nav-item ${current ? 'active' : ''}`} disabled={!ready} onClick={() => openService(service)}><Icon size={14}/><span>{tr(...serviceLabel[service])}</span></Button>; })}
         <Button variant="ghost" size="bare" className={`tree-table aws-nav-item ${active?.kind === 'topology' && active.profile === profile && active.region === region ? 'active' : ''}`} disabled={!ready} onClick={openTopology}><Network size={14}/><span>{tr('인프라 맵', 'Infrastructure map')}</span></Button>
       </nav>
-      <p className="aws-sidebar-foot">{tr('로컬 AWS CLI 프로필로 조회합니다. 변경 작업은 상세 탭의 작업에서 검토 후 실행합니다.', 'Queries run through your local AWS CLI profiles. Changes are reviewed in a detail tab’s Actions view.')}</p>
     </aside>}
     {renderMain()}
-    {visible && panelOpen && <aside className="history-sidebar aws-panel" id="aws-panel" aria-label={tr('리소스 요약', 'Resource summary')}>
+    {visible && panelOpen && active?.service && panelRow && <aside className="history-sidebar aws-panel" id="aws-panel" aria-label={tr('리소스 요약', 'Resource summary')}>
       <div className="history-heading"><span>{tr('리소스 요약', 'RESOURCE SUMMARY')}</span><Button variant="ghost" size="bare" className="history-icon" aria-label={tr('패널 닫기', 'Close panel')} title={tr('패널 닫기', 'Close panel')} onClick={() => setPanelOpen(false)}><X size={14}/></Button></div>
       {active?.service && panelRow ? <div className="aws-panel-body">
         <h2 title={resourceName(active.service, panelRow)}>{resourceName(active.service, panelRow)}</h2>
@@ -138,7 +139,7 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
       </div><div className="topbar-right">
         {env && profile && <span className="connection-status" title={env.arn}><span className="live-dot" aria-hidden="true"/><span>{tr('계정', 'Account')} {env.account} · {profile}</span></span>}
         {production && <span className="env-banner" data-environment="production" role="note"><AlertTriangle size={13}/>PRODUCTION</span>}
-        <Button variant="ghost" size="bare" className="icon-button history-toggle-button" aria-label={tr('리소스 요약 패널', 'Resource summary panel')} title={tr('리소스 요약 패널', 'Resource summary panel') + ' · Ctrl/Cmd+Alt+B'} aria-pressed={panelOpen} aria-controls="aws-panel" onClick={() => setPanelOpen(open => !open)}><PanelRight size={17}/></Button>
+        <Button variant="ghost" size="bare" className="icon-button history-toggle-button" aria-label={tr('리소스 요약 패널', 'Resource summary panel')} title={tr('리소스 요약 패널', 'Resource summary panel') + ' · Ctrl/Cmd+Alt+B'} aria-pressed={panelOpen && !!active?.service && !!panelRow} disabled={!active?.service || !panelRow} aria-controls="aws-panel" onClick={() => setPanelOpen(open => !open)}><PanelRight size={17}/></Button>
       </div></header>
       {!tabs.length ? <div className="workspace-empty"><Cloud size={28}/><h1>{tr('AWS 리소스를 살펴보세요', 'Explore your AWS resources')}</h1>
         <p className="connection-availability">{ready ? tr('왼쪽에서 서비스를 고르면 탭으로 열립니다.', 'Pick a service on the left to open it in a tab.') : tr('왼쪽에서 AWS 프로필과 리전을 선택하세요.', 'Choose an AWS profile and region on the left.')}</p>

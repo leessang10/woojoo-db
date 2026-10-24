@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, LockKeyhole, UnlockKeyhole, X } from 'lucide-react';
 import { ModalSurface } from '@/components/ModalSurface';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,14 +44,22 @@ export function actionsFor(service: AwsService, row: AwsRow): ActionSpec[] {
 }
 
 export function ResourceActions({ tab, row, onDone }: { tab: AwsTab; row: AwsRow; onDone: () => void }) {
+  return <ResourceActionList key={JSON.stringify([tab.profile, tab.region, tab.service, resourceId(tab.service!, row)])} tab={tab} row={row} onDone={onDone}/>;
+}
+
+function ResourceActionList({ tab, row, onDone }: { tab: AwsTab; row: AwsRow; onDone: () => void }) {
   const { language } = useLanguage(); const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
   const [open, setOpen] = useState<ActionSpec>();
+  const [unlocked, setUnlocked] = useState<AwsAction>();
   const service = tab.service!, actions = actionsFor(service, row);
   return <div className="aws-detail-body">
-    <p className="aws-snapshot-note">{tr('작업은 실행 전에 대상 계정과 명령을 보여주고, 리소스 이름을 입력해야 실행됩니다. 실행은 선택한 프로필의 IAM 권한으로 이루어집니다.', 'Each change shows the target account and command first and runs only after you type the resource name. It runs with the selected profile’s IAM permissions.')}</p>
+    <p className="aws-snapshot-note">{tr('대상과 명령을 검토한 뒤 리소스 이름을 입력해 실행합니다.', 'Review the target and command, then enter the resource name to confirm.')}</p>
     <div className="aws-action-list">{actions.map(spec => <div key={spec.action} className="aws-action-row" data-danger={!!spec.danger}>
       <div><strong>{tr(...spec.label)}</strong><p>{tr(...spec.description)}</p></div>
-      <Button variant={spec.danger ? 'destructive' : 'outline'} size="sm" onClick={() => setOpen(spec)}>{tr(...spec.label)}…</Button>
+      {spec.danger && <Button type="button" variant="outline" size="sm" aria-pressed={unlocked === spec.action} onClick={() => setUnlocked(unlocked === spec.action ? undefined : spec.action)}>
+        {unlocked === spec.action ? <UnlockKeyhole size={14}/> : <LockKeyhole size={14}/>}{unlocked === spec.action ? tr('다시 잠그기', 'Lock again') : tr('삭제 잠금 해제', 'Unlock deletion')}
+      </Button>}
+      <Button variant={spec.danger ? 'destructive' : 'outline'} size="sm" disabled={!!spec.danger && unlocked !== spec.action} onClick={() => { setUnlocked(undefined); setOpen(spec); }}>{tr(...spec.label)}…</Button>
     </div>)}</div>
     {open && <ActionDialog tab={tab} row={row} spec={open} onClose={() => setOpen(undefined)} onDone={onDone}/>}
   </div>;
@@ -70,7 +78,7 @@ function ActionDialog({ tab, row, spec, onClose, onDone }: { tab: AwsTab; row: A
     catch (reason) { fail(reason); } finally { setBusy(false); }
   }
   async function run() {
-    if (!review) return;
+    if (!review || busy || done || !review.phrase || phrase !== review.phrase) return;
     setBusy(true); setError('');
     try { await awsRunAction(review.review, phrase); setDone(true); onDone(); }
     catch (reason) { const code = String(reason); fail(reason); if (code === 'AWS_REVIEW_EXPIRED' || code === 'AWS_ACCOUNT_CHANGED') setReview(undefined); }
@@ -80,22 +88,22 @@ function ActionDialog({ tab, row, spec, onClose, onDone }: { tab: AwsTab; row: A
   return <ModalSurface title={title} onClose={close} locked={busy}><form className="modal aws-action-modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={event => { event.preventDefault(); if (done) close(); else if (review) void run(); else void prepare(); }}>
     <div className="modal-heading"><h2>{title}</h2><Button type="button" variant="ghost" size="icon-sm" disabled={busy} aria-label={t('닫기')} onClick={close}><X size={18}/></Button></div>
     <p className="modal-description">{tr(...spec.description)}</p>
-    {spec.danger && <p className="production-warning" role="note"><AlertTriangle size={14}/>{tr('되돌릴 수 없는 작업입니다.', 'This cannot be undone.')}</p>}
+    {spec.danger && <p className="production-warning" role="note"><AlertTriangle size={14}/>{tr('삭제하면 되돌릴 수 없습니다. 정말로 삭제하시겠습니까? 리소스 이름을 적어주세요.', 'Deletion cannot be undone. Are you sure you want to delete this resource? Type the resource name to confirm.')}</p>}
     {spec.field && <label>{tr(...spec.field.label)}{spec.field.options
       ? <NativeSelect aria-label={tr(...spec.field.label)} value={value} disabled={!!review || busy} onChange={event => setValue(event.target.value)}>{spec.field.options.map(([option, ko, en]) => <NativeSelectOption key={option} value={option}>{tr(ko, en)}</NativeSelectOption>)}</NativeSelect>
       : <Input aria-label={tr(...spec.field.label)} value={value} placeholder={spec.field.placeholder} disabled={!!review || busy} onChange={event => setValue(event.target.value)}/>}</label>}
     {review && !done && <>
-      <p className="modal-description">{tr(`AWS 계정 ${review.account} · 프로필 ${tab.profile} · ${tab.region}에서 다음 명령을 실행합니다.`, `Runs the following in AWS account ${review.account} · profile ${tab.profile} · ${tab.region}.`)}</p>
+      <p className="modal-description">{tr(`AWS 계정 ${review.account}\n프로필 ${tab.profile} · ${tab.region}`, `AWS account ${review.account}\nProfile ${tab.profile} · ${tab.region}`)}</p>
       <pre className="aws-action-command">{review.command}</pre>
       <label>{tr('확인을 위해 리소스 이름을 입력하세요', 'Type the resource name to confirm')} <code className="aws-confirm-phrase">{review.phrase}</code><Input aria-label={tr('확인 문구', 'Confirmation')} autoFocus autoComplete="off" value={phrase} disabled={busy} onChange={event => setPhrase(event.target.value)}/></label>
       <p className="field-hint">{tr('검토는 5분 뒤 만료됩니다.', 'The review expires in 5 minutes.')}</p>
     </>}
-    {done && <p className="dialog-message" role="status" data-kind="success"><Check size={14}/> {tr('요청을 보냈습니다. 상태가 바뀌는 데 시간이 걸릴 수 있으니 목록을 새로고침해 확인하세요.', 'Request sent. State changes can take a while; refresh the list to check.')}</p>}
+    {done && <p className="dialog-message" role="status" data-kind="success"><Check size={14}/> {tr('요청을 보냈습니다. 잠시 후 목록을 새로고침하세요.', 'Request sent. Refresh the list shortly to check the status.')}</p>}
     {error && <p className="dialog-error" role="alert">{error}</p>}
     <div className="modal-actions">
       {done ? <Button type="submit" size="sm">{t('확인')}</Button> : <>
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={review ? () => { void awsCancelAction(review.review); setReview(undefined); } : close}>{review ? tr('돌아가기', 'Back') : t('취소')}</Button>
-        {review ? <Button type="submit" size="sm" variant={spec.danger ? 'destructive' : 'default'} disabled={busy || phrase !== review.phrase}>{busy && <Loader2 size={13} className="spin"/>}{tr('실행', 'Run')}</Button>
+        {review ? <Button type="submit" size="sm" variant={spec.danger ? 'destructive' : 'default'} disabled={busy || !review.phrase || phrase !== review.phrase}>{busy && <Loader2 size={13} className="spin"/>}{spec.danger ? tr('영구 삭제', 'Permanently delete') : tr('실행', 'Run')}</Button>
           : <Button type="submit" size="sm" disabled={busy || (!!spec.field && !value.trim())}>{busy && <Loader2 size={13} className="spin"/>}{tr('검토', 'Review')}</Button>}
       </>}
     </div>

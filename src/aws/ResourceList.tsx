@@ -1,3 +1,4 @@
+import { SortableTable } from '../components/SortableTable';
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, RefreshCw, Search, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -65,16 +66,16 @@ export function ResourceList({ tab, revision, selected, onSelect, onOpen }: { ta
     </div>
     <AwsError error={error} profile={tab.profile} onRetry={() => void load()}/>
     <div className="grid-scroll" aria-busy={busy}>
-      <table className="data-grid aws-grid">
+      <SortableTable className="data-grid aws-grid">
         <thead><tr>{labels.map(([ko, en]) => <th key={en}><div><strong>{tr(ko, en)}</strong></div></th>)}</tr></thead>
         <tbody>{filtered.map(item => <tr key={item.id} tabIndex={0} aria-selected={selected === item.id} data-selected={selected === item.id} onClick={() => onSelect(item.row)} onDoubleClick={() => onOpen(item.row)} onKeyDown={event => { if (event.key === 'Enter') onOpen(item.row); else if (event.key === ' ') { event.preventDefault(); onSelect(item.row); } }}>
-          {item.cells.map((value, index) => <td key={index} title={value}>{index === 1 && hasState(service) ? <span className="aws-state" data-state={value}>{value}</span> : value}</td>)}
+          {item.cells.map((value, index) => <td key={index} title={value} data-sort-value={service === "s3" && index === 2 ? (item.row.CreationDate ? Date.parse(item.row.CreationDate) : undefined) : service === "logs" && index === 1 ? item.row.retentionInDays : service === "logs" && index === 2 ? (item.row.storedBytes ?? 0) : service === "logs" && index === 3 ? item.row.creationTime : value}>{index === 1 && hasState(service) ? <span className="aws-state" data-state={value}>{value}</span> : value}</td>)}
         </tr>)}</tbody>
-      </table>
+      </SortableTable>
       {busy && !page.rows.length && <div className="empty-result" role="status"><Loader2 size={22} className="spin"/><p>{tr('AWS CLI로 조회하는 중…', 'Querying with AWS CLI…')}</p></div>}
       {!busy && !error && page.updated > 0 && !page.rows.length && <div className="empty-result"><Server size={28}/><h3>{tr('리소스가 없습니다', 'No resources')}</h3><p>{tr(`${tab.region} 리전에 표시할 항목이 없습니다.`, `Nothing to show in ${tab.region}.`)}</p></div>}
       {page.rows.length > 0 && !filtered.length && <div className="empty-result"><Search size={24}/><p>{tr('일치하는 리소스가 없습니다.', 'No matching resources.')}</p></div>}
     </div>
-    <div className="result-footer"><span>{tr('행을 선택하면 오른쪽 패널에 요약을, 더블클릭하면 상세 탭을 엽니다.', 'Select a row for a summary in the right panel; double-click for a detail tab.')}</span>{page.nextToken && <Button variant="outline" size="xs" disabled={busy} onClick={() => void load(true)}>{busy ? <Loader2 size={12} className="spin"/> : null}{tr('더 불러오기', 'Load more')}</Button>}</div>
+    <div className="result-footer"><span>{tr('클릭: 요약 · 더블클릭: 상세', 'Click: summary · Double-click: details')}</span>{page.nextToken && <Button variant="outline" size="xs" disabled={busy} onClick={() => void load(true)}>{busy ? <Loader2 size={12} className="spin"/> : null}{tr('더 불러오기', 'Load more')}</Button>}</div>
   </section>;
 }

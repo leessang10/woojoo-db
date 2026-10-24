@@ -1,3 +1,4 @@
+import { SortableTable } from '../components/SortableTable';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, Copy, Database, FileText, Folder, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -92,11 +93,11 @@ function S3Browser({ tab, bucket, revision }: { tab: AwsTab; bucket: string; rev
     </div>
     <AwsError error={browse.error} profile={tab.profile} onRetry={() => open(prefix)}/>
     <div className="grid-scroll">
-      <table className="data-grid aws-grid"><thead><tr><th><div><strong>{tr('이름', 'Name')}</strong></div></th><th><div><strong>{tr('크기', 'Size')}</strong></div></th><th><div><strong>{tr('수정일', 'Modified')}</strong></div></th><th><div><strong>{tr('스토리지 클래스', 'Storage class')}</strong></div></th></tr></thead>
+      <SortableTable className="data-grid aws-grid"><thead><tr><th><div><strong>{tr('이름', 'Name')}</strong></div></th><th><div><strong>{tr('크기', 'Size')}</strong></div></th><th><div><strong>{tr('수정일', 'Modified')}</strong></div></th><th><div><strong>{tr('스토리지 클래스', 'Storage class')}</strong></div></th></tr></thead>
         <tbody>{browse.rows.map(row => row.kind === 'folder'
           ? <tr key={'d' + row.Prefix} tabIndex={0} className="aws-folder" onDoubleClick={() => open(row.Prefix)} onKeyDown={event => { if (event.key === 'Enter') open(row.Prefix); }} onClick={() => open(row.Prefix)}><td><Folder size={14}/> {String(row.Prefix).slice(prefix.length)}</td><td>—</td><td>—</td><td>—</td></tr>
-          : <tr key={'f' + row.Key}><td title={row.Key}><FileText size={14}/> {String(row.Key).slice(prefix.length) || row.Key}</td><td>{formatBytes(row.Size ?? 0)}</td><td>{formatDate(row.LastModified, language)}</td><td>{row.StorageClass ?? '—'}</td></tr>)}</tbody>
-      </table>
+          : <tr key={'f' + row.Key}><td title={row.Key}><FileText size={14}/> {String(row.Key).slice(prefix.length) || row.Key}</td><td data-sort-value={row.Size ?? 0}>{formatBytes(row.Size ?? 0)}</td><td data-sort-value={row.LastModified ? Date.parse(row.LastModified) : undefined}>{formatDate(row.LastModified, language)}</td><td>{row.StorageClass ?? '—'}</td></tr>)}</tbody>
+      </SortableTable>
       {browse.busy && !browse.rows.length && <div className="empty-result" role="status"><Loader2 size={22} className="spin"/></div>}
       {browse.loaded && !browse.busy && !browse.error && !browse.rows.length && <div className="empty-result"><Folder size={26}/><p>{tr('이 경로에 객체가 없습니다.', 'No objects at this path.')}</p></div>}
     </div>

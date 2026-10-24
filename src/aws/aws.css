@@ -81,3 +81,5 @@
 .aws-action-row{display:flex;align-items:center;gap:16px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--surface)}.aws-action-row:last-child{border-bottom:0}
 .aws-action-row>div{flex:1;min-width:0}.aws-action-row strong{font-size:13px;font-weight:600}.aws-action-row p{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--muted-foreground)}
 .aws-action-row[data-danger=true] strong{color:var(--error-text)}
+
+.aws-note,.aws-snapshot-note,.aws-panel-empty,.aws-error{word-break:keep-all;overflow-wrap:anywhere}
