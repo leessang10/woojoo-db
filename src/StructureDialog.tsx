@@ -78,7 +78,7 @@ export function StructureDialog({ action, session, engine, onClose, onApplied }:
       {dropping&&<label>{t('삭제 대상 이름 입력')}<Input aria-label={t('삭제 대상 이름 입력')} placeholder={confirmName} value={confirmation} disabled={pending} onChange={e=>setConfirmation(e.target.value)}/></label>}</>}
     {error&&<p role="alert" className="dialog-error">{error}</p>}
     <div className="modal-actions"><Button variant="outline" size="sm" className="secondary-button" disabled={pending} onClick={onClose}>{t('취소')}</Button>
-      {plan?<Button variant="default" size="sm" className="primary-button" disabled={pending||(dropping&&confirmation!==confirmName)} onClick={()=>void apply()}>{t(pending?'적용 중...':'구조 변경 적용')}</Button>
+      {plan?<Button variant={dropping ? "destructive" : "default"} size="sm" className={dropping ? undefined : "primary-button"} disabled={pending||(dropping&&confirmation!==confirmName)} onClick={()=>void apply()}>{t(pending?'적용 중...':dropping?(tableAction?'테이블 삭제':'컬럼 삭제'):'구조 변경 적용')}</Button>
         :<Button variant="default" size="sm" className="primary-button" disabled={pending} onClick={()=>void preview()}>{t(pending?'처리 중…':'SQL 검토')}</Button>}
     </div>
   </div></ModalSurface>;

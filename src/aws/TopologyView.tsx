@@ -53,7 +53,7 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
   async function collect() {
     const id = ++epoch.current; stop(); clearPublish();
     const active = () => epoch.current === id;
-    setBusy(true); setError(''); setMessage(''); setSelected(undefined);
+    setBusy(true); setError(''); setMessage('');
     try {
       const read = async (kind: string, resource?: string, nextToken?: string) => {
         const request = requestId(); running.current.add(request);
@@ -65,7 +65,7 @@ function Topology({ tab, revision, theme }: { tab: AwsTab; revision: number; the
         pending.current = snapshot;
         if (publishTimer.current === undefined) publishTimer.current = setTimeout(() => { if (active()) flushPublish(); }, 750);
       });
-      if (active()) { clearPublish(); setInventory(result); }
+      if (active()) { clearPublish(); setInventory(result); setSelected(current => current ? buildTopology(result).nodes.find(node => node.id === current.id) ?? (result.warnings.length ? current : undefined) : undefined); }
     } catch (reason) {
       if (active()) setError(String(reason instanceof Error ? reason.message : reason));
     } finally {

@@ -274,7 +274,7 @@ const SPEC_KEYS: (keyof RequestSpec)[] = ['method', 'url', 'params', 'headers', 
 export const sameSpec = (a: RequestSpec, b: RequestSpec) => SPEC_KEYS.every(key => JSON.stringify(a[key]) === JSON.stringify(b[key]));
 
 // --- Tabs -------------------------------------------------------------------------
-export type ApiTab = { id: string; requestId: string | null; name: string; collectionId: string | null; spec: RequestSpec; saved: RequestSpec | null; historyId?: string };
+export type ApiTab = { customTitle?: string; id: string; requestId: string | null; name: string; collectionId: string | null; spec: RequestSpec; saved: RequestSpec | null; historyId?: string };
 const TABS_KEY = 'woojoo-api-tabs-v1';
 export function readApiTabs(): { tabs: ApiTab[]; active: string } {
   try {

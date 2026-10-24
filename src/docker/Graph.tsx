@@ -29,7 +29,7 @@ function ProjectNode({ data }: NodeProps<GroupNode>) {
 }
 const nodeTypes = { docker: ResourceNode, projectGroup: ProjectNode };
 function layout(items: GraphNode[], edges: Topology['edges']) {
-  const g = new dagre.graphlib.Graph({ multigraph: true }); g.setGraph({ rankdir: 'LR', nodesep: 32, ranksep: 110 }); g.setDefaultEdgeLabel(() => ({}));
+  const g = new dagre.graphlib.Graph({ multigraph: true }); g.setGraph({ rankdir: 'LR', nodesep: 32, ranksep: 180 }); g.setDefaultEdgeLabel(() => ({}));
   items.forEach(n => g.setNode(n.id, { width: 250, height: 110 }));
   edges.forEach(e => g.setEdge(e.source, e.target, {}, e.id)); dagre.layout(g);
   return Object.fromEntries(items.map(n => { const p = g.node(n.id); return [n.id, { x: p.x - 125, y: p.y - 55 }]; }));
@@ -72,11 +72,11 @@ function Canvas({ graph, selected, onSelect, language, theme, storageKey, onReso
   useEffect(() => {
     setNodes(previous => initialNodes.map(n => n.type === 'projectGroup' || groups ? n : { ...n, position: previous.find(p => p.id === n.id)?.position ?? saved.current.positions?.[n.id] ?? n.position }));
   }, [initialNodes, setNodes, groups]);
-  const edges = useMemo(() => graph.edges.map(e => ({ ...e, label: groups && !selected ? undefined : e.label, type: 'smoothstep', style: { stroke: 'var(--muted-foreground)', opacity: !selected || e.source === selected || e.target === selected ? .8 : .13 }, labelStyle: { fill: 'var(--foreground)', fontSize: 11 }, labelBgStyle: { fill: 'var(--background)', fillOpacity: .95 }, labelBgPadding: [6, 4] as [number, number] })), [graph, selected, groups]);
+  const edges = useMemo(() => graph.edges.map(e => ({ ...e, label: groups && !selected ? undefined : <tspan><title>{e.label}</title>{e.label.length > 20 ? e.label.slice(0, 17) + '…' : e.label}</tspan>, type: 'smoothstep', style: { stroke: 'var(--muted-foreground)', opacity: !selected || e.source === selected || e.target === selected ? .8 : .13 }, labelStyle: { fill: 'var(--foreground)', fontSize: 11 }, labelBgStyle: { fill: 'var(--background)', fillOpacity: .95 }, labelBgPadding: [6, 4] as [number, number] })), [graph, selected, groups]);
   const groupShape = groups ? initialNodes.map(n => n.id).join('|') : '';
   useEffect(() => {
     if (!groupShape) return;
-    const timer = setTimeout(() => { void flow.fitView({ padding: .15, minZoom: .55, maxZoom: .9, duration: 150 }); }, 80);
+    const timer = setTimeout(() => { void flow.fitView({ padding: .15, minZoom: .15, maxZoom: .9, duration: 150 }); }, 80);
     return () => clearTimeout(timer);
   }, [groupShape, flow]);
   function save(viewport = flow.getViewport()) {
@@ -112,7 +112,7 @@ function Canvas({ graph, selected, onSelect, language, theme, storageKey, onReso
       <Button variant="outline" size="icon-sm" title={tr('미니맵', 'Minimap')} aria-label={tr('미니맵', 'Minimap')} aria-pressed={minimap} onClick={() => setMinimap(value => { try { localStorage.setItem('woojoo-docker-minimap', String(!value)); } catch { /* Session only. */ } return !value; })}><MapIcon size={14}/></Button>
       <Button variant="outline" size="icon-sm" title={tr('배치 초기화', 'Reset layout')} aria-label={tr('배치 초기화', 'Reset layout')} onClick={() => arrange(true)}><RotateCcw size={14}/></Button>
     </div>
-    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(_, n) => { if (n.type === 'docker') onSelect(n.id); }} onNodeContextMenu={(event, n) => { if (n.type === 'docker' && onResourceMenu) onResourceMenu(event, n.data.item); else canvasMenu(event); }} onPaneClick={() => onSelect('')} onNodeDragStop={() => save()} onMove={(_, viewport) => setZoom(viewport.zoom)} onMoveEnd={(_, viewport) => save(viewport)} defaultViewport={saved.current.viewport} fitView={!saved.current.viewport} fitViewOptions={{ padding: .15, minZoom: .65, maxZoom: 1 }} minZoom={.15} maxZoom={1.8} nodesConnectable={false} deleteKeyCode={null} colorMode={theme === 'dark' ? 'dark' : 'light'}>
+    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onNodeClick={(_, n) => { if (n.type === 'docker') onSelect(n.id); }} onNodeContextMenu={(event, n) => { if (n.type === 'docker' && onResourceMenu) onResourceMenu(event, n.data.item); else canvasMenu(event); }} onPaneClick={() => onSelect('')} onNodeDragStop={() => save()} onMove={(_, viewport) => setZoom(viewport.zoom)} onMoveEnd={(_, viewport) => save(viewport)} defaultViewport={saved.current.viewport} fitView={!saved.current.viewport} fitViewOptions={{ padding: .15, minZoom: .15, maxZoom: 1 }} minZoom={.15} maxZoom={1.8} nodesConnectable={false} deleteKeyCode={null} colorMode={theme === 'dark' ? 'dark' : 'light'}>
       <Background gap={22} size={1}/>{minimap && <MiniMap pannable zoomable nodeColor="var(--muted-foreground)"/>}
     </ReactFlow>
     {!graph.nodes.length && !groups?.length && <div className="docker-graph-empty">{tr('표시할 리소스가 없습니다.', 'No resources to display.')}</div>}

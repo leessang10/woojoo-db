@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror, { EditorView, Prec, keymap } from '@uiw/react-codemirror';
 import { json as jsonLanguage } from '@codemirror/lang-json';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -46,7 +46,12 @@ export function RequestPanel({ tab, variables, result, theme, dirty, onChange, o
     ['params', tr('파라미터', 'Params'), count(spec.params)], ['headers', tr('헤더', 'Headers'), count(spec.headers)],
     ['body', tr('본문', 'Body')], ['auth', tr('인증', 'Auth')], ['options', tr('설정', 'Settings')],
   ];
-  const copyCurl = () => void navigator.clipboard?.writeText(toCurl(buildOutgoing(spec, variables).outgoing)).catch(() => {});
+  const [copyNotice, setCopyNotice] = useState('');
+  useEffect(() => { if (copyNotice !== tr('복사했습니다', 'Copied')) return; const timer = setTimeout(() => setCopyNotice(''), 2500); return () => clearTimeout(timer); }, [copyNotice, language]);
+  async function copyCurl() {
+    try { await navigator.clipboard.writeText(toCurl(buildOutgoing(spec, variables).outgoing)); setCopyNotice(tr('복사했습니다', 'Copied')); }
+    catch { setCopyNotice(tr('복사하지 못했습니다. 다시 시도하세요.', 'Could not copy. Try again.')); }
+  }
   const auth = spec.auth, setAuth = (value: Partial<typeof auth>) => patch({ auth: { ...auth, ...value } });
   const body = spec.body, setBody = (value: Partial<typeof body>) => patch({ body: { ...body, ...value } });
   const editorTheme = theme === 'dark' ? oneDark : 'light';
@@ -63,6 +68,7 @@ export function RequestPanel({ tab, variables, result, theme, dirty, onChange, o
         : <Button type="submit" size="sm" className="api-send" disabled={!spec.url.trim()} title={tr('보내기', 'Send') + ' · Ctrl/Cmd+Enter'}><Send size={13}/>{tr('보내기', 'Send')}</Button>}
       <Button type="button" variant="default" size="sm" title={tr('저장', 'Save') + ' · Ctrl/Cmd+S'} onClick={onSave}><Save size={13}/>{tr('저장', 'Save')}{dirty && <span className="api-dirty" aria-label={tr('저장 안 됨', 'Unsaved')}/>}</Button>
     </form>
+    {copyNotice && <div className="api-copy-notice" role="status"><span>{copyNotice}</span><Button variant="ghost" size="icon-sm" aria-label={tr("알림 닫기", "Dismiss notification")} onClick={() => setCopyNotice('')}>×</Button></div>}
     {missing.length > 0 && <p className="api-missing" role="status"><AlertTriangle size={13}/>{tr('정의되지 않은 변수', 'Undefined variables')}: {missing.map(name => `{{${name}}}`).join(', ')}</p>}
     <div className="api-split" ref={area} style={{ gridTemplateRows: `minmax(80px,${split}fr) 6px minmax(80px,${1 - split}fr)` }}>
       <section className="api-config">
@@ -112,7 +118,12 @@ export function RequestPanel({ tab, variables, result, theme, dirty, onChange, o
           </div>}
         </div>
       </section>
-      <div className="api-resizer" role="separator" aria-orientation="horizontal" aria-label={tr('요청과 응답 크기 조절', 'Resize request and response')} onPointerDown={dragSplit}/>
+      <div className="api-resizer" role="separator" aria-orientation="horizontal" aria-label={tr('요청과 응답 크기 조절', 'Resize request and response')} tabIndex={0} aria-valuemin={15} aria-valuemax={85} aria-valuenow={Math.round(split * 100)} onKeyDown={event => {
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? .15 : event.key === 'End' ? .85 : Math.min(.85, Math.max(.15, split + (event.key === 'ArrowUp' ? -.05 : .05)));
+        setSplit(next); try { localStorage.setItem(SPLIT_KEY, String(next)); } catch { /* Session only. */ }
+      }} onPointerDown={dragSplit}/>
       <section className="api-response" aria-label={tr('응답', 'Response')} aria-busy={sending}>
         {sending && !result?.response ? <div className="api-response-empty"><Loader2 size={18} className="spin"/><span>{tr('요청 보내는 중…', 'Sending request…')}</span></div>
           : <ResponseView result={result} theme={theme}/>}

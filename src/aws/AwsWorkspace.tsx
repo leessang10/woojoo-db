@@ -1,3 +1,4 @@
+import { ManagedTab, reorderTabs } from '../components/ManagedTab';
 import { SidebarTitle } from '../components/SidebarTitle';
 import { lazy, Suspense, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { AlertTriangle, Archive, ChevronRight, Cloud, Database, FileText, Loader2, Network, PanelLeftClose, PanelLeftOpen, PanelRight, RefreshCw, Server, X, type LucideIcon } from 'lucide-react';
@@ -146,12 +147,12 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         {ready && <div className="empty-connection-actions">{AWS_SERVICES.map(service => { const Icon = SERVICE_ICONS[service]; return <Button key={service} variant="outline" size="sm" onClick={() => openService(service)}><Icon size={14}/>{serviceLabel[service][language === 'ko' ? 0 : 1]}</Button>; })}<Button variant="outline" size="sm" onClick={openTopology}><Network size={14}/>{tr('인프라 맵', 'Infrastructure map')}</Button></div>}
       </div> : <>
         <div className="tabs"><div className="tab-list" role="tablist" aria-label={tr('AWS 탭', 'AWS tabs')} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
-          {tabs.map(tab => { const [ko, en] = tabTitle(tab); const name = tr(ko, en); const scope = `${tab.profile} · ${tab.region}`; return <div key={tab.id} className={`tab-item ${active?.id === tab.id ? 'active' : ''}`}>
+          {tabs.map(tab => { const [ko, en] = tabTitle(tab); const name = tr(ko, en); const scope = `${tab.profile} · ${tab.region}`; return <ManagedTab key={tab.id} id={tab.id} name={name} active={active?.id === tab.id} ids={tabs.map(t => t.id)} onRename={title => setTabs(previous => previous.map(t => t.id === tab.id ? { ...t, customTitle: title } : t))} onReorder={(source, target, after) => setTabs(previous => reorderTabs(previous, source, target, after))}>
             <Button variant="ghost" size="bare" role="tab" className="tab" id={`aws-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`aws-panel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} title={`${name}\n${scope}`} onClick={() => activate(tab.id)} onAuxClick={event => { if (event.button === 1) close(tab.id); }}
               onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { const index = tabs.findIndex(item => item.id === tab.id), next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]; activate(next.id); document.getElementById(`aws-tab-${next.id}`)?.focus(); } }}>
               {icon(tab)}<span>{name}</span>{(tab.profile !== profile || tab.region !== region) && <small className="aws-tab-scope">{tab.region}</small>}</Button>
             <Button variant="ghost" size="bare" className="tab-close" aria-label={t('탭 닫기 이름', { name })} title={t('탭 닫기')} onClick={() => close(tab.id)}><X size={13}/></Button>
-          </div>; })}
+          </ManagedTab>; })}
         </div></div>
         {tabs.filter(tab => visited.has(tab.id) || tab.id === active?.id).map(tab => <div key={tab.id} className="aws-tab-panel" id={`aws-panel-${tab.id}`} role="tabpanel" aria-labelledby={`aws-tab-${tab.id}`} hidden={tab.id !== active?.id}>
           {tab.kind === 'resources' ? <ResourceList tab={tab} revision={revisions[tab.id] ?? 0} selected={tab.service && selection[tab.id] ? resourceId(tab.service, selection[tab.id]) : undefined} onSelect={row => setSelection(previous => ({ ...previous, [tab.id]: row }))} onOpen={row => openResource(tab, row)}/>

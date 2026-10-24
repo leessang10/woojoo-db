@@ -22,8 +22,8 @@ test('schema and column CRUD with SQL review and deletion confirmation',async({p
  await dialog.getByLabel('컬럼 이름 1',{exact:true}).fill('content');
  await dialog.getByRole('button',{name:'SQL 검토'}).click();await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
  await page.locator('.object-table tbody tr').filter({hasText:'content'}).getByRole('button',{name:'컬럼 삭제: content',exact:true}).click();
- await dialog.getByRole('button',{name:'SQL 검토'}).click();await expect(dialog.getByRole('button',{name:'구조 변경 적용'})).toBeDisabled();
- await page.screenshot({path:'test-results/structure-delete-spacing.png'});await dialog.getByLabel('삭제 대상 이름 입력').fill('content');await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
+ await dialog.getByRole('button',{name:'SQL 검토'}).click();await expect(dialog.getByRole('button',{name:'컬럼 삭제',exact:true})).toBeDisabled();
+ await page.screenshot({path:'test-results/structure-delete-spacing.png'});await dialog.getByLabel('삭제 대상 이름 입력').fill('content');await dialog.getByRole('button',{name:'컬럼 삭제',exact:true}).click();
  await expect(page.locator('.object-table tbody tr')).toHaveCount(1);
  await page.getByRole('tab',{name:'상세',exact:true}).click();
  await page.getByRole('button',{name:'설명 수정',exact:true}).click();await expect(dialog.getByLabel('설명',{exact:true})).toBeFocused();await dialog.getByLabel('설명',{exact:true}).fill('Notes description');await dialog.getByLabel('테이블 이름',{exact:true}).fill('renamed_notes');
@@ -31,7 +31,7 @@ test('schema and column CRUD with SQL review and deletion confirmation',async({p
  await expect(page.getByRole('heading',{name:'renamed_notes',exact:true})).toBeVisible();
  await expect(page.locator('.object-comment')).toContainText('Notes description');
  await page.getByRole('button',{name:'테이블 삭제',exact:true}).click();await dialog.getByRole('button',{name:'SQL 검토'}).click();
- await dialog.getByLabel('삭제 대상 이름 입력').fill('public.renamed_notes');await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
+ await dialog.getByLabel('삭제 대상 이름 입력').fill('public.renamed_notes');await dialog.getByRole('button',{name:'테이블 삭제',exact:true}).click();
  await expect(page.locator('.tree-table')).toHaveCount(1);await expect(page.getByRole('heading',{name:'public',exact:true})).toBeVisible();
 });
 test('pending data edits block schema modification',async({page})=>{

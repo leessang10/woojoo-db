@@ -204,7 +204,7 @@ for (const stopEarly of [true, false]) test(`infrastructure map streams results 
   expect(await viewport.evaluate(el => (el as HTMLElement).style.transform)).toBe(transform);
   if (stopEarly) await page.getByRole('button', { name: '중지', exact: true }).click();
   await page.evaluate(() => (window as any).releaseTopology());
-  await expect(page.locator('.aws-count')).toContainText('EC2 2');
+  await expect(page.locator('.aws-topology .aws-count')).toContainText('EC2 2');
   await expect(page.locator('.react-flow__node').filter({ hasText: 'app-db' })).toHaveCount(1);
   expect(await viewport.evaluate(el => (el as HTMLElement).style.transform)).toBe(transform);
 });
@@ -215,7 +215,7 @@ test('infrastructure map draws VPC, subnet and resources', async ({ page }) => {
   await expect(page.locator('.react-flow__node').filter({ hasText: 'web-1' })).toBeVisible();
   await expect(page.locator('.react-flow__node.infra-vpc')).toBeVisible();
   await expect(page.locator('.react-flow__node.infra-subnet')).toBeVisible();
-  await expect(page.locator('.aws-count')).toContainText('EC2 2');
+  await expect(page.locator('.aws-topology .aws-count')).toContainText('EC2 2');
 });
 
 test('expired SSO credentials show the sign-in command', async ({ page }) => {
@@ -237,4 +237,31 @@ test('AWS headers cycle sorting and restore resource order', async ({ page }) =>
  await header.click(); await expect(header).toHaveAttribute('aria-sort','descending');
  await header.click(); await expect(header).toHaveAttribute('aria-sort','none');
  expect(await table.locator('tbody tr').allTextContents()).toEqual(original);
+});
+
+ test('map refresh keeps the selected resource and tab tools rename and reorder', async ({page}) => {
+  await mock(page);
+  await page.locator('#aws-sidebar').getByRole('button',{name:'인프라 맵'}).click();
+  await expect(page.locator('.aws-topology .aws-count')).toContainText('EC2 2');
+  await page.locator('.react-flow__node').filter({hasText:'web-1'}).click();
+  await page.getByRole('button',{name:'다시 수집',exact:true}).click();
+  await expect(page.getByRole('complementary',{name:'선택한 리소스'})).toContainText('web-1');
+  await expect(page.locator('.aws-topology .aws-count')).toContainText('EC2 2');
+  await page.getByRole('button',{name:'인프라 맵 · 탭 메뉴',exact:true}).click();
+  await page.getByRole('menuitem',{name:'이름 바꾸기'}).click();
+  await page.getByRole('dialog').getByLabel('이름',{exact:true}).fill('Map overview');
+  await page.getByRole('dialog').getByRole('button',{name:'저장',exact:true}).click();
+  await expect(page.getByRole('tab',{name:'Map overview',exact:true})).toBeVisible();
+ });
+
+for(const language of ['ko','en']) for(const theme of ['light','dark']) test('AWS minimum layout '+language+' '+theme,async({page},testInfo)=>{
+ await page.setViewportSize({width:960,height:640});
+ await page.addInitScript(({language,theme})=>{localStorage.setItem('woojoo-language',language);localStorage.setItem('woojoo-theme',theme);},{language,theme});
+ await mock(page);const ko=language==='ko';
+ await page.locator('#aws-sidebar').getByRole('button',{name:ko?'EC2 인스턴스':'EC2 instances'}).click();
+ await expect(page.locator('.aws-grid')).toContainText('web-1');
+ await page.screenshot({path:testInfo.outputPath('aws-list.png'),animations:'disabled'});
+ await page.locator('#aws-sidebar').getByRole('button',{name:ko?'인프라 맵':'Infrastructure map'}).click();
+ await expect(page.locator('.aws-topology .aws-count')).toContainText('EC2 2');
+ await page.screenshot({path:testInfo.outputPath('aws-map.png'),animations:'disabled'});
 });

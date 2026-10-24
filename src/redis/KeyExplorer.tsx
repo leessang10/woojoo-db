@@ -17,9 +17,10 @@ export function KeyTree({ keys, separator, onOpen, selected }: { keys: KeyMeta[]
   const tree = useMemo(() => prefixTree(keys, separator), [keys, separator]); const [count, setCount] = useState(100);
   return <div className="redis-key-tree">{tree.slice(0, count).map(node => <Branch key={node.id} node={node} selected={selected} onOpen={onOpen}/>)}{tree.length > count && <button onClick={() => setCount(n => n + 100)}>+100</button>}</div>;
 }
-export function KeyExplorer({ keys, selected, onOpen, complete, busy }: { keys: KeyMeta[]; selected: string; onOpen: (key: KeyMeta) => void; complete: boolean; busy: boolean }) {
+export function KeyExplorer({ keys, selected, onOpen, complete, busy, scope }: { scope: string; keys: KeyMeta[]; selected: string; onOpen: (key: KeyMeta) => void; complete: boolean; busy: boolean }) {
   const { language } = useLanguage(); const ko = language === 'ko'; const [page, setPage] = useState(0);
-  useEffect(() => setPage(0), [keys]);
+  useEffect(() => setPage(0), [scope]);
+  useEffect(() => { if (!busy) setPage(p => Math.min(p, Math.max(0, Math.ceil(keys.length / 200) - 1))); }, [keys.length, busy]);
   const shown = keys.slice(page * 200, (page + 1) * 200);
   return <div className="redis-key-list" data-testid="redis-key-list" aria-busy={busy}>
     {keys.length > 200 && <p className="redis-muted redis-sort-note">{ko ? '정렬: 현재 페이지' : 'Sort: current page'}</p>}

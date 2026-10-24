@@ -83,3 +83,16 @@ export function appendLogs(previous: string[], incoming: string[]): { lines: str
   // A single oversized entry is discarded rather than slicing through UTF-8.
   return { lines: lines.slice(start), truncated };
 }
+
+/** The same availability rule is used by the menu, inspector and execution guard. */
+export function removalBlock(node: GraphNode, snapshot: Snapshot, language: string): string {
+  if (!snapshot.complete) return text(language, '리소스 조회를 완료한 뒤 다시 시도하세요.', 'Wait for a complete resource scan.');
+  if (isDefaultNetwork(node)) return text(language, '기본 네트워크는 삭제할 수 없습니다.', 'Default networks cannot be deleted.');
+  if (node.container && !['created', 'exited', 'dead'].includes(node.container.state)) return text(language, '컨테이너를 먼저 중지하세요.', 'Stop the container first.');
+  if (['volume', 'image', 'network'].includes(node.kind)) {
+    const graph = buildGraph(snapshot, '*', language);
+    const containers = new Set(graph.nodes.filter(n => n.kind === 'container').map(n => n.id));
+    if (graph.edges.some(e => e.source === node.id && containers.has(e.target) || e.target === node.id && containers.has(e.source))) return text(language, '컨테이너에서 사용 중입니다. 참조를 먼저 제거하세요.', 'Used by a container. Remove its references first.');
+  }
+  return '';
+}

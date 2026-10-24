@@ -506,3 +506,6 @@ p.empty-tree{flex-direction:row;align-items:center}
 
 /* Readable prose without changing code, tables or editable values. */
 .modal-description,.connection-availability,.field-hint,.credential-note,.dialog-message,.dialog-error,.dw-dialog>p{word-break:keep-all;overflow-wrap:anywhere;white-space:pre-line}
+
+.tab-more{width:24px;min-width:24px;height:28px;align-self:center;color:var(--muted-foreground)}
+.tab-item.drop-before{box-shadow:inset 2px 0 var(--primary)}.tab-item.drop-after{box-shadow:inset -2px 0 var(--primary)}

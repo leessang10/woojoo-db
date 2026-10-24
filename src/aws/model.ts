@@ -77,6 +77,7 @@ let requests = 0;
 export const requestId = () => `aws-${Date.now().toString(36)}-${++requests}`;
 
 export type AwsTab = {
+  customTitle?: string;
   id: string;
   kind: 'resources' | 'resource' | 'topology';
   profile: string;
@@ -88,6 +89,7 @@ export type AwsTab = {
 export const tabKey = (tab: Pick<AwsTab, 'kind' | 'profile' | 'region' | 'service' | 'row'>) =>
   JSON.stringify([tab.kind, tab.profile, tab.region, tab.service ?? '', tab.service && tab.row ? resourceId(tab.service, tab.row) : '']);
 export function tabTitle(tab: AwsTab) {
+  if (tab.customTitle) return [tab.customTitle, tab.customTitle] as [string, string];
   if (tab.kind === 'topology') return ['인프라 맵', 'Infrastructure map'] as [string, string];
   if (tab.kind === 'resource' && tab.service && tab.row) { const name = resourceName(tab.service, tab.row); return [name, name] as [string, string]; }
   const label = serviceShort[tab.service ?? 'ec2'];

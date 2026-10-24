@@ -39,7 +39,7 @@ async function setup(page: Page, scenario = 'normal') {
           if (scenario === 'delayed' && args.context === 'local') await new Promise(resolve => setTimeout(resolve, 700));
           return { context: args.context, complete: scenario !== 'partial', warnings: scenario === 'partial' ? ['volume: denied'] : [],
             images: [{ id: 'img', name: 'postgres:16', project: '', detail: '248 MB' }], volumes: [{ id: 'data', name: 'app_data', project: 'app', detail: '/docker/volumes/data' }, { id: 'old', name: 'old_volume', project: 'old-project', detail: '' }], networks: [{ id: 'net', name: 'app_default', project: 'app', detail: 'bridge' }, ...(scenario === 'default-networks' ? ['bridge', 'host', 'none'].map(name => ({id:name,name,project:'',detail:name})) : [])],
-            containers: [{ id, name: args.context === 'remote' ? 'remote-db' : 'local-db', imageId: 'img', image: 'postgres:16', project: scenario === 'standalone' ? '' : 'app', service: 'db', state: 'running', health: '', exitCode: 0, oom: false, error: '', finishedAt: '', restartCount: 2, healthOutput: '', networkMode: 'app_default', ports: [{ privatePort: '5432/tcp', hostIp: '127.0.0.1', hostPort: '15432' }, { privatePort: '80/tcp', hostIp: '', hostPort: '' }], mounts: [{ kind: 'volume', name: 'data', source: '/docker/data', target: '/data', rw: true }, { kind: 'bind', name: '', source: '/host/uploads', target: '/app/uploads', rw: false }], networks: [{ id: 'net', name: 'app_default', ip: '172.18.0.2' }] }] };
+            containers: [{ id, name: args.context === 'remote' ? 'remote-db' : 'local-db', imageId: 'img', image: 'postgres:16', project: scenario === 'standalone' ? '' : 'app', service: 'db', state: scenario === 'stopped' ? 'exited' : 'running', health: '', exitCode: 0, oom: false, error: '', finishedAt: '', restartCount: 2, healthOutput: '', networkMode: 'app_default', ports: [{ privatePort: '5432/tcp', hostIp: '127.0.0.1', hostPort: '15432' }, { privatePort: '80/tcp', hostIp: '', hostPort: '' }], mounts: [{ kind: 'volume', name: 'data', source: '/docker/data', target: '/data', rw: true }, { kind: 'bind', name: '', source: '/host/uploads', target: '/app/uploads', rw: false }], networks: [{ id: 'net', name: 'app_default', ip: '172.18.0.2' }] }] };
         }
         if (command === 'docker_logs_start') {
           args.onEvent.onmessage({ subscription: args.subscription, lines: ['2026-10-25 ready', 'ERROR example diagnostic'], truncated: false, done: false, error: null });
@@ -244,11 +244,24 @@ test('Compose wizard generates a persistent service and never starts it on save'
 });
 
 test('resource removal requires confirmation and retains exact context and id', async ({ page }, testInfo) => {
-  await setup(page); await selectDb(page);
+  await setup(page, 'stopped'); await selectDb(page);
   await page.locator('.docker-details').getByRole('button', { name: '리소스 삭제' }).click();
   await expect(page.getByRole('alertdialog')).toContainText('연결된 볼륨은 보존');
   await page.getByRole('alertdialog').screenshot({ path: testInfo.outputPath('container-remove-copy.png') });
-  await page.getByRole('alertdialog').getByRole('button', { name: '삭제', exact: true }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.getByRole('button', {name:'삭제', exact:true})).toBeDisabled();
+  await dialog.getByRole('button', {name:'삭제 잠금 해제'}).click();
+  await dialog.getByLabel('삭제 대상 이름').fill('wrong');
+  await expect(dialog.getByRole('button', {name:'삭제', exact:true})).toBeDisabled();
+  await dialog.getByLabel('삭제 대상 이름').fill('local-db');
+  await dialog.getByRole('button', {name:'다시 잠그기'}).click();
+  await expect(dialog.getByRole('button', {name:'삭제', exact:true})).toBeDisabled();
+  await dialog.getByRole('button', {name:'취소',exact:true}).click();
+  expect(await calls(page,'docker_resource_remove')).toHaveLength(0);
+  await page.locator('.docker-details').getByRole('button', { name: '리소스 삭제' }).click();
+  await dialog.getByRole('button', {name:'삭제 잠금 해제'}).click();
+  await dialog.getByLabel('삭제 대상 이름').fill('local-db');
+  await dialog.getByRole('button', {name:'삭제', exact:true}).click();
   await expect.poll(() => calls(page, 'docker_resource_remove')).toEqual([{ command: 'docker_resource_remove', args: { context: 'local', kind: 'container', id } }]);
 });
 test('missing Compose files can be unlinked without reading the missing source', async ({ page }) => {
@@ -429,10 +442,16 @@ test('context deletion uses the clicked volume instead of the selected container
   await page.locator('.docker-node.kind-volume').click({ button: 'right' });
   const remove = page.getByRole('menuitem', { name: '리소스 삭제', exact: true });
   await expect(remove).toHaveAttribute('data-variant', 'destructive');
-  await remove.click();
+  await expect(remove).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', {name:'old-project'}).click();
+  await page.locator('.docker-node.kind-volume').click({button:'right'});
+  await page.getByRole('menuitem', {name:'리소스 삭제',exact:true}).click();
   await expect(page.getByRole('alertdialog')).toContainText('볼륨 안의 데이터가 영구 삭제됩니다.');
+  await page.getByRole('button',{name:'삭제 잠금 해제'}).click();
+  await page.getByLabel('삭제 대상 이름').fill('old_volume');
   await page.getByRole('alertdialog').getByRole('button', { name: '삭제', exact: true }).click();
-  await expect.poll(() => calls(page, 'docker_resource_remove')).toEqual([{ command: 'docker_resource_remove', args: { context: 'local', kind: 'volume', id: 'data' } }]);
+  await expect.poll(() => calls(page, 'docker_resource_remove')).toEqual([{ command: 'docker_resource_remove', args: { context: 'local', kind: 'volume', id: 'old' } }]);
 });
 
 test('Docker list headers cycle sorting and restore resource order', async ({ page }) => {
@@ -465,8 +484,25 @@ test('default networks are labeled and cannot be removed from details or menus',
  }
  const custom=table.getByRole('row').filter({has:page.getByRole('cell',{name:'app_default',exact:true})});
  await custom.click();
- await expect(page.locator('.docker-details').getByRole('button',{name:'리소스 삭제'})).toBeEnabled();
+ await expect(page.locator('.docker-details').getByRole('button',{name:'리소스 삭제'})).toBeDisabled();
  expect(await calls(page,'docker_resource_remove')).toHaveLength(0);
  await table.getByRole('cell',{name:'none',exact:true}).click();
  await page.screenshot({path:testInfo.outputPath('default-networks.png')});
+});
+
+for(const language of ['ko','en']) for(const theme of ['dark','light']) test('deletion layout '+language+' '+theme,async({page},testInfo)=>{
+ await page.setViewportSize({width:960,height:640});
+ await page.addInitScript(({language,theme})=>{localStorage.setItem('woojoo-language',language);localStorage.setItem('woojoo-theme',theme);},{language,theme});
+ await setup(page,'stopped');await selectDb(page);
+ const ko=language==='ko';
+ await page.locator('.docker-details').getByRole('button',{name:ko?'리소스 삭제':'Delete resource',exact:true}).click();
+ const dialog=page.getByRole('alertdialog');
+ await dialog.getByRole('button',{name:ko?'삭제 잠금 해제':'Unlock deletion'}).click();
+ await dialog.getByLabel(ko?'삭제 대상 이름':'Deletion target name').fill('local-db');
+ const execute=dialog.getByRole('button',{name:ko?'삭제':'Delete',exact:true});
+ await expect(execute).toBeEnabled();
+ const box=await execute.boundingBox();expect(box!.y+box!.height).toBeLessThanOrEqual(640);
+ await page.screenshot({path:testInfo.outputPath('delete.png'),animations:'disabled'});
+ await dialog.getByRole('button',{name:ko?'취소':'Cancel',exact:true}).click();
+ expect(await calls(page,'docker_resource_remove')).toHaveLength(0);
 });

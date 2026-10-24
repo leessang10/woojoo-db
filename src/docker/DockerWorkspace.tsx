@@ -12,7 +12,7 @@ import { desktop } from '../api';
 import { useLanguage } from '../i18n';
 import type { Theme } from '../theme';
 import { dockerAction, dockerContexts, dockerSnapshot, errorMessage, startDockerDesktop } from './api';
-import { buildGraph, isDefaultNetwork, kindLabel, projects, text, type DockerContext, type Kind, type Snapshot, type GraphNode } from './model';
+import { buildGraph, removalBlock, kindLabel, projects, text, type DockerContext, type Kind, type Snapshot, type GraphNode } from './model';
 import { DockerGraph } from './Graph';
 import { DockerDetails } from './Details';
 import { DockerLogs } from './Logs';
@@ -137,13 +137,16 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
     finally { actionLock.current = false; setActionBusy(false); if (latest.current.context === targetContext) setRevision(v => v + 1); }
   }
   async function removeResource(targetNode = node, targetContext = context) {
-    if (latest.current.context !== targetContext || !targetNode || isDefaultNetwork(targetNode) || !ready.current || actionLock.current || !['container', 'image', 'volume', 'network'].includes(targetNode.kind)) return;
+    if (latest.current.context !== targetContext || !targetNode || (!snapshotRef.current || !!removalBlock(targetNode, snapshotRef.current, language)) || !ready.current || actionLock.current || !['container', 'image', 'volume', 'network'].includes(targetNode.kind)) return;
     const target = targetNode;
     actionLock.current = true; setActionBusy(true);
     try {
       const detail = target.kind === 'volume' ? tr('볼륨 안의 데이터가 영구 삭제됩니다.', 'Data inside this volume will be permanently deleted.') : target.kind === 'container' ? tr('컨테이너 내부 데이터가 삭제됩니다.\n연결된 볼륨은 보존합니다. 실행 중이면 먼저 중지하세요.', 'Container-local data is deleted.\nMounted volumes are preserved. Stop the container first if running.') : tr('사용 중인 리소스는 삭제할 수 없습니다.', 'Resources in use cannot be removed.');
-      if (!await requestConfirm(`${targetContext} / ${target.label}\n${detail}`, { title: tr('리소스 삭제', 'Delete resource'), confirmLabel: tr('삭제', 'Delete'), destructive: true })) return;
+      if (!await requestConfirm(`${targetContext} / ${target.label}\n${detail}`, { title: tr('리소스 삭제', 'Delete resource'), confirmLabel: tr('삭제', 'Delete'), destructive: true, confirmationPhrase: target.label })) return;
       if (!latest.current.visible || latest.current.context !== targetContext || !ready.current) return;
+      const currentSnapshot = snapshotRef.current;
+      const currentTarget = currentSnapshot && buildGraph(currentSnapshot, '*', language).nodes.find(n => n.id === target.id);
+      if (!currentSnapshot || !currentTarget || removalBlock(currentTarget, currentSnapshot, language)) return;
       await invoke('docker_resource_remove', { context: targetContext, kind: target.kind, id: target.resourceId });
       setSelected(''); setNotice(tr('리소스를 삭제했습니다.', 'Resource removed.'));
     } catch (e) { setNotice(errorMessage(e, language)); }
@@ -174,7 +177,7 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
         { label: tr('로그 보기', 'View logs'), action: () => { select(target.id); requestAnimationFrame(() => document.querySelector('.docker-logs')?.scrollIntoView({ block: 'nearest' })); }, divider: true },
         ...(['start', 'stop', 'restart'] as const).map(action => ({ label: ({ start: tr('시작', 'Start'), stop: tr('중지', 'Stop'), restart: tr('재시작', 'Restart') })[action], disabled: blocked || !(action === 'start' ? ['created', 'exited'] : action === 'stop' ? ['running', 'restarting'] : ['running', 'exited', 'restarting']).includes(c.state), action: () => { void act(action, target, targetContext); } })),
       ] : []),
-      ...(['container', 'image', 'volume', 'network'].includes(target.kind) ? [{ label: tr('리소스 삭제', 'Delete resource'), destructive: true, divider: true, disabled: blocked || isDefaultNetwork(target) || !!c && ['running', 'restarting', 'paused'].includes(c.state), action: () => { void removeResource(target, targetContext); } }] : []),
+      ...(['container', 'image', 'volume', 'network'].includes(target.kind) ? [{ label: tr('리소스 삭제', 'Delete resource'), destructive: true, divider: true, disabled: blocked || !snapshot || !!removalBlock(target, snapshot, language), action: () => { void removeResource(target, targetContext); } }] : []),
     ] });
   }
   const toolbar = snapshot && <div className="docker-toolbar">

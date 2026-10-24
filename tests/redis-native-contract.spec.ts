@@ -11,6 +11,8 @@ async function setup(page: Page, scenario: string) {
       if (command === 'redis_workspace_load') return { profiles: [profile], views: scenario === 'delayed-direct' ? [{ id: 'fav', profileId: 'local', db: 0, name: 'A favorite', kind: 'favorite', keyBase64: btoa('A'), pattern: '', direction: 'unknown' }] : scenario === 'flow-events' ? [{ id: 'queue', profileId: 'local', db: 0, name: 'Jobs', kind: 'list', keyBase64: btoa('queue:jobs'), pattern: '', direction: 'left' }] : [], credentialSupported: true };
       if (command === 'redis_connect') return { sessionId: 'native-session' };
       if (command === 'redis_profile_save' && scenario === 'save-failure') throw 'STORE: test failure';
+      if (command === 'redis_scan' && scenario === 'many-keys') return { keys: Array.from({length:args.request.cursor === '0' ? 400 : 50},(_,i)=>meta('key:'+((args.request.cursor === '0' ? 0 : 400)+i))), nextCursor: args.request.cursor === '0' ? 'more' : '0', observedAt:Date.now(), partial:true, dbSize:'450' };
+      if (command === 'redis_read_value' && scenario === 'large-json') return {...meta('A'),rows:[],text:bytes(JSON.stringify(Object.fromEntries(Array.from({length:140},(_,i)=>['field'+i,i])))),nextCursor:null,observedAt:Date.now(),truncated:false};
       if (command === 'redis_scan') return { keys: scenario === 'empty-page' && args.request.cursor === '0' ? [] : scenario === 'flow-events' ? [meta('queue:jobs')] : [meta('A'), meta('B')], nextCursor: scenario === 'empty-page' && args.request.cursor === '0' ? 'next-page' : '0', observedAt: Date.now(), partial: scenario === 'empty-page' && args.request.cursor === '0', dbSize: '2' };
       if (command === 'redis_key_metadata') { if (scenario === 'delayed-direct') await new Promise<void>(resolve => { w.releaseMeta = resolve; }); return meta(atob(args.request.keyBase64)); }
       if (command === 'redis_read_value') return { ...meta(atob(args.request.keyBase64)), rows: [], text: bytes(atob(args.request.keyBase64) === 'A' ? 'value-A' : 'value-B'), nextCursor: null, observedAt: Date.now(), truncated: false };
@@ -83,3 +85,20 @@ test('native event contract animates received records, filters unrelated keys an
   await page.getByRole('button', { name: '흐름', exact: true }).click();
   await expect(page.locator('.rf-history summary')).toContainText('1');
 });
+
+ test('loading more keys preserves the current page',async({page})=>{
+  await setup(page,'many-keys');
+  const list=page.getByTestId('redis-key-list');
+  await list.getByRole('button',{name:'다음',exact:true}).click();
+  await expect(list).toContainText('201–400 / 400');
+  await page.getByRole('button',{name:'더 불러오기',exact:true}).click();
+  await expect(list).toContainText('201–400 / 450');
+ });
+ test('JSON tree progressively reveals entries after the first hundred',async({page})=>{
+  await setup(page,'large-json');
+  await page.getByTestId('redis-key-list').getByRole('button',{name:'A',exact:true}).click();
+  const detail=page.getByTestId('redis-detail');
+  await expect(detail.getByText('field139',{exact:true})).toHaveCount(0);
+  await detail.getByRole('button',{name:'더 보기 (40개 남음)',exact:true}).click();
+  await expect(detail.getByText('field139',{exact:true})).toBeVisible();
+ });

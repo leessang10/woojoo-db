@@ -130,3 +130,12 @@
 .api-env-help-tooltip{z-index:60;width:360px;max-width:calc(100vw - 32px);padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 8px 24px #0003;font-size:12px;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
 .api-env-help-tooltip p{margin:0 0 8px}
 .api-env-help-tooltip p:last-child{margin-bottom:0}
+
+.api-error-banner,.api-copy-notice{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;flex-shrink:0;word-break:keep-all;overflow-wrap:anywhere;font-size:12px}
+.api-error-banner{color:var(--destructive);border-bottom:1px solid var(--border)}
+.api-error-banner>span,.api-copy-notice>span{min-width:0;flex:1}
+.api-resizer:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
+.api-main [hidden]{display:none!important}
+.api-response-bar{flex-wrap:wrap}
+
+.api-tree-row{display:flex;align-items:center;min-width:0}.api-tree-row>.tree-table{flex:1;min-width:0}.api-tree-row>button:last-child{flex-shrink:0}

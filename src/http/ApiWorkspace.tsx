@@ -1,6 +1,7 @@
+import { ManagedTab, reorderTabs } from '../components/ManagedTab';
 import { SidebarTitle } from '../components/SidebarTitle';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, FolderPlus, History, Import, PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Search, Settings2, Trash2, Waypoints, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Folder, FolderPlus, MoreHorizontal, History, Import, PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Search, Settings2, Trash2, Waypoints, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -40,6 +41,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   const [naming, setNaming] = useState<Naming | null>(null), [curl, setCurl] = useState<string | null>(null), [editingEnvironments, setEditingEnvironments] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [notice, setNotice] = useState('');
+  const [saveError, setSaveError] = useState('');
   useEffect(() => writeApiTabs(tabs, activeId), [tabs, activeId]);
   useEffect(() => { try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed])); } catch { /* Session-only. */ } }, [collapsed]);
   useEffect(() => { try { localStorage.setItem(PANEL_KEY, panelOpen ? 'open' : 'closed'); } catch { /* Session-only. */ } }, [panelOpen]);
@@ -68,7 +70,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   const production = !!environment && matchesProduction(environment.name);
   const dirty = (tab: ApiTab) => !tab.saved || !sameSpec(tab.spec, tab.saved);
   const collectionName = (id: string | null) => workspace.collections.find(c => c.id === id)?.name;
-  const tabName = (tab: ApiTab) => tab.name || requestTitle(tab.spec) || tr('새 요청', 'New request');
+  const tabName = (tab: ApiTab) => tab.customTitle || tab.name || requestTitle(tab.spec) || tr('새 요청', 'New request');
 
   // --- Tabs ---------------------------------------------------------------------
   function openTab(draft: Omit<ApiTab, 'id'>, result?: Result) {
@@ -109,7 +111,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
       const response = await store.send(outgoing, ticket);
       setResults(previous => ({ ...previous, [tab.id]: { response, sentAt: Date.now() } }));
     } catch (reason) {
-      setResults(previous => ({ ...previous, [tab.id]: reason === 'HTTP_CANCELLED' ? { response: previous[tab.id]?.response } : { error: String(reason), sentAt: Date.now() } }));
+      setResults(previous => ({ ...previous, [tab.id]: { response: previous[tab.id]?.response, sentAt: previous[tab.id]?.sentAt, stale: true, error: reason === 'HTTP_CANCELLED' ? tr('요청이 취소되었습니다', 'Request cancelled') : String(reason) } }));
     } finally { setHistoryRevision(value => value + 1); }
   }
   function cancel(tab = active) { const ticket = tab && results[tab.id]?.ticket; if (ticket) store.cancelSend(ticket); }
@@ -119,11 +121,12 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
     const siblings = workspace.requests.filter(r => r.collectionId === collectionId && r.id !== requestId);
     const previous = workspace.requests.find(r => r.id === requestId);
     const request: SavedRequest = { id: requestId, collectionId, name, sort: previous && previous.collectionId === collectionId ? previous.sort : siblings.length, spec: tab.spec, updatedAt: 0 };
+    setSaveError('');
     try {
       await store.saveRequest(request);
       updateTab(tab.id, { requestId, name, collectionId, saved: structuredClone(tab.spec) });
       await reload(); setNotice(tr('저장했습니다', 'Saved'));
-    } catch (reason) { setNotice(tr(`저장하지 못했습니다: ${reason}`, `Could not save: ${reason}`)); }
+    } catch (reason) { setSaveError(tr(`저장하지 못했습니다: ${reason}`, `Could not save: ${reason}`)); }
   }
   function save(tab = active) {
     if (!tab) return;
@@ -211,12 +214,12 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
     { label: tr('복제', 'Duplicate'), action: () => void duplicateRequest(request) },
     ...[{ id: null, name: tr('컬렉션 없음', 'No collection') }, ...workspace.collections].filter(c => c.id !== request.collectionId)
       .map((c, index) => ({ label: `${tr('이동', 'Move to')} → ${c.name}`, action: () => void moveRequest(request, c.id), divider: index === 0 })),
-    { label: tr('삭제', 'Delete'), action: () => void deleteRequest(request), divider: true },
+    { label: tr('삭제', 'Delete'), action: () => void deleteRequest(request), divider: true, destructive: true },
   ]);
   const collectionMenu = (id: string) => menuFor(() => [
     { label: tr('새 요청', 'New request'), action: () => newTab(blankSpec(), id) },
     { label: tr('이름 바꾸기', 'Rename'), action: () => renameCollection(id) },
-    { label: tr('삭제', 'Delete'), action: () => void deleteCollection(id), divider: true },
+    { label: tr('삭제', 'Delete'), action: () => void deleteCollection(id), divider: true, destructive: true },
   ]);
 
   // --- Sidebar tree ----------------------------------------------------------------
@@ -226,9 +229,9 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   const grouped = useMemo(() => workspace.collections.map(c => ({ collection: c, requests: workspace.requests.filter(r => r.collectionId === c.id) })), [workspace]);
   const requestItem = (request: SavedRequest, nested: boolean) => {
     const method = String(request.spec?.method ?? 'GET');
-    return <Button key={request.id} variant="ghost" size="bare" className={`tree-table api-tree-request ${nested ? 'nested' : ''} ${active?.requestId === request.id ? 'active' : ''}`} title={`${method} ${request.spec?.url ?? ''}`} onClick={() => openSaved(request)} {...requestMenu(request)}>
+    return <div key={request.id} className="api-tree-row"><Button variant="ghost" size="bare" className={`tree-table api-tree-request ${nested ? 'nested' : ''} ${active?.requestId === request.id ? 'active' : ''}`} title={`${method} ${request.spec?.url ?? ''}`} onClick={() => openSaved(request)} {...requestMenu(request)}>
       <span className="api-method-tag" data-method={method}>{method.slice(0, 6)}</span><span>{request.name}</span>
-    </Button>;
+    </Button><Button variant="ghost" size="icon-sm" aria-label={`${request.name} · ${tr("메뉴", "Menu")}`} onClick={event => requestMenu(request).onContextMenu(event)}><MoreHorizontal size={14}/></Button></div>;
   };
 
   return <>
@@ -256,9 +259,9 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
           if (term && !shown.length && !collection.name.toLowerCase().includes(term)) return null;
           const open = !collapsed.has(collection.id) || !!term;
           return <div key={collection.id} className="api-tree-group">
-            <Button variant="ghost" size="bare" className="tree-table api-tree-collection" aria-expanded={open} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(collection.id)) next.delete(collection.id); else next.add(collection.id); return next; })} {...collectionMenu(collection.id)}>
+            <div className="api-tree-row"><Button variant="ghost" size="bare" className="tree-table api-tree-collection" aria-expanded={open} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(collection.id)) next.delete(collection.id); else next.add(collection.id); return next; })} {...collectionMenu(collection.id)}>
               {open ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}<Folder size={13}/><span>{collection.name}</span><small>{requests.length}</small>
-            </Button>
+            </Button><Button variant="ghost" size="icon-sm" aria-label={`${collection.name} · ${tr("메뉴", "Menu")}`} onClick={event => collectionMenu(collection.id).onContextMenu(event)}><MoreHorizontal size={14}/></Button></div>
             {open && (term ? shown : requests).map(r => requestItem(r, true))}
             {open && !requests.length && <p className="api-tree-empty">{tr('오른쪽 클릭 → 새 요청, 또는 요청을 저장할 때 이 컬렉션을 고르세요.', 'Right-click → New request, or pick this collection when saving.')}</p>}
           </div>;
@@ -299,6 +302,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         {production && <span className="env-banner" data-environment="production" role="note"><AlertTriangle size={13}/>PRODUCTION</span>}
         <Button variant="ghost" size="bare" className="icon-button history-toggle-button" aria-label={tr('요청 기록 패널', 'Request history panel')} title={tr('요청 기록 패널', 'Request history panel') + ' · Ctrl/Cmd+Alt+B'} aria-pressed={panelOpen} aria-controls="api-history" onClick={() => setPanelOpen(open => !open)}>{panelOpen ? <PanelRight size={17}/> : <History size={17}/>}</Button>
       </div></header>
+      {saveError && <div className="api-error-banner" role="alert"><span>{saveError}</span><Button variant="ghost" size="icon-sm" aria-label={tr("오류 닫기", "Dismiss error")} onClick={() => setSaveError('')}><X size={14}/></Button></div>}
       {!tabs.length ? <div className="workspace-empty"><Waypoints size={28}/><h1>{tr('API 요청을 보내 보세요', 'Send an API request')}</h1>
         <p className="connection-availability">{tr('요청을 만들거나 cURL을 가져와 시작하세요.', 'Create a request or import cURL to get started.')}</p>
         <div className="empty-connection-actions">
@@ -308,18 +312,18 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         </div>
       </div> : <>
         <div className="tabs"><div className="tab-list" role="tablist" aria-label={tr('API 탭', 'API tabs')} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
-          {tabs.map(tab => { const name = tabName(tab); const sending = !!results[tab.id]?.ticket; return <div key={tab.id} className={`tab-item ${active?.id === tab.id ? 'active' : ''}`}>
+          {tabs.map(tab => { const name = tabName(tab); const sending = !!results[tab.id]?.ticket; return <ManagedTab key={tab.id} id={tab.id} name={name} active={active?.id === tab.id} ids={tabs.map(t => t.id)} onRename={title => setTabs(previous => previous.map(t => t.id === tab.id ? { ...t, customTitle: title } : t))} onReorder={(source, target, after) => setTabs(previous => reorderTabs(previous, source, target, after))}>
             <Button variant="ghost" size="bare" role="tab" className="tab" id={`api-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`api-panel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} title={`${tab.spec.method} ${tab.spec.url}`} onClick={() => setActiveId(tab.id)} onAuxClick={event => { if (event.button === 1) void close(tab.id); }}
               onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { const index = tabs.findIndex(item => item.id === tab.id), next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]; setActiveId(next.id); document.getElementById(`api-tab-${next.id}`)?.focus(); } }}>
               <span className="api-method-tag" data-method={tab.spec.method}>{tab.spec.method.slice(0, 6)}</span><span>{name}</span>{sending ? <span className="api-tab-busy" aria-label={tr('보내는 중', 'Sending')}/> : dirty(tab) && tab.requestId && <span className="api-dirty" aria-label={tr('저장 안 됨', 'Unsaved')}/>}</Button>
             <Button variant="ghost" size="bare" className="tab-close" aria-label={t('탭 닫기 이름', { name })} title={t('탭 닫기')} onClick={() => void close(tab.id)}><X size={13}/></Button>
-          </div>; })}
+          </ManagedTab>; })}
           <Button variant="ghost" size="bare" className="api-new-tab" aria-label={tr('새 요청', 'New request')} title={tr('새 요청', 'New request') + ' · Ctrl/Cmd+N'} onClick={() => newTab()}><Plus size={14}/></Button>
         </div></div>
-        {active && <div className="aws-tab-panel" id={`api-panel-${active.id}`} role="tabpanel" aria-labelledby={`api-tab-${active.id}`}>
-          <RequestPanel key={active.id} tab={active} variables={variables} result={results[active.id]} theme={theme} dirty={dirty(active)}
-            onChange={spec => updateTab(active.id, { spec })} onSend={() => void send(active)} onCancel={() => cancel(active)} onSave={() => save(active)}/>
-        </div>}
+        {tabs.map(panel => <div key={panel.id} hidden={panel.id !== active?.id} className="aws-tab-panel" id={`api-panel-${panel.id}`} role="tabpanel" aria-labelledby={`api-tab-${panel.id}`}>
+          <RequestPanel tab={panel} variables={variables} result={results[panel.id]} theme={theme} dirty={dirty(panel)}
+            onChange={spec => updateTab(panel.id, { spec })} onSend={() => void send(panel)} onCancel={() => cancel(panel)} onSave={() => save(panel)}/>
+        </div>)}
       </>}
     </main>;
   }

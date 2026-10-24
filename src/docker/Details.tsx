@@ -1,7 +1,7 @@
 import { Play, Square, RotateCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { buildGraph, isDefaultNetwork, kindLabel, statusLabel, text, tone, type GraphNode, type Snapshot } from './model';
+import { buildGraph, removalBlock, kindLabel, statusLabel, text, tone, type GraphNode, type Snapshot } from './model';
 type Props = { node: GraphNode | undefined; snapshot: Snapshot; language: string; disabled: boolean; busy: boolean; onAction: (action: string) => void; onSelect: (id: string) => void; onRemove: () => void; onEdit: () => void; onRename: (name: string) => void };
 export function DockerDetails({ node, snapshot, language, disabled, busy, onAction, onSelect, onRemove, onEdit, onRename }: Props) {
   const tr = (ko: string, en: string) => text(language, ko, en);
@@ -37,6 +37,6 @@ export function DockerDetails({ node, snapshot, language, disabled, busy, onActi
     <h3>{tr('연결된 리소스', 'Connected resources')}</h3>
     {all.nodes.filter(n => neighbors.has(n.id)).map(n => <Button key={n.id} variant="ghost" size="sm" className="docker-neighbor" onClick={() => onSelect(n.id)}>{n.label}{n.container?.project && <small>{n.container.project}</small>}</Button>)}
     {!neighbors.size && <p>{snapshot.complete ? tr('현재 컨테이너 참조 없음. 삭제 안전성을 뜻하지 않습니다.', 'No current container reference. This does not establish deletion safety.') : tr('일부 조회가 실패하여 참조 상태를 알 수 없습니다.', 'References are unverified because some queries failed.')}</p>}
-    <div className="docker-danger-zone">{['container', 'image', 'volume', 'network'].includes(node.kind) && <Button size="sm" variant="destructive" disabled={disabled || busy || isDefaultNetwork(node)} onClick={onRemove}>{tr('리소스 삭제', 'Delete resource')}</Button>}</div>
+    <div className="docker-danger-zone">{['container', 'image', 'volume', 'network'].includes(node.kind) && <Button size="sm" variant="destructive" disabled={disabled || busy || !!removalBlock(node, snapshot, language)} onClick={onRemove}>{tr('리소스 삭제', 'Delete resource')}</Button>}{removalBlock(node, snapshot, language) && <p>{removalBlock(node, snapshot, language)}</p>}</div>
   </aside>;
 }

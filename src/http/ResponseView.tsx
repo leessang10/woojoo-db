@@ -10,7 +10,7 @@ import type { Theme } from '../theme';
 import { bodyView, formatDuration, formatSize, headerValue, prettyJson, statusTone, type HttpResponse } from './model';
 
 /** The latest outcome of a tab: a response, an error, or the ticket of a request in flight. */
-export type Result = { response?: HttpResponse; error?: string; ticket?: string; sentAt?: number };
+export type Result = { response?: HttpResponse; error?: string; ticket?: string; sentAt?: number; stale?: boolean };
 const readOnly = [EditorView.editable.of(false), EditorView.lineWrapping];
 
 export function ResponseView({ result, theme }: { result?: Result; theme: Theme }) {
@@ -22,10 +22,12 @@ export function ResponseView({ result, theme }: { result?: Result; theme: Theme 
   const text = useMemo(() => !response ? '' : kind === 'json' && !raw ? prettyJson(response.body) : response.body, [response, kind, raw]);
   const extensions = useMemo(() => kind === 'json' && !raw ? [...readOnly, jsonLanguage()] : readOnly, [kind, raw]);
 
-  if (result?.error) return <div className="api-response-empty api-response-error" role="alert"><AlertTriangle size={18}/><strong>{tr('요청이 실패했습니다', 'The request failed')}</strong><span>{result.error}</span></div>;
+  if (result?.error && !response) return <div className="api-response-empty api-response-error" role="alert"><AlertTriangle size={18}/><strong>{tr('요청이 실패했습니다', 'The request failed')}</strong><span>{result.error}</span></div>;
   if (!response) return <div className="api-response-empty"><Send size={18}/><span>{tr('보내기를 누르면 응답이 여기에 표시됩니다.', 'Send the request to see the response here.')}</span><small>Ctrl/Cmd+Enter</small></div>;
   const tone = statusTone(response.status);
   return <div className="api-response-body">
+    {result?.error && <div className="api-error-banner" role="alert">{result.error}</div>}
+    {(result?.stale || result?.ticket) && <p className="api-missing" role="status">{tr('이전 성공 응답', 'Previous successful response')}{result.sentAt && ` · ${new Date(result.sentAt).toLocaleTimeString(language === 'ko' ? 'ko-KR' : 'en-US')}`}</p>}
     <div className="api-response-bar">
       <div className="api-sections" role="tablist" aria-label={tr('응답 보기', 'Response view')}>
         <Button variant="ghost" size="bare" role="tab" className="api-section" aria-selected={view === 'body'} onClick={() => setView('body')}>{tr('본문', 'Body')}</Button>
