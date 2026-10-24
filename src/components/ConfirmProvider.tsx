@@ -39,7 +39,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}>
           <div className="grid gap-2">
             <AlertDialog.Title className="text-base font-semibold">{request?.title ?? t('확인')}</AlertDialog.Title>
-            <AlertDialog.Description className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{request?.message}</AlertDialog.Description>
+            <AlertDialog.Description className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line break-keep [overflow-wrap:anywhere]">{request?.message}</AlertDialog.Description>
           </div>
           <div className="flex justify-end gap-2">
             <AlertDialog.Cancel asChild><Button variant="outline" onClick={() => finish(false)}>{t('취소')}</Button></AlertDialog.Cancel>

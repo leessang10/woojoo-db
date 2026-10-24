@@ -503,3 +503,6 @@ p.empty-tree{flex-direction:row;align-items:center}
 .modal.settings-modal .settings-row small{font-size:11px;line-height:1.5;color:var(--muted-foreground)}
 .modal.settings-modal .settings-row.settings-row-stacked{flex-direction:column;align-items:stretch;gap:10px}
 .settings-row-stacked input{height:32px;font-size:12px}
+
+/* Readable prose without changing code, tables or editable values. */
+.modal-description,.connection-availability,.field-hint,.credential-note,.dialog-message,.dialog-error,.dw-dialog>p{word-break:keep-all;overflow-wrap:anywhere;white-space:pre-line}
