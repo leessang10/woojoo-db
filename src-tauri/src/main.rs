@@ -8,6 +8,7 @@ mod local_database;
 mod aws;
 mod docker;
 mod http;
+mod redis;
 mod data;
 mod db;
 mod export;
@@ -42,6 +43,7 @@ fn main() {
             app.manage(store);
             let requests=tauri::async_runtime::block_on(http::store::Store::open(&directory.join("api-client.sqlite3"))).map_err(std::io::Error::other)?;
             app.manage(requests);
+            app.manage(redis::State::new(directory.join("redis-workspace-v1.json")).map_err(std::io::Error::other)?);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -54,6 +56,21 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            redis::redis_workspace_load,
+            redis::redis_profile_save,
+            redis::redis_profile_delete,
+            redis::redis_view_save,
+            redis::redis_view_delete,
+            redis::redis_connect,
+            redis::redis_test_connection,
+            redis::redis_disconnect,
+            redis::redis_forget_password,
+            redis::redis_scan,
+            redis::redis_key_metadata,
+            redis::redis_read_value,
+            redis::redis_queue_inspect,
+            redis::redis_server_info,
+            redis::redis_cancel,
             set_close_guard,
             close_window,
             docker::docker_contexts,
@@ -138,6 +155,7 @@ fn main() {
             structure::execute_ddl,
             db::read_erd,
             export::save_erd_export,
+            export::save_environment_export,
             db::run_query,
             db::apply_edits,
             db::set_result_limit
@@ -153,9 +171,9 @@ fn main() {
                     if !EXIT_STARTED.swap(true, Ordering::SeqCst) {
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {
+                            app.state::<redis::State>().shutdown().await;
                             docker::logs::shutdown().await;
                             EXIT_READY.store(true, Ordering::SeqCst);
-            export::save_environment_export,
                             app.exit(code.unwrap_or(0));
                         });
                     }

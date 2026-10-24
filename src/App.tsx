@@ -43,6 +43,7 @@ import { AlertTriangle, ArrowDownToLine, ArrowRight, Check, ChevronDown, Chevron
 import * as api from './api';
 import { collectEdits, csv, tableQuery, type Profile, type Table, type Result } from './model';
 const DockerWorkspace = lazy(() => import('./docker/DockerWorkspace').then(module => ({ default: module.DockerWorkspace })));
+const RedisWorkspace = lazy(() => import('./redis/RedisWorkspace').then(module => ({ default: module.RedisWorkspace })));
 
 // Development tests explicitly opt into in-memory fixtures.
 const fixtureMode = import.meta.env.DEV && (() => {
@@ -54,15 +55,16 @@ type Connection = { profile: Profile; session: string };
 const initialTab = createTab('demo', 0, { schema: 'public', name: 'users' }, tableQuery('postgres', 'public', 'users'));
 type Notice = { text: string; kind: 'success' | 'info' | 'error' };
 // Each rail item is a work area with its own sidebar explorer, tabs and right panel.
-type WorkArea = 'database' | 'aws' | 'api' | 'docker';
+type WorkArea = 'database' | 'aws' | 'api' | 'docker' | 'redis';
 const WORK_AREAS: { id: WorkArea; icon: typeof Database; label: [string, string]; title: [string, string] }[] = [
   { id: 'database', icon: Database, label: ['데이터베이스', 'Databases'], title: ['데이터베이스 · 연결과 스키마', 'Databases · connections and schemas'] },
   { id: 'aws', icon: Cloud, label: ['AWS', 'AWS'], title: ['AWS · 로컬 AWS CLI로 리소스 조회', 'AWS · resources through your local AWS CLI'] },
   { id: 'api', icon: Waypoints, label: ['API', 'API'], title: ['API · 로컬 HTTP 요청 테스트', 'API · local HTTP request testing'] },
   { id: 'docker', icon: ContainerIcon, label: ['Docker', 'Docker'], title: ['Docker · 리소스 관계도', 'Docker · resource topology'] },
+  { id: 'redis', icon: Layers3, label: ['Redis', 'Redis'], title: ['Redis · 키, 캐시, 큐 탐색', 'Redis · keys, cache and queues'] },
 ];
 const AREA_KEY = 'woojoo-work-area';
-const readArea = (): WorkArea => { try { const value = localStorage.getItem(AREA_KEY); return value === 'aws' || value === 'api' || value === 'docker' ? value : 'database'; } catch { return 'database'; } };
+const readArea = (): WorkArea => { try { const value = localStorage.getItem(AREA_KEY); return value === 'aws' || value === 'api' || value === 'docker' || value === 'redis' ? value : 'database'; } catch { return 'database'; } };
 const COLLAPSED_KEY = 'woojoo-collapsed-schemas-v1';
 function readCollapsed(): Record<string, string[]> {
   try { const value = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}'); return value && typeof value === 'object' ? value : {}; }
@@ -160,6 +162,8 @@ export default function App() {
   useEffect(() => { if (area === 'api') setApiVisited(true); }, [area]);
   const [dockerVisited, setDockerVisited] = useState(area === 'docker');
   useEffect(() => { if (area === 'docker') setDockerVisited(true); }, [area]);
+  const [redisVisited, setRedisVisited] = useState(area === 'redis');
+  useEffect(() => { if (area === 'redis') setRedisVisited(true); }, [area]);
   const apiCommands = useRef<ApiCommands>({});
   const [awsPreset, setAwsPreset] = useState<AwsPreset>();
   // Query history sits in a right-hand panel beside the database workspace.
@@ -437,11 +441,11 @@ export default function App() {
     if(!refresh&&!await leaveData())return;
 
     const target = refresh ? tab : workspace.add(table, tableQuery(connection.profile.engine, table.schema, table.name));
+    setView(target.id, 'data');
     await performFor(target.id, async () => {
       const data = await api.readTable(active, table);
       const sql = tableQuery(connection.profile.engine, table.schema, table.name);
       workspace.patch(target.id, { selected: table, source: 'table', result: data, resultStale:false, draft: {}, filter: '', sort: null, scroll: 0, editorSql: sql, initialSql: sql, loaded: true, lastQuery: '' });
-    setView(target.id, 'data');
     });
   }
   function changeBlocked(table: Table) {
@@ -766,11 +770,11 @@ export default function App() {
       <div className="rail-bottom"><Button variant="ghost" size="bare" className="rail-button" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={21}/> : <Moon size={21}/>}</Button><Button variant="ghost" size="bare" className="rail-button" title={t("설정") + " · Ctrl/Cmd+,"} aria-label={t("설정")} onClick={() => setShowSettings(true)}><Settings2 size={21}/></Button><Button variant="ghost" size="bare" className="rail-button" title={t("도움말")} aria-label={t("도움말")} onClick={() => setShowHelp(true)}><CircleHelp size={21}/></Button></div>
     </aside>
     {sidebarOpen && area === 'database' && <aside className="sidebar" id="database-sidebar" onContextMenu={event => { if (event.target instanceof HTMLInputElement) return; menuFor([{label:t("연결 추가"),action:()=>setShowConnect(true)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}]).onContextMenu(event); }}>
+      <SidebarTitle icon={Database} title="Database"/>
       {area === 'database' && <>
       <div className="section-label"> {t("연결")} <Button variant="ghost" size="bare" title={t("연결 추가")} aria-label={t("새 연결")} onClick={() => setShowConnect(true)}><Plus size={16}/></Button></div>
       <div className="connections">{selectableConnections.length>0&&<ConnectionSwitcher connections={selectableConnections} active={active} onSelect={id=>{editorSelection.current='';void selectConnection(id);}} onAdd={()=>setShowConnect(true)}>{currentConnection ? (()=>{const c=currentConnection;return <Button variant="ghost" size="bare" key={c.session} {...menuFor([
         {label:t('연결 선택'), action:()=>selectConnection(c.session)},
-      <SidebarTitle icon={Database} title="Database"/>
         {label:t('호스트 복사'), action:()=>void copyText(c.profile.host)},
         {label:tr('프로필 수정 / 다시 연결','Edit profile / reconnect'),action:()=>{setEditProfile(c.profile);setShowConnect(true);},disabled:c.session==='demo'},
         {label:tr('백업 / 복원','Backup / restore'),action:()=>{setActive(c.session);setShowMaintenance(true);},disabled:c.session==='demo'||c.session.startsWith('saved:')},
@@ -873,6 +877,7 @@ export default function App() {
     {historyOpen && area === 'database' && <aside className="history-sidebar" id="history-sidebar"><HistoryPanel profileId={connection.profile.id} connectionName={connection.profile.name} profileIds={connections.map(c => c.profile.id)} panelScope={emptyWorkspace ? 'all' : 'connection'} onOpen={entry => void openExecution(entry)} onShowAll={emptyWorkspace ? undefined : () => void openHistory()} onClose={() => setHistoryOpen(false)}/></aside>}
     {apiVisited && <ApiWorkspace visible={area === 'api'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={apiCommands} theme={theme}/>}
     {dockerVisited && <Suspense fallback={area === 'docker' ? <main className="main" aria-busy="true">Docker…</main> : null}><DockerWorkspace visible={area === 'docker'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} theme={theme}/></Suspense>}
+    {redisVisited && <Suspense fallback={area === 'redis' ? <main className="main" aria-busy="true">Redis…</main> : null}><RedisWorkspace visible={area === 'redis'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} theme={theme}/></Suspense>}
     {awsVisited && <AwsWorkspace visible={area === 'aws'} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} commandsRef={awsCommands} theme={theme} onConnectRds={preset => { setEditProfile(undefined); setAwsPreset(preset); setShowConnect(true); }}/>}
     {showSchemas&&<ModalSurface title={tr('스키마 선택','Select schemas')} onClose={()=>setShowSchemas(false)}><section className="modal schema-picker">
       <div className="modal-heading"><h2>{tr('스키마 선택','Select schemas')}</h2><Button variant="ghost" size="icon-sm" aria-label={t('닫기')} onClick={()=>setShowSchemas(false)}><X size={16}/></Button></div>
