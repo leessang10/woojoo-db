@@ -41,12 +41,15 @@ test('long connection labels stay inside the card in both themes', async ({ page
 test('sidebar header is compact and its add action aligns with its label', async ({ page }) => {
   await page.setViewportSize({width:960,height:700});
   await page.goto('/');
+  await expect(page.locator('#database-sidebar').getByRole('heading', {name:'Database',exact:true})).toBeVisible();
   const layout = await page.locator('.section-label').first().evaluate(element => {
     const rect=element.getBoundingClientRect(), button=element.querySelector('button')!.getBoundingClientRect();
     const sidebar=element.closest('.sidebar')!, box=sidebar.getBoundingClientRect();
-    return { gap:rect.top-box.top, inset:box.right-button.right, center:Math.abs(rect.y+rect.height/2-button.y-button.height/2), overflow:sidebar.scrollWidth>sidebar.clientWidth };
+    const title=sidebar.querySelector('.workspace-sidebar-title')!.getBoundingClientRect();
+    return { gap:rect.top-title.bottom, inset:box.right-button.right, center:Math.abs(rect.y+rect.height/2-button.y-button.height/2), overflow:sidebar.scrollWidth>sidebar.clientWidth };
   });
   expect(layout.gap).toBeLessThanOrEqual(8);
+  expect(layout.gap).toBeGreaterThanOrEqual(0);
   expect(layout.inset).toBeLessThanOrEqual(16);
   expect(layout.center).toBeLessThan(1);
   expect(layout.overflow).toBe(false);

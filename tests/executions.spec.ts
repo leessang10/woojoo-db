@@ -40,6 +40,17 @@ test('history panel and tab filter, page, read full SQL, pages, reads full SQL a
   await history.getByRole('button',{name:'전체 기록 보기',exact:true}).click();
   const all=page.getByRole('region',{name:'전체 쿼리 기록',exact:true});
   await expect(page.getByRole('tab',{name:'쿼리 기록',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(all.locator('.history-entry')).toHaveCount(50);
+  const originalOrder=await all.locator('.history-entry').allTextContents();
+  await all.getByRole('button',{name:'상세 보기'}).nth(1).click();
+  const durationHeader=all.getByRole('columnheader',{name:'소요 시간'});
+  await durationHeader.click(); await durationHeader.click();
+  await expect(durationHeader).toHaveAttribute('aria-sort','descending');
+  await expect(all.locator('.history-entry').first()).toContainText('SELECT 49;');
+  expect(await all.locator('.history-detail-row').evaluate(row=>row.previousElementSibling?.getAttribute('data-status'))).toBe('failed');
+  await durationHeader.click();
+  expect(await all.locator('.history-entry').allTextContents()).toEqual(originalOrder);
+  await all.locator('.history-entry[data-expanded="true"]').getByRole('button',{name:'상세 보기'}).click();
   await chooseOption(all.getByLabel('실행 상태',{exact:true}), 'failed');
   await expect(all.locator('.history-entry')).toHaveCount(1);
   await all.getByRole('button',{name:'상세 보기'}).click();

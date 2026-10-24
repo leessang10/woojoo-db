@@ -1,7 +1,10 @@
 import {test,expect} from './fixtures';
 test('schema and column CRUD with SQL review and deletion confirmation',async({page})=>{
  await page.goto('/');await page.locator('.tree-schema').click();
+ await page.getByRole('tab',{name:'상세',exact:true}).click();
  await expect(page.getByText('DB 인코딩',{exact:true})).toBeVisible();
+ await expect(page.locator('.object-properties')).toContainText('UTF8');
+ await page.getByRole('tab',{name:/^테이블/}).click();
  await page.getByRole('button',{name:'테이블 추가',exact:true}).click();
  const dialog=page.getByRole('dialog');
  await dialog.getByLabel('테이블 이름',{exact:true}).fill('notes');
@@ -9,18 +12,20 @@ test('schema and column CRUD with SQL review and deletion confirmation',async({p
  await expect(dialog.getByLabel('실행 SQL')).toContainText('CREATE TABLE "public"."notes"');
  await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
  await expect(dialog).not.toBeVisible();await page.locator('.tree-table').filter({hasText:'notes'}).click();
+ await page.locator('.object-view-bar').getByRole('button',{name:'구조',exact:true}).click();
  await expect(page.getByRole('heading',{name:'notes',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'컬럼 추가',exact:true}).click();
  await dialog.getByLabel('컬럼 이름 1',{exact:true}).fill('body');
  await dialog.getByRole('button',{name:'SQL 검토'}).click();await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
  const row=page.locator('.object-table tbody tr').filter({hasText:'body'});await expect(row).toBeVisible();
- await row.getByRole('button',{name:'변경',exact:true}).click();
+ await row.getByRole('button',{name:'컬럼 수정: body',exact:true}).click();
  await dialog.getByLabel('컬럼 이름 1',{exact:true}).fill('content');
  await dialog.getByRole('button',{name:'SQL 검토'}).click();await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
- await page.locator('.object-table tbody tr').filter({hasText:'content'}).getByRole('button',{name:'삭제',exact:true}).click();
+ await page.locator('.object-table tbody tr').filter({hasText:'content'}).getByRole('button',{name:'컬럼 삭제: content',exact:true}).click();
  await dialog.getByRole('button',{name:'SQL 검토'}).click();await expect(dialog.getByRole('button',{name:'구조 변경 적용'})).toBeDisabled();
  await page.screenshot({path:'test-results/structure-delete-spacing.png'});await dialog.getByLabel('삭제 대상 이름 입력').fill('content');await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
  await expect(page.locator('.object-table tbody tr')).toHaveCount(1);
+ await page.getByRole('tab',{name:'상세',exact:true}).click();
  await page.getByRole('button',{name:'설명 수정',exact:true}).click();await expect(dialog.getByLabel('설명',{exact:true})).toBeFocused();await dialog.getByLabel('설명',{exact:true}).fill('Notes description');await dialog.getByLabel('테이블 이름',{exact:true}).fill('renamed_notes');
  await dialog.getByRole('button',{name:'SQL 검토'}).click();await dialog.getByRole('button',{name:'구조 변경 적용'}).click();
  await expect(page.getByRole('heading',{name:'renamed_notes',exact:true})).toBeVisible();
@@ -44,5 +49,5 @@ test('MySQL metadata and reviewed DDL transport report permission errors',async(
  if(command==='execute_ddl'){(window as any).reviewed=args;throw new Error('ALTER command denied');}throw new Error(command);
  }}});
  });
- await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'MySQL',exact:true}).click();await page.getByRole('button',{name:'연결하기',exact:true}).click();await page.locator('.tree-table').click();await expect(page.getByText('utf8mb4',{exact:true})).toBeVisible();await page.getByRole('button',{name:'컬럼 추가',exact:true}).click();const d=page.getByRole('dialog');await d.getByLabel('컬럼 이름 1',{exact:true}).fill('title');await d.getByLabel('Charset 1',{exact:true}).fill('utf8mb4');await d.getByRole('button',{name:'SQL 검토'}).click();const sql=await d.getByLabel('실행 SQL').textContent();await d.getByRole('button',{name:'구조 변경 적용'}).click();await expect(d.getByRole('alert')).toContainText('ALTER command denied');expect(await page.evaluate(()=>(window as any).reviewed.sqls.join(';')+';')).toBe(sql);await expect(d.getByRole('button',{name:'SQL 검토'})).toBeEnabled();
+ await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'MySQL',exact:true}).click();await page.getByRole('button',{name:'연결하기',exact:true}).click();await page.locator('.tree-table').click();await page.locator('.object-view-bar').getByRole('button',{name:'구조',exact:true}).click();await page.getByRole('tab',{name:'상세',exact:true}).click();await expect(page.locator('.object-properties').getByText('utf8mb4',{exact:true})).toBeVisible();await page.getByRole('tab',{name:/^컬럼/}).click();await page.getByRole('button',{name:'컬럼 추가',exact:true}).click();const d=page.getByRole('dialog');await d.getByLabel('컬럼 이름 1',{exact:true}).fill('title');await d.getByLabel('Charset 1',{exact:true}).fill('utf8mb4');await d.getByRole('button',{name:'SQL 검토'}).click();const sql=await d.getByLabel('실행 SQL').textContent();await d.getByRole('button',{name:'구조 변경 적용'}).click();await expect(d.getByRole('alert')).toContainText('ALTER command denied');expect(await page.evaluate(()=>(window as any).reviewed.sqls.join(';')+';')).toBe(sql);await expect(d.getByRole('button',{name:'SQL 검토'})).toBeEnabled();
 });
