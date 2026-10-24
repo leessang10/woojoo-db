@@ -1,5 +1,7 @@
 mod connection;
 mod explorer;
+mod flow;
+mod notifications;
 mod protocol;
 mod queues;
 mod store;
@@ -327,6 +329,68 @@ pub async fn redis_server_info(
         queues::server(&mut c).await
     })
     .await
+}
+#[tauri::command]
+pub async fn redis_flow_events(
+    state: tauri::State<'_, State>,
+    request: ReadRequest,
+    after_id: Option<String>,
+) -> Result<flow::EventBatch, String> {
+    run(&state, request, |mut c, _, r| async move {
+        flow::read(&mut c, &r, after_id.as_deref()).await
+    })
+    .await
+}
+fn notification_session(state: &State, id: &str) -> Result<Arc<Session>, String> {
+    state
+        .sessions
+        .lock()
+        .unwrap()
+        .get(id)
+        .cloned()
+        .ok_or("DISCONNECTED: Session no longer exists".into())
+}
+#[tauri::command]
+pub async fn redis_notifications_start(
+    state: tauri::State<'_, State>,
+    session_id: String,
+) -> Result<notifications::Started, String> {
+    let session = notification_session(&state, &session_id)?;
+    let _permit = state
+        .connecting
+        .try_acquire()
+        .map_err(|_| "BUSY: Too many connections in progress")?;
+    let mut closed = session.closed.subscribe();
+    if *closed.borrow() {
+        return Err("DISCONNECTED: Session closed".into());
+    }
+    tokio::select! {
+        _ = closed.changed() => Err("DISCONNECTED: Session closed".into()),
+        result = tokio::time::timeout(std::time::Duration::from_secs(10), notifications::start(&session)) => result.map_err(|_| "TIMEOUT: Notification subscription timed out".to_string())?,
+    }
+}
+#[tauri::command]
+pub fn redis_notifications_poll(
+    state: tauri::State<'_, State>,
+    session_id: String,
+    subscription_id: String,
+) -> Result<notifications::Batch, String> {
+    ipc(notifications::poll(
+        notification_session(&state, &session_id)?.as_ref(),
+        &subscription_id,
+    )?)
+}
+#[tauri::command]
+pub fn redis_notifications_stop(
+    state: tauri::State<'_, State>,
+    session_id: String,
+    subscription_id: String,
+) -> Result<(), String> {
+    notifications::stop(
+        notification_session(&state, &session_id)?.as_ref(),
+        &subscription_id,
+    );
+    Ok(())
 }
 #[cfg(test)]
 mod tests {

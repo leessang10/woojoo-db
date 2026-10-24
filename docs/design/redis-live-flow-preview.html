@@ -1,0 +1,30 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>Redis Live Flow — 화면 설계</title>
+<style>
+@font-face{font-family:Pretendard;src:url('../../public/fonts/pretendard/PretendardVariable.woff2')}*{box-sizing:border-box}body{margin:0;background:#131518;color:#e8ecf2;font-family:Pretendard,sans-serif}main{width:1120px;padding:32px;margin:auto}header{display:flex;align-items:center;gap:16px;margin-bottom:24px}header strong{font-size:22px}header span{color:#95a2b5;font-size:13px}header small{margin-left:auto;color:#a9b8cd;border:1px solid #3a4350;padding:7px 10px;border-radius:6px}section{background:#1a1d22;border:1px solid #303640;border-radius:10px;margin-bottom:20px;overflow:hidden}.bar{display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid #303640}.bar strong{font-size:15px}.bar span{font-size:12px;color:#9daabd}.bar .right{margin-left:auto}svg{display:block;width:100%;height:auto}text{font-family:Pretendard,sans-serif;fill:#e4eaf3;font-size:13px}.muted{fill:#9eabbd;font-size:12px}.tiny{font-size:11px}.blue{fill:#9dc3ff}.green{fill:#89d7b3}.amber{fill:#e7c182}.note{padding:0 20px 15px;color:#9daabd;font-size:12px}footer{font-size:12px;color:#9daabd;line-height:1.8}.card{fill:#252c36;stroke:#48566a}.line{stroke:#586a81;stroke-width:2;fill:none}
+</style><main><header><strong>Redis · Live Flow</strong><span>데이터가 어떻게 쌓이고 사용되는지 관찰</span><small>화면 설계 · 예시 데이터</small></header>
+<section><div class="bar"><strong>큐</strong><span>emails</span><span class="right">흐름　 /　 목록　　 ● 이벤트 연결됨</span></div>
+<svg viewBox="0 0 1056 285" role="img" aria-label="생산자에서 가로 원통 큐로 작업이 들어가고 워커로 빠져나가는 화면 설계">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#718bab"/></marker></defs>
+<rect x="25" y="105" width="120" height="65" rx="8" class="card"/><text x="45" y="133">주문 서비스</text><text x="45" y="153" class="muted">생산자</text>
+<path d="M145 138H275" class="line" marker-end="url(#arrow)"/><rect x="171" y="121" width="64" height="32" rx="6" fill="#263e5e" stroke="#91bfff"/><text x="181" y="141" class="blue">#105</text><text x="172" y="100" class="muted">새 작업 유입</text>
+<path d="M305 69H650A27 70 0 0 1 650 209H305Z" fill="#202c3b" stroke="#59718f" stroke-width="2"/>
+<ellipse cx="305" cy="139" rx="27" ry="70" fill="#26384e" stroke="#83a6d1" stroke-width="2"/>
+<ellipse cx="650" cy="139" rx="27" ry="70" fill="none" stroke="#59718f" stroke-width="2"/>
+<rect x="339" y="109" width="79" height="58" rx="6" fill="#2d4562" stroke="#779bc8"/><text x="351" y="133">#104</text><text x="351" y="152" class="tiny muted">email</text>
+<rect x="431" y="109" width="79" height="58" rx="6" fill="#2d4562" stroke="#779bc8"/><text x="443" y="133">#103</text><text x="443" y="152" class="tiny muted">email</text>
+<rect x="523" y="109" width="79" height="58" rx="6" fill="#2d4562" stroke="#779bc8"/><text x="535" y="133">#102</text><text x="535" y="152" class="tiny muted">email</text>
+<text x="360" y="49">대기 큐</text><text x="435" y="49" class="muted">128개 · 일부 표시</text><text x="361" y="241" class="muted">원통 내부에 job 카드가 순서대로 쌓임</text>
+<path d="M677 139H814" class="line" marker-end="url(#arrow)"/><rect x="714" y="122" width="65" height="32" rx="6" fill="#263e5e" stroke="#91bfff"/><text x="724" y="143" class="blue">#101</text><text x="706" y="100" class="muted">워커로 전달</text>
+<rect x="830" y="105" width="190" height="65" rx="8" class="card"/><text x="850" y="132">email-worker-1</text><text x="850" y="153" class="muted">#101 처리 중</text>
+<path d="M925 170V211" class="line" marker-end="url(#arrow)"/><text x="867" y="238" class="green">✓ #100 완료 확인</text>
+</svg><div class="note">그림은 작업 이벤트가 연결된 경우입니다. List 조회만으로는 워커·성공 여부를 추정하지 않습니다.</div></section>
+<section><div class="bar"><strong>캐시</strong><span>product:*</span><span class="right">관찰 32분　　 ● 서비스 이벤트 연결됨</span></div>
+<svg viewBox="0 0 1056 265" role="img" aria-label="서비스 조회와 캐시 키의 TTL 갱신 및 조회 미관측 후보를 표현한 설계">
+<rect x="25" y="92" width="150" height="72" rx="8" class="card"/><text x="45" y="121">상품 API</text><text x="45" y="145" class="muted">GET /products/42</text>
+<path d="M175 127H283" class="line" marker-end="url(#arrow)"/><circle cx="227" cy="127" r="5" fill="#97c1ff"/><text x="199" y="104" class="blue">HIT</text>
+<rect x="299" y="39" width="465" height="191" rx="9" fill="#1c232c" stroke="#3c4b60"/><text x="319" y="65">product:*　24개</text>
+<rect x="320" y="85" width="203" height="118" rx="7" fill="#26364b" stroke="#91bfff" stroke-width="2"/><text x="335" y="111">product:42</text><text x="335" y="134" class="blue">TTL 갱신　28초 → 5분</text><text x="335" y="154" class="muted">마지막 조회 방금</text><rect x="335" y="177" width="172" height="4" rx="2" fill="#38485d"/><rect x="335" y="177" width="161" height="4" rx="2" fill="#97bfff"/>
+<rect x="540" y="85" width="203" height="118" rx="7" class="card"/><text x="555" y="111">product:84</text><text x="555" y="134" class="muted">남은 TTL　18초</text><text x="555" y="154" class="muted">마지막 조회 2초 전</text><rect x="555" y="177" width="172" height="4" rx="2" fill="#38485d"/><rect x="555" y="177" width="22" height="4" rx="2" fill="#c8af7f"/>
+<rect x="793" y="60" width="238" height="150" rx="8" fill="#252629" stroke="#7b7054"/><text x="811" y="87" class="amber">점검 후보</text><text x="811" y="116">product:legacy</text><text x="811" y="140" class="muted">만료 없음</text><text x="811" y="162" class="muted">관측 32분간 조회 없음</text><text x="811" y="188" class="tiny muted">상품 API 연동 범위 기준</text>
+</svg><div class="note">값이 바뀌지 않는 키도 자주 쓰일 수 있습니다. 조회 없음과 변경 없음은 별도로 표시합니다.</div></section>
+<footer>원통 내부 이동 350–600ms · 갱신 시 화면 위치 유지 · 고빈도 이벤트는 묶어서 표시 · 키/job을 선택하면 상세 열기<br>정적 화면 설계입니다. 실제 Redis 연결이나 상태 변경은 수행하지 않습니다.</footer></main></html>

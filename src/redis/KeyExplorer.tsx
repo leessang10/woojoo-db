@@ -1,3 +1,4 @@
+import { SortableTable } from '../components/SortableTable';
 import { useMemo, useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { useLanguage } from '../i18n';
@@ -21,9 +22,10 @@ export function KeyExplorer({ keys, selected, onOpen, complete, busy }: { keys: 
   useEffect(() => setPage(0), [keys]);
   const shown = keys.slice(page * 200, (page + 1) * 200);
   return <div className="redis-key-list" data-testid="redis-key-list" aria-busy={busy}>
-    <table><thead><tr><th>{ko ? '키' : 'Key'}</th><th>{ko ? '자료형' : 'Type'}</th><th>TTL</th><th>{ko ? '길이 / 항목 수' : 'Length / count'}</th></tr></thead>
-      <tbody>{shown.map(item => <tr key={item.key.base64} className={selected === item.key.base64 ? 'selected' : ''}><td><button onClick={() => onOpen(item)} title={item.key.utf8 ? item.key.text : `base64: ${item.key.base64}`}>{item.key.text || '(empty key)'}{!item.key.utf8 && <small> binary</small>}</button>{item.error && <small className="redis-error">{item.error}</small>}</td><td><span className={`redis-type redis-type-${item.type}`}>{item.type}</span></td><td>{ttlText(item.ttlMs, ko)}</td><td>{item.length ?? '—'}</td></tr>)}</tbody>
-    </table>
+    {keys.length > 200 && <p className="redis-muted redis-sort-note">{ko ? '정렬: 현재 페이지' : 'Sort: current page'}</p>}
+    <SortableTable aria-label={ko ? '키 목록' : 'Key list'}><thead><tr><th>{ko ? '키' : 'Key'}</th><th>{ko ? '자료형' : 'Type'}</th><th>TTL</th><th>{ko ? '길이 / 항목 수' : 'Length / count'}</th></tr></thead>
+      <tbody>{shown.map(item => <tr key={item.key.base64} className={selected === item.key.base64 ? 'selected' : ''}><td data-sort-value={item.key.text}><button onClick={() => onOpen(item)} title={item.key.utf8 ? item.key.text : `base64: ${item.key.base64}`}>{item.key.text || '(empty key)'}{!item.key.utf8 && <small> binary</small>}</button>{item.error && <small className="redis-error">{item.error}</small>}</td><td><span className={`redis-type redis-type-${item.type}`}>{item.type}</span></td><td data-sort-value={item.ttlMs ?? undefined}>{ttlText(item.ttlMs, ko)}</td><td>{item.length ?? '—'}</td></tr>)}</tbody>
+    </SortableTable>
     {!keys.length && <p className="redis-empty-inline">{busy ? (ko ? '키를 탐색하고 있습니다…' : 'Scanning keys…') : complete ? (ko ? '표시할 키가 없습니다.' : 'No matching keys.') : (ko ? '아직 키를 발견하지 못했습니다. 더 불러오기를 계속하세요.' : 'No keys discovered yet. Continue loading.')}</p>}
     {keys.length > 200 && <footer className="redis-pagination"><Button variant="ghost" disabled={!page} onClick={() => setPage(p => p - 1)}>{ko ? '이전' : 'Previous'}</Button><span>{page * 200 + 1}–{Math.min(keys.length, (page + 1) * 200)} / {keys.length}</span><Button variant="ghost" disabled={(page + 1) * 200 >= keys.length} onClick={() => setPage(p => p + 1)}>{ko ? '다음' : 'Next'}</Button></footer>}
   </div>;

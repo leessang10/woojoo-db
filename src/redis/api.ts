@@ -22,6 +22,10 @@ export function redisApi(demo = false) {
     value: (request: ReadRequest) => call<RedisValue>('redis_read_value', { request }),
     queue: (request: ReadRequest) => call<QueueInfo>('redis_queue_inspect', { request }),
     info: (request: ReadRequest) => call<{ info: string | null; dbSize: string | null; errors: string[] }>('redis_server_info', { request }),
+    flowEvents: (request: ReadRequest, afterId: string | null) => call<{ records: { id: string; fields: Record<string, string> }[]; lastId: string; gap: boolean; observedAt: number; baseline: boolean }>('redis_flow_events', { request, afterId }),
+    notificationsStart: (sessionId: string) => call<{ subscriptionId: string; configuration: string | null; coverage: string }>('redis_notifications_start', { sessionId }),
+    notificationsPoll: (sessionId: string, subscriptionId: string) => call<{ records: { id: string; keyBase64: string; operation: string; observedAt: number }[]; gap: boolean; connected: boolean; error: string | null; observedAt: number }>('redis_notifications_poll', { sessionId, subscriptionId }),
+    notificationsStop: (sessionId: string, subscriptionId: string) => call<void>('redis_notifications_stop', { sessionId, subscriptionId }),
     cancel: (sessionId: string, requestId: string) => call<void>('redis_cancel', { sessionId, requestId }),
   };
 }

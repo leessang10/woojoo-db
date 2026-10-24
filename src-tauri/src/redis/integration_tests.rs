@@ -589,3 +589,179 @@ async fn set_accepts_exact_65536_raw_bytes_despite_base64_padding() {
     assert!(value.next_cursor.is_none());
     task.abort();
 }
+
+#[tokio::test]
+async fn flow_stream_baselines_and_detects_trim_without_consuming() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let seen = calls.clone();
+    let (p, task) = server(move |args| {
+        seen.lock().unwrap().push(args.clone());
+        let entry = || {
+            array(vec![
+                bulk(b"9007199254740993-0"),
+                array(vec![bulk(b"kind"), bulk(b"cache.hit")]),
+            ])
+        };
+        match args[0].as_slice() {
+            b"SELECT" => b"+OK\r\n".to_vec(),
+            b"XREVRANGE" => array(vec![entry()]),
+            b"XRANGE" if args[2] == args[3] => array(vec![]),
+            b"XRANGE" => array(vec![entry()]),
+            _ => panic!("not an observation read"),
+        }
+    })
+    .await;
+    let mut c = Connection::open(&p, None).await.unwrap();
+    let baseline = flow::read(&mut c, &request(b"events"), None).await.unwrap();
+    assert!(baseline.baseline);
+    assert!(baseline.records.is_empty());
+    assert_eq!(baseline.last_id, "9007199254740993-0");
+    let batch = flow::read(&mut c, &request(b"events"), Some("1-0"))
+        .await
+        .unwrap();
+    assert!(batch.gap);
+    assert_eq!(batch.records[0].fields["kind"], "cache.hit");
+    assert!(calls
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|a| [b"SELECT".as_slice(), b"XRANGE", b"XREVRANGE"].contains(&a[0].as_slice())));
+    task.abort();
+}
+
+#[tokio::test]
+async fn notifications_are_binary_safe_and_disconnect_closes_subscriber() {
+    let (p, task) = server(|args| match args[0].as_slice() {
+        b"SELECT" => b"+OK\r\n".to_vec(),
+        b"CONFIG" => array(vec![bulk(b"notify-keyspace-events"), bulk(b"KEA")]),
+        b"PSUBSCRIBE" => {
+            let mut reply = array(vec![
+                bulk(b"psubscribe"),
+                bulk(b"__keyevent@0__:*"),
+                b":1\r\n".to_vec(),
+            ]);
+            reply.extend(array(vec![
+                bulk(b"pmessage"),
+                bulk(b"__keyevent@0__:*"),
+                bulk(b"__keyevent@0__:set"),
+                bulk(&[255, 0]),
+            ]));
+            reply
+        }
+        _ => panic!("unexpected command"),
+    })
+    .await;
+    let session = Arc::new(Session::new(p, None));
+    let started = notifications::start(&session).await.unwrap();
+    let mut received = vec![];
+    for _ in 0..100 {
+        let batch = notifications::poll(&session, &started.subscription_id).unwrap();
+        received.extend(batch.records);
+        if !received.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    }
+    assert_eq!(received[0].key_base64, "/wA=");
+    assert_eq!(received[0].operation, "set");
+    session.closed.send_replace(true);
+    for _ in 0..100 {
+        if !notifications::poll(&session, &started.subscription_id)
+            .unwrap()
+            .connected
+        {
+            task.abort();
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    }
+    panic!("subscriber did not close");
+}
+
+/// Run only against an isolated disposable Redis with keyevent notifications enabled.
+#[tokio::test]
+#[ignore]
+async fn live_flow_observation_transport() {
+    let port = std::env::var("WOOJOO_FLOW_TEST_PORT")
+        .expect("isolated Redis port required")
+        .parse()
+        .unwrap();
+    let session = Arc::new(Session::new(profile(port), None));
+    let mut c = session.open().await.unwrap();
+    let key = format!("woojoo-flow-test:{}", uuid::Uuid::new_v4());
+    let r = request(key.as_bytes());
+    let initial = flow::read(&mut c, &r, None).await.unwrap();
+    assert!(initial.baseline && initial.records.is_empty());
+    let sub = notifications::start(&session).await.unwrap();
+    // Test producer writes only to this randomly named stream in the disposable fixture.
+    let mut producer = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .unwrap();
+    for index in 0..105 {
+        protocol::send(
+            &mut producer,
+            &[
+                b"XADD".to_vec(),
+                key.as_bytes().to_vec(),
+                b"*".to_vec(),
+                b"kind".to_vec(),
+                b"queue.enqueued".to_vec(),
+                b"jobId".to_vec(),
+                index.to_string().into_bytes(),
+            ],
+        )
+        .await
+        .unwrap();
+        protocol::read(&mut producer).await.unwrap();
+    }
+    let first = flow::read(&mut c, &r, Some(&initial.last_id))
+        .await
+        .unwrap();
+    assert_eq!(first.records.len(), 100);
+    let second = flow::read(&mut c, &r, Some(&first.last_id)).await.unwrap();
+    assert_eq!(second.records.len(), 5);
+    assert!(!second.gap);
+    let mut notifications_seen = 0;
+    for _ in 0..100 {
+        notifications_seen += notifications::poll(&session, &sub.subscription_id)
+            .unwrap()
+            .records
+            .iter()
+            .filter(|e| e.key_base64 == Bytes::new(key.as_bytes()).base64 && e.operation == "xadd")
+            .count();
+        if notifications_seen == 105 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    assert_eq!(notifications_seen, 105);
+    protocol::send(
+        &mut producer,
+        &[
+            b"XTRIM".to_vec(),
+            key.as_bytes().to_vec(),
+            b"MAXLEN".to_vec(),
+            b"1".to_vec(),
+        ],
+    )
+    .await
+    .unwrap();
+    protocol::read(&mut producer).await.unwrap();
+    assert!(
+        flow::read(&mut c, &r, Some(&first.last_id))
+            .await
+            .unwrap()
+            .gap
+    );
+    assert_eq!(
+        c.command("XLEN", &[key.as_bytes()])
+            .await
+            .unwrap()
+            .string()
+            .unwrap(),
+        "1"
+    );
+    notifications::stop(&session, &sub.subscription_id);
+    assert!(notifications::poll(&session, &sub.subscription_id).is_err());
+    session.closed.send_replace(true);
+}

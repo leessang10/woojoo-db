@@ -17,6 +17,35 @@ pub struct Connection {
     socket: Box<dyn Socket>,
 }
 impl Connection {
+    // Fixed internal commands only: never expose arbitrary CONFIG or Pub/Sub IPC.
+    pub async fn notification_config(&mut self) -> Result<String, String> {
+        let values = self
+            .exchange(&[
+                b"CONFIG".to_vec(),
+                b"GET".to_vec(),
+                b"notify-keyspace-events".to_vec(),
+            ])
+            .await?
+            .array()?;
+        values
+            .get(1)
+            .ok_or("PROTOCOL: Missing notification configuration")?
+            .string()
+    }
+    pub async fn subscribe_keyevents(&mut self, db: i64) -> Result<(), String> {
+        self.exchange(&[
+            b"PSUBSCRIBE".to_vec(),
+            format!("__keyevent@{db}__:*").into_bytes(),
+        ])
+        .await?;
+        Ok(())
+    }
+    pub async fn notification(&mut self) -> Result<Resp, String> {
+        match protocol::read(self.socket.as_mut()).await? {
+            Resp::Error(error) => Err(error),
+            value => Ok(value),
+        }
+    }
     pub async fn verify_topology(&mut self) -> Result<bool, String> {
         match self.command("INFO", &[b"cluster"]).await {
             Ok(v) => {
@@ -152,6 +181,7 @@ struct CursorEntry {
     buffer: Vec<Resp>,
 }
 pub struct Session {
+    pub notifications: Mutex<Option<super::notifications::Subscription>>,
     cursor_generation: std::sync::atomic::AtomicU64,
     pub topology_verified: std::sync::atomic::AtomicBool,
     pub profile: Profile,
@@ -170,6 +200,7 @@ impl Session {
     pub fn new(profile: Profile, password: Option<String>) -> Self {
         let (closed, _) = tokio::sync::watch::channel(false);
         Self {
+            notifications: Mutex::new(None),
             cursor_generation: std::sync::atomic::AtomicU64::new(0),
             topology_verified: std::sync::atomic::AtomicBool::new(false),
             profile,

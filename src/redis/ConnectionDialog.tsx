@@ -37,10 +37,10 @@ export function ConnectionDialog({ profile, api, credentialSupported, onClose, o
     </div>
     <label className="redis-check"><input type="checkbox" checked={draft.tls} onChange={e => patch('tls', e.target.checked)}/>{tr('TLS 사용 · 서버 인증서 검증', 'Use TLS · verify server certificate')}</label>
     <label className="redis-check"><input type="checkbox" checked={remember} disabled={!credentialSupported} onChange={e => setRemember(e.target.checked)}/>{tr('이 PC에 비밀번호 기억', 'Remember password on this PC')}</label>
-    {profile && <Button type="button" variant="ghost" disabled={busy} onClick={() => { setBusy(true); void api.forget(profile.id).then(() => setNotice(tr('저장된 비밀번호를 삭제했습니다.', 'Saved password removed.'))).catch(e => setError(errorText(e))).finally(() => setBusy(false)); }}>{tr('저장된 비밀번호 삭제', 'Forget saved password')}</Button>}
-    <p className="redis-muted">{tr('Standalone Redis · 조회 전용 · 저장 시 비밀번호는 프로필에 포함되지 않습니다.', 'Standalone Redis · Read only · Passwords are excluded from saved profiles.')}</p>
+    {profile && <Button type="button" variant="ghost" className="redis-danger" disabled={busy} onClick={() => { setBusy(true); void api.forget(profile.id).then(() => setNotice(tr('저장된 비밀번호를 삭제했습니다.', 'Saved password removed.'))).catch(e => setError(errorText(e))).finally(() => setBusy(false)); }}>{tr('저장된 비밀번호 삭제', 'Forget saved password')}</Button>}
+    <p className="redis-muted">{tr('Standalone Redis · 조회 전용', 'Standalone Redis · Read only')}</p>
     {error && <p role="alert" className="redis-error">{error}</p>}{notice && <p role="status">{notice}</p>}
     <footer><Button type="button" variant="outline" disabled={busy} onClick={() => void run('test')}>{tr('연결 테스트', 'Test connection')}</Button><span/>
-      <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>{tr('취소', 'Cancel')}</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void run('save')}>{tr('프로필 저장', 'Save profile')}</Button><Button type="submit" disabled={busy}>{busy ? tr('처리 중…', 'Working…') : tr('연결', 'Connect')}</Button></footer>
+      <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>{tr('취소', 'Cancel')}</Button><Button type="button" disabled={busy} onClick={() => void run('save')}>{tr('프로필 저장', 'Save profile')}</Button><Button type="submit" disabled={busy}>{busy ? tr('처리 중…', 'Working…') : tr('연결', 'Connect')}</Button></footer>
   </form></ModalSurface>;
 }
