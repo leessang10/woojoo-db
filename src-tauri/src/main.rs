@@ -6,6 +6,7 @@ mod journal;
 mod credentials;
 mod local_database;
 mod aws;
+mod docker;
 mod http;
 mod data;
 mod db;
@@ -19,6 +20,8 @@ mod erd_changes;
 
 /// Set by the UI while closing would lose pending edits or open transactions.
 static CLOSE_GUARD: AtomicBool = AtomicBool::new(false);
+static EXIT_STARTED: AtomicBool = AtomicBool::new(false);
+static EXIT_READY: AtomicBool = AtomicBool::new(false);
 #[tauri::command]
 fn set_close_guard(enabled: bool) { CLOSE_GUARD.store(enabled, Ordering::SeqCst); }
 #[tauri::command]
@@ -50,6 +53,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             set_close_guard,
             close_window,
+            docker::docker_contexts,
+            docker::docker_snapshot,
+            docker::docker_action,
+            docker::logs::docker_logs_start,
+            docker::logs::docker_logs_stop,
             local_database::create_local_database,
             journal::execution_list,
             journal::execution_detail,
@@ -115,6 +123,22 @@ fn main() {
             db::apply_edits,
             db::set_result_limit
         ])
-        .run(tauri::generate_context!())
-        .expect("Woojoo 실행 실패");
+        .build(tauri::generate_context!())
+        .expect("Woojoo 실행 실패")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if !EXIT_READY.load(Ordering::SeqCst) {
+                    // Tauri exits the process directly; detached subprocess tasks must finish first.
+                    api.prevent_exit();
+                    if !EXIT_STARTED.swap(true, Ordering::SeqCst) {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            docker::logs::shutdown().await;
+                            EXIT_READY.store(true, Ordering::SeqCst);
+                            app.exit(code.unwrap_or(0));
+                        });
+                    }
+                }
+            }
+        });
 }
