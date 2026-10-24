@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { desktop } from '../api';
+import type { EnvironmentFormat } from './environment-export';
 import { headerValue, type Collection, type Environment, type HistoryDetail, type HistoryEntry, type HttpResponse, type Outgoing, type SavedRequest, type Workspace } from './model';
 
 /**
@@ -22,6 +23,17 @@ export async function saveRequest(request: SavedRequest): Promise<number> {
 export async function saveEnvironment(environment: Environment) {
   if (desktop) return invoke<void>('http_save_environment', { environment });
   upsert(memory.environments, structuredClone(environment));
+}
+export async function exportEnvironmentFile(name: string, format: EnvironmentFormat, text: string): Promise<boolean> {
+  const base = name.replace(/\.(?:env|json|ya?ml)$/i, '').replace(/[^\p{L}\p{N}_-]/gu, '_').slice(0, 100) || 'environment';
+  if (desktop) return invoke<boolean>('save_environment_export', { name: base, format, text });
+  const types = { env: 'text/plain', json: 'application/json', yml: 'application/yaml' };
+  const url = URL.createObjectURL(new Blob([text], { type: `${types[format]};charset=utf-8` }));
+  const link = document.createElement('a');
+  link.href = url; link.download = `${base}.${format}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }
 export async function deleteItem(table: 'collection' | 'request' | 'environment', id: string) {
   if (desktop) return invoke<void>('http_delete', { table, id });

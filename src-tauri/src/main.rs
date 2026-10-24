@@ -155,6 +155,7 @@ fn main() {
                         tauri::async_runtime::spawn(async move {
                             docker::logs::shutdown().await;
                             EXIT_READY.store(true, Ordering::SeqCst);
+            export::save_environment_export,
                             app.exit(code.unwrap_or(0));
                         });
                     }

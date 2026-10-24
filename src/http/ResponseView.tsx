@@ -1,3 +1,4 @@
+import { SortableTable } from '../components/SortableTable';
 import { useMemo, useState } from 'react';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { json as jsonLanguage } from '@codemirror/lang-json';
@@ -38,11 +39,11 @@ export function ResponseView({ result, theme }: { result?: Result; theme: Theme 
       {view === 'body' && !response.base64 && <Button variant="ghost" size="bare" className="icon-button" title={tr('본문 복사', 'Copy body')} aria-label={tr('본문 복사', 'Copy body')} onClick={() => void navigator.clipboard?.writeText(text).catch(() => {})}><Copy size={13}/></Button>}
     </div>
     {response.truncated && <p className="api-missing"><AlertTriangle size={13}/>{tr('응답이 커서 앞부분만 표시합니다.', 'The response is large; only the beginning is shown.')}</p>}
-    {view === 'headers' ? <div className="api-headers"><table className="api-pairs api-pairs-readonly"><tbody>
-      {response.headers.map(([key, value], index) => <tr key={index}><th>{key}</th><td>{value}</td></tr>)}
-      <tr><th>{tr('최종 URL', 'Final URL')}</th><td>{response.url}</td></tr>
-      <tr><th>{tr('프로토콜', 'Protocol')}</th><td>{response.version}</td></tr>
-    </tbody></table></div>
+    {view === 'headers' ? <div className="api-headers"><SortableTable className="api-pairs api-pairs-readonly"><thead><tr><th>{tr("헤더", "Header")}</th><th>{tr("값", "Value")}</th></tr></thead><tbody>
+      {response.headers.map(([key, value], index) => <tr key={index}><td>{key}</td><td>{value}</td></tr>)}
+      <tr><td>{tr('최종 URL', 'Final URL')}</td><td>{response.url}</td></tr>
+      <tr><td>{tr('프로토콜', 'Protocol')}</td><td>{response.version}</td></tr>
+    </tbody></SortableTable></div>
       : kind === 'image' ? <div className="api-image"><img alt={tr('응답 이미지', 'Response image')} src={`data:${headerValue(response.headers, 'content-type')};base64,${response.body}`}/></div>
       : kind === 'binary' ? <div className="api-response-empty"><span>{tr('바이너리 응답입니다', 'Binary response')} · {headerValue(response.headers, 'content-type') || 'application/octet-stream'} · {formatSize(response.size)}</span></div>
       : <div className="api-editor api-response-editor"><CodeMirror value={text} height="100%" theme={theme === 'dark' ? oneDark : 'light'} editable={false} extensions={extensions} basicSetup={{ highlightActiveLine: false }} aria-label={tr('응답 본문', 'Response body')}/></div>}

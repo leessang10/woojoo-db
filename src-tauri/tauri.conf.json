@@ -12,6 +12,7 @@
   "app": {
     "windows": [{
       "title": "Woojoo — Backend workspace",
+      "dragDropEnabled": false,
       "width": 1440, "height": 940, "minWidth": 960, "minHeight": 640,
       "backgroundColor": "#141720"
     }],

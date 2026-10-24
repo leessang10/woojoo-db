@@ -59,7 +59,7 @@
 .api-pair-tools .icon-button{width:26px;height:26px;color:var(--muted-foreground)}
 .api-pair-file{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;font-size:12px;color:var(--brand)}
 .api-pair-file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.api-pairs-readonly th{width:32%;height:auto;padding:6px 16px;font:12px 'Cascadia Code',Consolas,monospace;color:var(--muted-foreground);vertical-align:top;border-right:1px solid var(--line);overflow-wrap:anywhere}
+.api-pairs-readonly td:first-child{width:32%;height:auto;padding:6px 16px;font:12px 'Cascadia Code',Consolas,monospace;color:var(--muted-foreground);vertical-align:top;border-right:1px solid var(--line);overflow-wrap:anywhere}
 .api-pairs-readonly td{padding:6px 12px;font:12px 'Cascadia Code',Consolas,monospace;overflow-wrap:anywhere;user-select:text}
 
 .api-body{display:flex;flex-direction:column;height:100%}
@@ -106,6 +106,10 @@
 .modal.api-curl-modal{width:620px}
 .modal.api-curl-modal textarea.api-curl-text{height:200px;font:12px/1.6 'Cascadia Code',Consolas,monospace}
 .modal.api-env-modal{width:760px}
+.api-env-drop-overlay{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border:2px dashed var(--brand);border-radius:inherit;background:var(--background);opacity:.96;color:var(--foreground);pointer-events:none}
+.api-env-fields{border:0;padding:0;margin:0;min-width:0}
+.api-env-import{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.api-env-import .api-hint{margin:0}
 .api-env-body{display:flex;gap:16px;height:340px}
 .api-env-list{display:flex;flex-direction:column;gap:2px;width:180px;flex-shrink:0;overflow:auto;padding-right:12px;border-right:1px solid var(--line)}
 .api-env-list [data-slot=button].tree-table{margin:0;width:100%;padding-left:10px}
@@ -115,3 +119,14 @@
 .api-env-name{display:flex;align-items:center;gap:6px;margin-bottom:10px}
 .modal .api-env-name input{height:32px}
 .modal .api-pairs input:not([type=checkbox]){height:30px;border:0;border-radius:0}
+
+/* Destructive icon actions retain their semantic colour in shared toolbars. */
+.api-pair-tools [data-variant=destructive],.api-env-name [data-variant=destructive],.api-history [data-variant=destructive]{color:white;background:var(--destructive)}
+@media(max-width:1000px){.api-line{flex-wrap:wrap}.api-line .api-url{flex-basis:calc(100% - 130px)}.api-env-body{gap:12px}.api-env-list{width:150px}}
+
+.api-hint,.api-response-empty,.api-sidebar-empty{word-break:keep-all;overflow-wrap:anywhere}
+.api-env-heading{display:flex;align-items:center;gap:6px}
+.api-env-help-trigger{color:var(--muted-foreground)}
+.api-env-help-tooltip{z-index:60;width:360px;max-width:calc(100vw - 32px);padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--popover);color:var(--popover-foreground);box-shadow:0 8px 24px #0003;font-size:12px;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
+.api-env-help-tooltip p{margin:0 0 8px}
+.api-env-help-tooltip p:last-child{margin-bottom:0}
