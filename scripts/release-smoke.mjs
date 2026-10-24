@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import { createServer } from 'node:http';
 
 async function chooseOption(trigger, value) {
   await trigger.click();
@@ -35,7 +36,12 @@ const child = spawn(executable, [], {windowsHide:true, stdio:'ignore', env:{...p
 let launchError;
 child.once('error', error => { launchError=error; });
 let browser;
+const httpServer = createServer((request, response) => {
+  response.writeHead(200, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify({ releaseSmoke: 'ok', method: request.method }));
+});
 try {
+  await new Promise(resolve => httpServer.listen(0, '127.0.0.1', resolve));
   for (let attempt=0; attempt<60; attempt++) {
     if (launchError) throw launchError;
     if (child.exitCode !== null) throw new Error(`App exited with ${child.exitCode}`);
@@ -47,25 +53,26 @@ try {
   const page = context.pages()[0] ?? await context.waitForEvent('page');
   const errors=[];
   page.on('pageerror', error => errors.push(error.message));
-  await expect(page.locator('.workspace-brand')).toHaveText('Woojoo', {timeout:20000});
+  await expect(page.locator('.rail')).toBeVisible({timeout:20000});
   expect(new URL(page.url()).hostname).toBe('tauri.localhost');
   expect(await page.evaluate(() => !!window.__TAURI_INTERNALS__)).toBe(true);
   await chooseLanguage(page, 'ko');
   await expect(page.locator('.workspace-empty')).toBeVisible();
-  const database = page.locator('.rail').getByRole('button',{name:'탐색기',exact:true});
-  const archive = page.locator('.rail').getByRole('button',{name:'쿼리 기록',exact:true});
+  const database = page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true});
+  const archive = page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true});
   await archive.click();
   await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toBeVisible();
-  await database.click();
+  await archive.click();
   await expect(page.locator('.workspace-empty')).toBeVisible();
   await expect(page.locator('.sidebar')).toBeVisible();
-  await expect(database).toHaveAttribute('aria-current','page');
+  await expect(database).toHaveAttribute('aria-pressed','true');
+
   await page.getByRole('button',{name:'새 연결',exact:true}).first().click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await page.reload();
-  await expect(page.locator('.workspace-brand')).toHaveText('Woojoo');
+  await expect(page.locator('.rail')).toBeVisible();
   await expect(page.locator('.workspace-empty')).toBeVisible();
   mkdirSync('test-results',{recursive:true});
   await page.screenshot({path:'test-results/release-smoke.png'});
@@ -83,7 +90,7 @@ try {
   await expect(page.locator('.tree-table')).toHaveCount(1);
   for(let i=0;i<2;i++) {
     await archive.click();
-    await database.click();
+    await archive.click();
     await page.locator('.tree-table').click();
     await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
     await expect(page.locator('.object-view-bar')).toBeVisible();
@@ -104,12 +111,12 @@ try {
   await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('woojoo-workspace-v1')??'{}').tabs?.some(tab=>tab.customName==='Renamed'))).toBe(true);
   while(await page.locator('.tab-close').count()) {
     await page.locator('.tab-close').last().click();
-    if(await page.getByRole('alertdialog').count()) await page.getByRole('alertdialog').getByRole('button',{name:'확인',exact:true}).click();
+    if(await page.getByRole('alertdialog').count()) await page.getByRole('alertdialog').getByRole('button',{name:'버리고 닫기',exact:true}).click();
   }
   await expect(page.getByRole('heading',{name:'열린 탭이 없습니다',exact:true})).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('woojoo-workspace-v1')??'{}').tabs?.filter(tab=>tab.profileId!=='demo').length)).toBe(0);
   await page.reload();
-  await expect(page.locator('.workspace-brand')).toHaveText('Woojoo');
+  await expect(page.locator('.rail')).toBeVisible();
   await expect(page.getByRole('tab')).toHaveCount(0);
   await page.evaluate(()=>{
     localStorage.setItem('woojoo-profiles-v1',JSON.stringify(Array.from({length:16},(_,i)=>({id:'preview-'+i,name:'Database '+String(i+1).padStart(2,'0'),engine:'sqlite',host:'',port:0,database:'preview-'+i+'.sqlite3',username:'',tls:false,group:i%2?'Personal':'Work',environment:i%2?'development':'production'}))));
@@ -126,10 +133,19 @@ try {
   await page.keyboard.press('Enter');
   await expect(page.locator('.connection-name')).toContainText('Database 16');
   expect((await page.locator('.tree').boundingBox()).height).toBe(treeHeight);
+  await page.locator('.rail').getByRole('button',{name:'API',exact:true}).click();
+  await expect(page.locator('#api-sidebar')).toBeVisible();
+  await page.getByRole('button',{name:'새 요청',exact:true}).first().click();
+  await page.getByRole('textbox',{name:'URL',exact:true}).fill(`http://127.0.0.1:${httpServer.address().port}/release-smoke`);
+  await page.getByRole('button',{name:'보내기',exact:true}).click();
+  await expect(page.locator('.api-response')).toContainText('releaseSmoke');
+  await expect(page.locator('.api-response')).toContainText('200');
+  await database.click();
   expect(errors).toEqual([]);
   expect(await listening(1420)).toBe(false);
   console.log(JSON.stringify({executable,url:page.url(),developmentServer:false,isolatedProfile:profile,status:'passed'}));
 } finally {
+  httpServer.close();
   await browser?.close();
   if(child.pid) {
     try { execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'}); } catch { /* Already closed. */ }

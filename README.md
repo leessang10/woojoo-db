@@ -4,7 +4,7 @@
 
 PostgreSQL, MySQL, MariaDB, SQLite를 한 작업 공간에서 다루는 데스크톱 데이터베이스 클라이언트입니다. SQL 작성부터 데이터 편집, 스키마 탐색, ERD 내보내기까지 지원합니다.
 
-[Windows 다운로드](https://github.com/leessang10/woojoo-db/releases/latest) · [릴리즈 노트](https://github.com/leessang10/woojoo-db/releases/tag/v0.1.1) · [문제 신고](https://github.com/leessang10/woojoo-db/issues) · [MIT 라이선스](LICENSE)
+[Windows 다운로드](https://github.com/leessang10/woojoo-db/releases/latest) · [릴리즈 노트](https://github.com/leessang10/woojoo-db/releases/tag/v0.1.4) · [문제 신고](https://github.com/leessang10/woojoo-db/issues) · [MIT 라이선스](LICENSE)
 
 ![Woojoo의 한국어 다크 모드 SQL 편집기와 조회 결과](docs/images/workspace-ko.png)
 
@@ -32,14 +32,14 @@ ERD에서 테이블·컬럼·인덱스와 물리 FK를 추가한 뒤 `커밋`에
 
 현재 배포 파일은 **Windows x64**용입니다. macOS·Linux용 실행 파일은 제공하지 않습니다.
 
-1. [최신 릴리즈](https://github.com/leessang10/woojoo-db/releases/latest)에서 `Woojoo-0.1.1-windows-x64.exe`를 다운로드합니다.
+1. [최신 릴리즈](https://github.com/leessang10/woojoo-db/releases/latest)에서 `Woojoo-0.1.4-windows-x64.exe`를 다운로드합니다.
 2. WebView2 런타임이 없다면 [Microsoft 공식 다운로드](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)에서 설치합니다.
 3. EXE를 실행합니다. 별도 설치 프로그램이나 Node.js, Rust, 개발 서버가 필요하지 않습니다.
 
 EXE는 아직 코드 서명되지 않았습니다. Windows에서 게시자 경고가 표시될 수 있습니다. 다운로드한 파일은 릴리즈의 `SHA256SUMS.txt`와 비교할 수 있습니다.
 
 ```powershell
-Get-FileHash .\Woojoo-0.1.1-windows-x64.exe -Algorithm SHA256
+Get-FileHash .\Woojoo-0.1.4-windows-x64.exe -Algorithm SHA256
 ```
 
 업데이트할 때는 앱을 종료하고 새 EXE로 교체합니다. 연결 프로필과 로컬 데이터는 EXE 옆이 아닌 앱의 사용자 데이터 영역에 저장됩니다. 최초 v0.1.0에서 localhost 연결 오류가 발생했다면 수정된 EXE를 다시 다운로드하세요.

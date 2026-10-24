@@ -17,6 +17,7 @@ Pretendard is bundled as a local WOFF2 font; Woojoo’s MIT license does not rep
 
 | Component | Version | License | Text |
 | --- | --- | --- | --- |
+| @codemirror/lang-json | 6.0.2 | MIT | [Full text](docs/licenses/codemirror-lang-json.txt) |
 | @codemirror/lang-sql | 6.10.0 | MIT | [Full text](docs/licenses/frontend.txt) |
 | @codemirror/theme-one-dark | 6.1.3 | MIT | [Full text](docs/licenses/frontend.txt) |
 | @dagrejs/dagre | 3.1.1 | MIT | [Full text](docs/licenses/frontend.txt) |
