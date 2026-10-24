@@ -118,6 +118,7 @@ fn args(p: &Project, file: &str, tail: &[&str]) -> Result<Vec<String>, String> {
     Ok(args)
 }
 async fn run(p: &Project, file: &str, tail: &[&str], seconds: u64) -> Result<String, String> {
+    let _operation = super::storage::operation().await?;
     let args = args(p, file, tail)?;
     let refs: Vec<_> = args.iter().map(String::as_str).collect();
     let mut command = cli::command(Some(&p.context), &refs)?;

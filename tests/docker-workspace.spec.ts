@@ -9,6 +9,16 @@ async function setup(page: Page, scenario = 'normal') {
       transformCallback: (cb: any) => { callbacks.set(++callbackId, cb); return callbackId; }, unregisterCallback: (key: number) => callbacks.delete(key),
       invoke: async (command: string, args: any) => {
         w.calls.push({ command, args });
+        if (command === 'docker_storage_inspect') return { supported: args.context === 'local', disks: args.context === 'local' ? [{ id: 'disk-1', path: 'C:/Docker/data/docker_data.vhdx', fileBytes: 40 * 1024 ** 3, allocatedBytes: 30 * 1024 ** 3, token: 'review-token' }] : [] };
+        if (command === 'docker_storage_stop') { w.dockerFail = true; return; }
+        if (command === 'docker_storage_trim') return '/data: 4 GiB trimmed';
+        if (command === 'docker_storage_compact') {
+          if (scenario === 'storage-cancel') throw 'DOCKER_DISK_UAC_CANCELLED';
+          if (scenario === 'storage-locked') throw 'DOCKER_DISK_IN_USE';
+          await new Promise(resolve => setTimeout(resolve, 350));
+          const before = { id: 'disk-1', path: 'C:/Docker/data/docker_data.vhdx', fileBytes: 40 * 1024 ** 3, allocatedBytes: 30 * 1024 ** 3, token: 'review-token' };
+          return { before, after: { ...before, id: 'disk-2', allocatedBytes: (scenario === 'storage-zero' ? 30 : 12) * 1024 ** 3, token: 'after-token' } };
+        }
         if (command === 'compose_list') return scenario.startsWith('compose') ? [{ id: 'compose-1', context: 'local', name: 'app', path: 'C:/projects/app/compose.yml' }] : [];
         if (command === 'compose_read' && scenario === 'compose-missing') throw 'Compose file not found';
         if (command === 'compose_read' || command === 'compose_import') return { project: { id: 'compose-1', context: 'local', name: 'app', path: 'C:/projects/app/compose.yml' }, source: w.composeSource || 'services:\n  db:\n    image: postgres:16\n' };
@@ -242,4 +252,71 @@ test('independent container names can be edited without changing the target ID',
   await details.getByRole('textbox', { name: '컨테이너 이름', exact: true }).fill('renamed-db');
   await details.getByRole('button', { name: '이름 변경', exact: true }).click();
   await expect.poll(() => calls(page, 'docker_container_rename')).toEqual([{ command: 'docker_container_rename', args: { context: 'local', id, name: 'renamed-db' } }]);
+});
+
+
+test('disk reclaim reviews the selected file and reports allocated bytes rather than file length', async ({ page }, testInfo) => {
+  await setup(page);
+  await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('파일 크기: 40.00 GiB');
+  await expect(dialog).toContainText('실제 디스크 사용: 30.00 GiB');
+  await dialog.getByRole('button', { name: '공간 회수', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('C:/Docker/data/docker_data.vhdx');
+  await page.getByRole('alertdialog').getByRole('button', { name: '공간 회수', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: '닫기', exact: true })).toBeDisabled();
+  await expect(dialog.locator('.storage-result')).toContainText('18.00 GiB 회수');
+  expect((await calls(page, 'docker_storage_compact'))[0].args).toEqual({ context: 'local', id: 'disk-1', token: 'review-token' });
+  expect(await calls(page, 'docker_resource_remove')).toHaveLength(0);
+  expect(await calls(page, 'docker_storage_stop')).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath('disk-reclaim.png'), animations: 'disabled' });
+});
+
+test('disk maintenance treats UAC cancellation as cancellation and allows retry', async ({ page }) => {
+  await setup(page, 'storage-cancel');
+  await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '공간 회수', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '공간 회수', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('관리자 권한 요청을 취소했습니다');
+  await expect(dialog.getByRole('button', { name: '공간 회수', exact: true })).toBeEnabled();
+  await expect(dialog.locator('.storage-result')).toHaveCount(0);
+});
+
+test('stopping Docker for disk maintenance requires its own confirmation', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Docker 종료', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('실행 중인 모든 컨테이너');
+  await page.getByRole('alertdialog').getByRole('button', { name: '종료', exact: true }).click();
+  await expect.poll(() => calls(page, 'docker_storage_stop')).toEqual([{ command: 'docker_storage_stop', args: { context: 'local' } }]);
+  expect(await calls(page, 'docker_storage_compact')).toHaveLength(0);
+});
+
+test('remote context cannot offer local disk compaction', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('combobox', { name: 'Docker 연결 대상' }).selectOption('remote');
+  await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('로컬 Windows Docker WSL 연결');
+  await expect(dialog.getByRole('button', { name: '공간 회수', exact: true })).toHaveCount(0);
+});
+test('locked disks explain how to proceed and never show a success result', async ({ page }) => {
+  await setup(page, 'storage-locked');
+  await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '공간 회수', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '공간 회수', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('디스크가 사용 중');
+  await expect(dialog.locator('.storage-result')).toHaveCount(0);
+});
+test('zero reclaimed bytes is reported honestly after a successful compaction', async ({ page }) => {
+  await setup(page, 'storage-zero');
+  await page.getByRole('button', { name: '디스크 공간 회수', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '공간 회수', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '공간 회수', exact: true }).click();
+  await expect(dialog.locator('.storage-result')).toContainText('0 B 회수');
+  await expect(dialog.locator('.storage-result')).toContainText('실제 디스크 사용량은 줄지 않았습니다');
 });

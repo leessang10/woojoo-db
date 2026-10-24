@@ -116,6 +116,7 @@ pub async fn docker_logs_start(
     subscription: String,
     on_event: Channel<LogEvent>,
 ) -> Result<(), String> {
+    let _operation = super::storage::operation().await?;
     cli::validate(&context)?;
     cli::id(&id)?;
     cli::validate(&subscription)?;

@@ -79,13 +79,18 @@ pub fn failure(stderr: &str) -> String {
     format!("{code}: {}", stderr.chars().take(1500).collect::<String>())
 }
 pub async fn run(context: Option<&str>, args: &[&str], seconds: u64) -> Result<String, String> {
+    let _operation = super::storage::operation().await?;
     let _slot = timeout(Duration::from_secs(3), SLOTS.acquire())
         .await
         .map_err(|_| "DOCKER_BUSY")?
         .map_err(|_| "DOCKER_BUSY")?;
     execute(command(context, args)?, Duration::from_secs(seconds), LIMIT).await
 }
-pub(super) async fn execute(mut command: Command, duration: Duration, limit: u64) -> Result<String, String> {
+pub(super) async fn execute(command: Command, duration: Duration, limit: u64) -> Result<String, String> {
+    let output = execute_bytes(command, duration, limit).await?;
+    String::from_utf8(output).map_err(|_| "DOCKER_INVALID_UTF8".into())
+}
+pub(super) async fn execute_bytes(mut command: Command, duration: Duration, limit: u64) -> Result<Vec<u8>, String> {
     let mut child = command.spawn().map_err(|_| "DOCKER_CLI_START_FAILED")?;
     let stdout = child.stdout.take().ok_or("DOCKER_PIPE_FAILED")?;
     let stderr = child.stderr.take().ok_or("DOCKER_PIPE_FAILED")?;
@@ -110,7 +115,7 @@ pub(super) async fn execute(mut command: Command, duration: Duration, limit: u64
     match result {
         Ok(Ok((status, out, err))) if status.success() => {
             let _ = err;
-            String::from_utf8(out).map_err(|_| "DOCKER_INVALID_UTF8".into())
+            Ok(out)
         }
         Ok(Ok((_, _, err))) => Err(failure(&String::from_utf8_lossy(&err))),
         other => {

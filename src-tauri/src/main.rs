@@ -26,11 +26,13 @@ static EXIT_READY: AtomicBool = AtomicBool::new(false);
 fn set_close_guard(enabled: bool) { CLOSE_GUARD.store(enabled, Ordering::SeqCst); }
 #[tauri::command]
 fn close_window(window: tauri::Window) -> Result<(), String> {
+    if docker::storage::busy() { return Err("Docker disk maintenance is still running".into()); }
     CLOSE_GUARD.store(false, Ordering::SeqCst);
     window.destroy().map_err(|error| error.to_string())
 }
 
 fn main() {
+    if let Some(code) = docker::storage::helper_entry() { std::process::exit(code); }
     tauri::Builder::default()
         .manage(db::State::default())
         .setup(|app| {
@@ -44,6 +46,7 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if docker::storage::busy() { api.prevent_close(); return; }
                 if CLOSE_GUARD.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.emit("close-requested", ());
@@ -58,6 +61,11 @@ fn main() {
             docker::docker_snapshot,
             docker::docker_action,
             docker::docker_resource_remove,
+            docker::storage::docker_storage_inspect,
+            docker::storage::docker_storage_pick,
+            docker::storage::docker_storage_stop,
+            docker::storage::docker_storage_trim,
+            docker::storage::docker_storage_compact,
             docker::docker_container_rename,
             docker::compose::compose_list,
             docker::compose::compose_import,
@@ -138,6 +146,7 @@ fn main() {
         .expect("Woojoo 실행 실패")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if docker::storage::busy() { api.prevent_exit(); return; }
                 if !EXIT_READY.load(Ordering::SeqCst) {
                     // Tauri exits the process directly; detached subprocess tasks must finish first.
                     api.prevent_exit();

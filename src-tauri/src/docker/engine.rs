@@ -2,7 +2,7 @@ use super::cli;
 use std::sync::LazyLock;
 use tokio::sync::Semaphore;
 
-static START: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
+pub(super) static START: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
 // Docker Desktop manages these local Windows pipes. A context's name alone is not evidence.
 pub fn is_desktop_endpoint(endpoint: &str) -> bool {

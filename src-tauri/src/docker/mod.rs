@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod engine;
 pub mod compose;
+pub mod storage;
 pub mod logs;
 use serde_json::{json, Value};
 use std::{
