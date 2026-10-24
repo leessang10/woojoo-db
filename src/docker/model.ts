@@ -8,7 +8,7 @@ export type Container = {
 };
 export type Resource = { id: string; name: string; project: string; detail: string };
 export type Snapshot = { context: string; containers: Container[]; images: Resource[]; volumes: Resource[]; networks: Resource[]; warnings: string[]; complete: boolean };
-export type DockerContext = { name: string; endpoint: string; current: boolean };
+export type DockerContext = { name: string; endpoint: string; current: boolean; canStartDesktop?: boolean };
 export type Kind = 'container' | 'image' | 'port' | 'volume' | 'bind' | 'tmpfs' | 'network';
 export type GraphNode = { id: string; kind: Kind; label: string; detail: string; resourceId: string; container?: Container };
 export type GraphEdge = { id: string; source: string; target: string; label: string };

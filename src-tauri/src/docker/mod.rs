@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod engine;
 pub mod logs;
 use serde_json::{json, Value};
 use std::{
@@ -69,10 +70,12 @@ pub fn container(v: &Value) -> Value {
 #[tauri::command]
 pub async fn docker_contexts() -> Result<Value, String> {
     let raw = cli::run(None, &["context", "ls", "--format", "{{json .}}"], 15).await?;
+    let can_start = engine::supported().await;
     let mut list = Vec::new();
     for line in raw.lines().filter(|l| !l.trim().is_empty()) {
         let v = parse(line)?;
-        list.push(json!({"name":string(&v["Name"]),"endpoint":string(&v["DockerEndpoint"]),"current":v["Current"].as_bool().unwrap_or(false)}));
+        let endpoint = string(&v["DockerEndpoint"]);
+        list.push(json!({"name":string(&v["Name"]),"endpoint":endpoint,"current":v["Current"].as_bool().unwrap_or(false),"canStartDesktop":can_start && engine::is_desktop_endpoint(&endpoint)}));
     }
     Ok(json!(list))
 }

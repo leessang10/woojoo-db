@@ -54,6 +54,7 @@ fn main() {
             set_close_guard,
             close_window,
             docker::docker_contexts,
+            docker::engine::docker_start_desktop,
             docker::docker_snapshot,
             docker::docker_action,
             docker::logs::docker_logs_start,

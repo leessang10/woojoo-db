@@ -2,14 +2,19 @@ import { test, expect, type Page } from './fixtures';
 const id = 'a'.repeat(64);
 async function setup(page: Page, scenario = 'normal') {
   await page.addInitScript(({ scenario, id }) => {
-    const w = window as any; w.calls = []; w.dockerFail = false;
+    const w = window as any; w.calls = []; w.dockerFail = scenario === 'engine-off' || scenario === 'engine-start-fails';
     const callbacks = new Map(); let callbackId = 0;
     Object.defineProperty(window, 'isTauri', { value: true });
     Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {
       transformCallback: (cb: any) => { callbacks.set(++callbackId, cb); return callbackId; }, unregisterCallback: (key: number) => callbacks.delete(key),
       invoke: async (command: string, args: any) => {
         w.calls.push({ command, args });
-        if (command === 'docker_contexts') return [{ name: 'local', endpoint: 'npipe://docker_engine', current: true }, { name: 'remote', endpoint: 'ssh://test', current: false }];
+        if (command === 'docker_contexts') return [{ name: 'local', endpoint: 'npipe://docker_engine', current: true, canStartDesktop: true }, { name: 'remote', endpoint: 'ssh://test', current: false, canStartDesktop: false }];
+        if (command === 'docker_start_desktop') {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (scenario === 'engine-start-fails') throw 'DOCKER_DESKTOP_START_FAILED: example startup failure';
+          w.dockerFail = false; return;
+        }
         if (command === 'docker_snapshot') {
           if (w.dockerFail) throw 'DOCKER_ENGINE_UNAVAILABLE';
           if (scenario === 'delayed' && args.context === 'local') await new Promise(resolve => setTimeout(resolve, 700));
@@ -54,6 +59,33 @@ test('project graph explains port/storage relationships and unknown health witho
   await page.getByRole('button', { name: 'old-project' }).click();
   await expect(page.locator('.docker-node.kind-volume')).toContainText('old_volume');
   await expectAllLogsStopped(page);
+});
+
+test('starts local Docker Desktop once and loads the graph when ready', async ({ page }) => {
+  await setup(page, 'engine-off');
+  const start = page.getByRole('button', { name: 'Docker 켜기', exact: true });
+  await expect(start).toBeVisible(); await start.click();
+  await expect(page.getByRole('button', { name: 'Docker 시작 중…', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Docker 연결 대상')).toBeDisabled();
+  await expect(page.locator('.docker-node.kind-container')).toContainText('local-db');
+  expect((await calls(page, 'docker_start_desktop')).map((c: any) => c.args)).toEqual([{ context: 'local' }]);
+  await expect(start).toHaveCount(0);
+});
+
+test('does not offer local engine startup for a remote context', async ({ page }) => {
+  await setup(page, 'engine-off');
+  await expect(page.getByRole('button', { name: 'Docker 켜기', exact: true })).toBeVisible();
+  await page.getByLabel('Docker 연결 대상').selectOption('remote');
+  await expect(page.getByRole('alert')).toContainText('Docker 엔진에 연결할 수 없습니다');
+  await expect(page.getByRole('button', { name: 'Docker 켜기', exact: true })).toHaveCount(0);
+});
+
+test('startup errors restore the button and remain visible', async ({ page }) => {
+  await setup(page, 'engine-start-fails');
+  await page.getByRole('button', { name: 'Docker 켜기', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('example startup failure');
+  await expect(page.getByRole('button', { name: 'Docker 켜기', exact: true })).toBeEnabled();
+  expect(await calls(page, 'docker_start_desktop')).toHaveLength(1);
 });
 
 test('mutations require confirmation and preserve exact context and ID', async ({ page }) => {
