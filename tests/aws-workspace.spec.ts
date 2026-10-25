@@ -265,3 +265,8 @@ for(const language of ['ko','en']) for(const theme of ['light','dark']) test('AW
  await expect(page.locator('.aws-topology .aws-count')).toContainText('EC2 2');
  await page.screenshot({path:testInfo.outputPath('aws-map.png'),animations:'disabled'});
 });
+
+for(const language of ['ko','en']) for(const theme of ['light','dark']) test('AWS detail design '+language+' '+theme,async({page},info)=>{
+ await page.setViewportSize({width:960,height:640});await page.addInitScript(({language,theme})=>{localStorage.setItem('woojoo-language',language);localStorage.setItem('woojoo-theme',theme);},{language,theme});
+ await mock(page);await page.locator('#aws-sidebar').getByRole('button',{name:language==='ko'?'EC2 인스턴스':'EC2 instances'}).click();await page.locator('.aws-grid').getByText('web-1',{exact:true}).dblclick();await expect(page.locator('.aws-detail-heading h1')).toHaveText('web-1');await page.screenshot({path:info.outputPath('aws-detail.png')});
+});

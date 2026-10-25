@@ -1,5 +1,6 @@
 import { Play, Square, RotateCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { buildGraph, removalBlock, kindLabel, statusLabel, text, tone, type GraphNode, type Snapshot } from './model';
 type Props = { node: GraphNode | undefined; snapshot: Snapshot; language: string; disabled: boolean; busy: boolean; onAction: (action: string) => void; onSelect: (id: string) => void; onRemove: () => void; onEdit: () => void; onRename: (name: string) => void };
@@ -15,7 +16,7 @@ export function DockerDetails({ node, snapshot, language, disabled, busy, onActi
   return <aside className="docker-details" aria-label={tr('리소스 상세', 'Resource details')}>
     <div className="docker-details-heading"><span className="docker-eyebrow">{kindLabel(node.kind, language)}</span><Button variant="ghost" size="icon-sm" aria-label={tr('상세 닫기', 'Close details')} onClick={() => onSelect('')}><X size={14}/></Button></div><h2>{node.label}</h2>
     {c?.project && <Button size="sm" variant="outline" disabled={busy} onClick={onEdit}>{tr('Compose 설정 수정', 'Edit Compose configuration')}</Button>}
-    {c && !c.project && <><label>{tr('컨테이너 이름', 'Container name')}<input className="docker-rename-input" value={name} onChange={e => setName(e.target.value)}/></label><Button size="sm" variant="outline" disabled={disabled || busy || !name || name === c.name} onClick={() => onRename(name)}>{tr('이름 변경', 'Rename')}</Button><p>{tr('포트·이미지·마운트 변경은 컨테이너 재생성이 필요합니다. Compose 프로젝트로 구성해 관리하세요.', 'Changing ports, images or mounts requires recreating the container. Manage these settings through a Compose project.')}</p></>}
+    {c && !c.project && <><label>{tr('컨테이너 이름', 'Container name')}<Input className="docker-rename-input" value={name} onChange={e => setName(e.target.value)}/></label><Button size="sm" variant="outline" disabled={disabled || busy || !name || name === c.name} onClick={() => onRename(name)}>{tr('이름 변경', 'Rename')}</Button><p>{tr('포트·이미지·마운트 변경은 컨테이너 재생성이 필요합니다. Compose 프로젝트로 구성해 관리하세요.', 'Changing ports, images or mounts requires recreating the container. Manage these settings through a Compose project.')}</p></>}
     {c ? <>
       <p className="docker-state" data-tone={tone(c)}>{statusLabel(c, language)}</p>
       <div className="docker-action-row">

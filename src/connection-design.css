@@ -1,0 +1,56 @@
+/* Connection forms share the Redis dialog's quiet, compact field rhythm. */
+.connection-modal { width:570px; max-width:calc(100vw - 40px); border-radius:10px; }
+.connection-modal.aws-connection-modal { width:800px; }
+.connection-modal .modal-heading { margin:0 0 20px; }
+.connection-modal .modal-heading h2 { margin:0; font-size:18px; }
+.connection-scroll { padding:24px; }
+.connection-modal .modal-description { margin:0 0 14px; }
+.connection-modal .engine-options { margin:14px 0 18px; }
+.connection-modal .engine-options button { min-height:34px; padding:6px; }
+.connection-profile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.connection-profile-grid>* { min-width:0; }
+.connection-profile-grid>.form-row,.connection-profile-grid>.connection-wide,
+.connection-profile-grid>.checkbox-label,.connection-profile-grid>.credential-note,
+.connection-profile-grid>.sqlite-file-actions { grid-column:1/-1; }
+.connection-modal .connection-profile-grid label:not(.checkbox-label) { margin:0; gap:6px; font-weight:400; }
+.connection-modal .form-row { gap:14px; }
+.connection-modal .form-row label { min-width:0; }
+
+.connection-modal .connection-profile-grid .credential-note { margin:0; font-size:11px; }
+.connection-modal .connection-profile-grid .checkbox-label { margin:0; min-height:0; }
+.connection-modal .field-hint { font-size:11px; color:var(--muted-foreground); word-break:keep-all; }
+.connection-modal>.modal-actions { padding:18px 24px; gap:8px; background:var(--background); }
+.connection-action-spacer { flex:1; }
+.connection-modal .aws-discovery { border:0; padding:0; background:transparent; }
+.connection-modal .aws-connection-grid { gap:24px; }
+
+.aws-connection-grid .connection-profile-grid>.form-row { flex-wrap:wrap; }
+.aws-connection-grid .form-row>label { flex-basis:120px; }
+:root .compose-dialog { border-radius:10px; font-size:13px; }
+.compose-dialog.compose-registration-dialog { width:min(800px,calc(100vw - 40px)); }
+:root .compose-dialog h2 { font-size:18px; }
+:root .compose-dialog header { margin-bottom:20px; }
+:root .compose-dialog label { gap:6px; font-size:12px; }
+:root .compose-dialog .compose-fields { gap:14px; }
+:root .compose-dialog .compose-fields label { margin:0; min-width:0; }
+:root .compose-dialog .compose-steps { flex-wrap:wrap; gap:14px; font-size:12px; margin:18px 0; }
+:root .compose-dialog footer { margin:18px 0 0; gap:8px; flex-wrap:wrap; }
+:root .docker-details { padding:24px; background:var(--background); }
+:root .docker-details h2 { font-size:18px; margin:0 0 20px; }
+.docker-details>label { display:grid; gap:6px; font-size:12px; margin:14px 0 8px; }
+:root .docker-details dl { display:block; margin-top:18px; }
+:root .docker-details dt { font-size:12px; margin-top:14px; }
+:root .docker-details dd { margin:6px 0 0; font-size:13px; }
+:root .docker-details p { word-break:keep-all; overflow-wrap:anywhere; }
+:root .aws-facts { gap:14px; border:0; border-radius:0; background:transparent; }
+:root .aws-facts>div { padding:0; background:transparent; }
+:root .aws-facts dt { font-size:12px; white-space:normal; word-break:keep-all; overflow-wrap:anywhere; }
+:root .aws-facts dd { font-size:13px; margin-top:6px; white-space:normal; overflow-wrap:anywhere; }
+.aws-detail-heading h1 { font-size:18px; }
+@media(max-width:600px) {
+ .connection-profile-grid { grid-template-columns:minmax(0,1fr); }
+ .connection-modal .form-row { flex-wrap:wrap; }
+ .connection-modal .form-row>label { flex-basis:160px; }
+ .connection-modal>.modal-actions { flex-wrap:wrap; }
+ .connection-action-spacer { display:none; }
+}

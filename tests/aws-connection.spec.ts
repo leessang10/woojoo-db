@@ -13,7 +13,7 @@ async function mock(page:Page,scenario='normal'){
    if(command==='list_tables')return [];throw new Error(command);
   }}});
  },{scenario});
- await page.goto('/');await page.getByLabel('새 연결',{exact:true}).click();await page.getByRole('button',{name:'AWS RDS',exact:true}).click();
+ await page.goto('/');await page.getByLabel(/^(새 연결|New connection)$/).click();await page.getByRole('button',{name:'AWS RDS',exact:true}).click();
 }
 test('AWS profile and region selection fill DB fields and use the existing connection flow',async({page})=>{
  await mock(page);const d=page.getByRole('dialog');await expect(d.getByRole('button',{name:'연결하기',exact:true})).toBeDisabled();
@@ -51,3 +51,11 @@ for(const scenario of ['missing','emptyProfiles','expired','denied','regionDenie
  await expect(d.getByRole('radio',{name:'app-db',exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/aws-discovery-layout.png'});
  });
+
+for(const language of ['ko','en']) for(const theme of ['light','dark']) test('RDS design '+language+' '+theme,async({page},info)=>{
+ await page.setViewportSize({width:960,height:640});await page.addInitScript(({language,theme})=>{localStorage.setItem('woojoo-language',language);localStorage.setItem('woojoo-theme',theme);},{language,theme});
+ await mock(page);await chooseOption(page.getByLabel(language==='ko'?'AWS 프로필':'AWS profile',{exact:true}),'prod');await page.getByRole('radio',{name:'app-db',exact:true}).check();
+ await page.screenshot({path:info.outputPath('rds.png')});
+ await page.getByLabel(language==='ko'?'읽기 전용 연결':'Read-only connection').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('rds-fields.png')});
+ await expect(page.getByRole('dialog').getByRole('button',{name:language==='ko'?'연결하기':'Connect',exact:true})).toBeInViewport();
+});

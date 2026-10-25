@@ -506,3 +506,9 @@ for(const language of ['ko','en']) for(const theme of ['dark','light']) test('de
  await dialog.getByRole('button',{name:ko?'취소':'Cancel',exact:true}).click();
  expect(await calls(page,'docker_resource_remove')).toHaveLength(0);
 });
+
+for(const language of ['ko','en']) for(const theme of ['light','dark']) test('Compose design '+language+' '+theme,async({page},info)=>{
+ await page.setViewportSize({width:960,height:640});await page.addInitScript(({language,theme})=>{localStorage.setItem('woojoo-language',language);localStorage.setItem('woojoo-theme',theme);},{language,theme});
+ await setup(page);const ko=language==='ko';await page.getByRole('button',{name:ko?'새 프로젝트':'New project',exact:true}).click();const d=page.getByRole('dialog');await page.screenshot({path:info.outputPath('compose-create.png')});
+ await d.getByRole('button',{name:ko?'다음':'Next',exact:true}).click();await d.getByRole('button',{name:ko?'다음':'Next',exact:true}).click();await page.screenshot({path:info.outputPath('compose-fields.png')});
+});

@@ -7,6 +7,7 @@ import './fonts.css';
 import './styles.css';
 import './light-theme.css';
 import './workspace-design.css';
+import './connection-design.css';
 import { applyTheme, readTheme } from './theme';
 import { applySettings } from './settings';
 applyTheme(readTheme());
