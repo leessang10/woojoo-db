@@ -1,3 +1,78 @@
-import { Button } from '@/components/ui/button';
-import type { Operation } from './api';
-export function OperationPanel({operations,language,onCancel,onRefresh}:{operations:Operation[];language:string;onCancel:(id:string)=>void;onRefresh:()=>void}){const tr=(ko:string,en:string)=>language==='ko'?ko:en;return <section className="builder-operations"><header><h2>{tr('실행 작업','Operations')}</h2><Button variant="outline" size="sm" onClick={onRefresh}>{tr('실제 상태 다시 확인','Reconcile runtime')}</Button></header>{!operations.length&&<p>{tr('아직 실행한 작업이 없습니다.','No operations yet.')}</p>}{operations.map(op=><article key={op.id}><header><strong>{op.context} / {op.project}</strong><span>{({running:tr('실행 중','Running'),completed:tr('CLI 완료 · 준비 상태 별도 확인','CLI completed · verify readiness'),failed:tr('실패','Failed'),unknown:tr('결과 미확정 · 실제 상태 확인 필요','Outcome unknown · reconcile runtime')} as Record<string,string>)[op.state]??op.state}</span>{op.state==='running'&&<Button variant="outline" size="sm" onClick={()=>onCancel(op.id)}>{tr('CLI 작업 취소','Cancel CLI operation')}</Button>}</header><small>{new Date(op.started*1000).toLocaleString()} · {op.id}</small><pre tabIndex={0}>{op.lines?.join('\n')||tr('이전 세션의 출력은 저장하지 않습니다.','Output from previous sessions is not retained.')}</pre></article>)}<small>{tr('화면 전환은 작업을 중단하지 않습니다. 취소해도 Docker daemon의 작업은 계속될 수 있습니다.','Switching views does not stop jobs. Docker daemon work may continue after cancellation.')}</small></section>}
+import { Button } from "@/components/ui/button";
+import type { Operation } from "./api";
+export function OperationPanel({
+  operations,
+  language,
+  onCancel,
+  onRefresh,
+}: {
+  operations: Operation[];
+  language: string;
+  onCancel: (id: string) => void;
+  onRefresh: () => void;
+}) {
+  const tr = (ko: string, en: string) => (language === "ko" ? ko : en);
+  return (
+    <section className="builder-operations">
+      <header>
+        <h2>{tr("실행 작업", "Operations")}</h2>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          {tr("실제 상태 다시 확인", "Reconcile runtime")}
+        </Button>
+      </header>
+      {!operations.length && (
+        <p>{tr("아직 실행한 작업이 없습니다.", "No operations yet.")}</p>
+      )}
+      {operations.map((op) => (
+        <article key={op.id}>
+          <header>
+            <strong>
+              {op.context} / {op.project}
+            </strong>
+            <span>
+              {(
+                {
+                  running: tr("실행 중", "Running"),
+                  completed: tr(
+                    "CLI 완료 · 준비 상태 별도 확인",
+                    "CLI completed · verify readiness",
+                  ),
+                  failed: tr("실패", "Failed"),
+                  unknown: tr(
+                    "결과 미확정 · 실제 상태 확인 필요",
+                    "Outcome unknown · reconcile runtime",
+                  ),
+                } as Record<string, string>
+              )[op.state] ?? op.state}
+            </span>
+            {op.state === "running" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onCancel(op.id)}
+              >
+                {tr("CLI 작업 취소", "Cancel CLI operation")}
+              </Button>
+            )}
+          </header>
+          <small>
+            {new Date(op.started * 1000).toLocaleString()} · {op.id}
+          </small>
+          <pre tabIndex={0}>
+            {op.lines?.join("\n") ||
+              tr(
+                "이전 세션의 출력은 저장하지 않습니다.",
+                "Output from previous sessions is not retained.",
+              )}
+          </pre>
+        </article>
+      ))}
+      <small>
+        {tr(
+          "화면 전환은 작업을 중단하지 않습니다. 취소해도 Docker daemon의 작업은 계속될 수 있습니다.",
+          "Switching views does not stop jobs. Docker daemon work may continue after cancellation.",
+        )}
+      </small>
+    </section>
+  );
+}

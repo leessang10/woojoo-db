@@ -169,21 +169,16 @@ pub(super) async fn execute(
     // file after review cannot change the service configuration being applied.
     // Build context and mounted file contents remain external mutable inputs.
     let files = vec!["-".to_owned()];
-    let mut child = builder::command(
-        &plan.input,
-        &files,
-        &["up", "--detach", "--remove-orphans=false"],
-    )?
-    .stdin(std::process::Stdio::piped())
-    .spawn()
-    .map_err(|e| e.to_string())?;
+    let mut tail = vec!["up", "--detach", "--remove-orphans=false"];
+    if plan.input.rebuild {
+        tail.push("--build");
+    }
+    let mut child = builder::command(&plan.input, &files, &tail)?
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
     let mut stdin = child.stdin.take().ok_or("Missing stdin")?;
     let bytes = serde_json::to_vec(&plan.model).map_err(|e| e.to_string())?;
-    if let Err(e) = stdin.write_all(&bytes).await {
-        kill_tree(&mut child).await;
-        return Err(e.to_string());
-    }
-    drop(stdin);
     let values = secrets(&plan.model);
     let stdout = child.stdout.take().ok_or("Missing stdout")?;
     let stderr = child.stderr.take().ok_or("Missing stderr")?;
@@ -193,7 +188,17 @@ pub(super) async fn execute(
             output(stderr, &id, &channel, &values)
         );
     };
-    let wait = async { tokio::join!(io, child.wait()).1.map_err(|e| e.to_string()) };
+    let send = async {
+        let result = stdin.write_all(&bytes).await;
+        drop(stdin);
+        result.map_err(|e| e.to_string())
+    };
+    // Drain output while sending the model; cancellation/timeout covers stdin too.
+    let wait = async {
+        let (_, sent, status) = tokio::join!(io, send, child.wait());
+        sent?;
+        status.map_err(|e| e.to_string())
+    };
     let result = tokio::select! {r=wait=>r.map(|s|("finished".to_owned(),s.code())),_=cancel.notified()=>Err("cancelled".into()),_=tokio::time::sleep(Duration::from_secs(seconds))=>Err("timeout".into())};
     match result {
         Ok((_, Some(0))) => Ok(("completed".to_owned(), Some(0))),

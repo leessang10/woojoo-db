@@ -24,6 +24,8 @@ pub struct BuildInput {
     pub files: Vec<SourceFile>,
     pub profiles: Vec<String>,
     #[serde(default)]
+    pub rebuild: bool,
+    #[serde(default)]
     pub env: BTreeMap<String, String>,
 }
 #[derive(Clone)]
@@ -67,7 +69,6 @@ pub fn fingerprint_files(paths: &[PathBuf]) -> Result<String, String> {
     Ok(format!("{:016x}", h.finish()))
 }
 fn validate(input: &BuildInput) -> Result<(), String> {
-    cli::validate(&input.context)?;
     if input.name.is_empty()
         || input.name.len() > 128
         || !input
@@ -296,6 +297,8 @@ fn env_files(input: &BuildInput) -> Result<Vec<SourceFile>, String> {
     for (k, v) in &input.env {
         if env.source.lines().any(|l| {
             l.trim_start()
+                .trim_start_matches("export ")
+                .trim_start()
                 .strip_prefix(k)
                 .is_some_and(|s| s.trim_start().starts_with('='))
         }) {
@@ -306,10 +309,7 @@ fn env_files(input: &BuildInput) -> Result<Vec<SourceFile>, String> {
         if k.is_empty() || !k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
             return Err("Invalid variable key".into());
         }
-        env.source.push_str(&format!(
-            "\n{k}='{}'\n",
-            v.replace('\\', "\\\\").replace('\'', "\\'")
-        ));
+        env.source.push_str(&format!("\n{k}={}\n", dotenv_value(v)));
         if !example
             .source
             .lines()
@@ -324,6 +324,69 @@ fn env_files(input: &BuildInput) -> Result<Vec<SourceFile>, String> {
             .push_str("\n# Local Compose credentials\n.env\n");
     }
     Ok(vec![env, example, ignore])
+}
+fn dotenv_value(value: &str) -> String {
+    format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('$', "$$")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+    )
+}
+
+// Stage every output first. A failed replacement restores only files still
+// matching our just-written content; an external edit is never overwritten.
+fn save_files_with(
+    files: &[SourceFile],
+    mut commit: impl FnMut(&Path, &Path) -> Result<(), String>,
+) -> Result<(), String> {
+    check_originals(files)?;
+    let mut temp = Temporary(vec![]);
+    for f in files {
+        let target = Path::new(&f.path);
+        let staged = target.with_file_name(format!(".woojoo-save-{}", uuid::Uuid::new_v4()));
+        temp.0.push(staged.clone());
+        atomic_write(&staged, f.source.as_bytes())?;
+        if let Ok(metadata) = target.metadata() {
+            std::fs::set_permissions(&staged, metadata.permissions()).map_err(|e| e.to_string())?;
+        }
+    }
+    check_originals(files)?;
+    for (index, f) in files.iter().enumerate() {
+        if let Err(error) = commit(&temp.0[index], Path::new(&f.path)) {
+            let mut unrestored = vec![];
+            for previous in files[..index].iter().rev() {
+                let path = Path::new(&previous.path);
+                let result = if read(path).ok().as_ref() != Some(&previous.source) {
+                    Err("External edit".into())
+                } else if let Some(original) = &previous.original {
+                    atomic_write(path, original.as_bytes())
+                } else {
+                    std::fs::remove_file(path).map_err(|e| e.to_string())
+                };
+                if result.is_err() {
+                    unrestored.push(previous.path.clone());
+                }
+            }
+            return Err(if unrestored.is_empty() {
+                format!("SAVE_FAILED: {error}; prior writes restored")
+            } else {
+                format!(
+                    "SAVE_PARTIAL: {error}; inspect these files before retry: {}",
+                    unrestored.join(", ")
+                )
+            });
+        }
+    }
+    Ok(())
+}
+fn save_files(files: &[SourceFile]) -> Result<(), String> {
+    save_files_with(files, |from, to| {
+        std::fs::rename(from, to).map_err(|e| e.to_string())
+    })
 }
 #[tauri::command]
 pub async fn docker_builder_import(
@@ -519,7 +582,36 @@ pub async fn docker_builder_review(input: BuildInput) -> Result<Value, String> {
     let token = uuid::Uuid::new_v4().to_string();
     let mut masked = model.clone();
     mask_model(&mut masked);
-    let result = json!({"token":token,"effective":masked,"fingerprint":fingerprint,"files":input.files.iter().map(|f|json!({"path":f.path,"changed":f.original.as_ref()!=Some(&f.source)})).collect::<Vec<_>>(),"extraFiles":extras.iter().map(|f|json!({"path":f.path,"purpose":Path::new(&f.path).file_name().unwrap_or_default().to_string_lossy()})).collect::<Vec<_>>(),"checked":now()});
+    let mut baseline = None;
+    let mut changed_fields = BTreeMap::<String, Vec<String>>::new();
+    if input.files.iter().all(|f| f.original.is_some()) {
+        let mut before = input.clone();
+        for f in &mut before.files {
+            f.source = f.original.clone().unwrap_or_default();
+        }
+        if let Ok(mut old) = resolve(&before, false).await {
+            for (name, service) in model["services"].as_object().into_iter().flatten() {
+                let previous = &old["services"][name];
+                let fields = service
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|s| s.keys())
+                    .chain(previous.as_object().into_iter().flat_map(|s| s.keys()))
+                    .collect::<std::collections::BTreeSet<_>>();
+                changed_fields.insert(
+                    name.clone(),
+                    fields
+                        .into_iter()
+                        .filter(|k| service[*k] != previous[*k])
+                        .cloned()
+                        .collect(),
+                );
+            }
+            mask_model(&mut old);
+            baseline = Some(old);
+        }
+    }
+    let result = json!({"token":token,"effective":masked,"baseline":baseline,"changedFields":changed_fields,"fingerprint":fingerprint,"files":input.files.iter().map(|f|json!({"path":f.path,"changed":f.original.as_ref()!=Some(&f.source)})).collect::<Vec<_>>(),"extraFiles":extras.iter().map(|f|json!({"path":f.path,"purpose":Path::new(&f.path).file_name().unwrap_or_default().to_string_lossy()})).collect::<Vec<_>>(),"checked":now()});
     let mut plans = PLANS.lock().map_err(|_| "Plan storage unavailable")?;
     plans.retain(|_, p| now().saturating_sub(p.created) < 1800);
     if plans.len() >= 20 {
@@ -562,9 +654,15 @@ pub async fn verified_plan(token: &str) -> Result<Plan, String> {
 pub async fn save_plan(token: &str) -> Result<Plan, String> {
     let _lock = WRITES.lock().await;
     let mut plan = verified_plan(token).await?;
-    // Preflight every original before any write. Each file replacement is atomic.
+    save_files(
+        &plan
+            .extras
+            .iter()
+            .chain(plan.input.files.iter())
+            .cloned()
+            .collect::<Vec<_>>(),
+    )?;
     for f in plan.extras.iter_mut().chain(plan.input.files.iter_mut()) {
-        atomic_write(Path::new(&f.path), f.source.as_bytes())?;
         f.original = Some(f.source.clone());
     }
     plan.fingerprint = fingerprint_files(&plan.references)?;
@@ -584,9 +682,7 @@ pub async fn docker_builder_save_draft(input: BuildInput) -> Result<Vec<SourceFi
     validate(&input)?;
     let _lock = WRITES.lock().await;
     check_originals(&input.files)?;
-    for f in &input.files {
-        atomic_write(Path::new(&f.path), f.source.as_bytes())?;
-    }
+    save_files(&input.files)?;
     Ok(input
         .files
         .into_iter()
@@ -667,6 +763,49 @@ async fn check_ports(input: &BuildInput, model: &Value) -> Result<(), String> {
 mod tests {
     use super::*;
     #[test]
+    fn failed_save_restores_prior_files_and_cleans_staging() {
+        let dir =
+            std::env::temp_dir().join(format!("woojoo-builder-save-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&dir).unwrap();
+        let a = dir.join("a.yml");
+        let b = dir.join("b.yml");
+        std::fs::write(&a, "old-a").unwrap();
+        std::fs::write(&b, "old-b").unwrap();
+        let files = vec![
+            SourceFile {
+                path: a.to_string_lossy().into_owned(),
+                original: Some("old-a".into()),
+                source: "new-a".into(),
+            },
+            SourceFile {
+                path: b.to_string_lossy().into_owned(),
+                original: Some("old-b".into()),
+                source: "new-b".into(),
+            },
+        ];
+        let mut count = 0;
+        let error = save_files_with(&files, |from, to| {
+            count += 1;
+            if count == 2 {
+                Err("injected second-file failure".into())
+            } else {
+                std::fs::rename(from, to).map_err(|e| e.to_string())
+            }
+        })
+        .unwrap_err();
+        assert!(error.contains("prior writes restored"));
+        assert_eq!(read(&a).unwrap(), "old-a");
+        assert_eq!(read(&b).unwrap(), "old-b");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+        std::fs::remove_file(a).unwrap();
+        std::fs::remove_file(b).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+    #[test]
+    fn dotenv_quotes_preserve_backslashes_and_literal_interpolation() {
+        assert_eq!(dotenv_value("a\\'b\n$TOKEN\""), "\"a\\\\'b\\n$$TOKEN\\\"\"");
+    }
+    #[test]
     fn file_changes_invalidate_review_fingerprint() {
         let dir = std::env::temp_dir().join(format!("woojoo-builder-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -697,6 +836,7 @@ mod tests {
                 },
             ],
             profiles: vec!["dev".into()],
+            rebuild: false,
             env: BTreeMap::new(),
         };
         let args = compose_args(
@@ -728,6 +868,46 @@ mod tests {
         assert_eq!(port_conflicts("other", &model, &snapshot).len(), 1);
     }
     #[tokio::test]
+    #[ignore = "Requires the local Docker Compose CLI; creates no containers"]
+    async fn native_multifile_and_dotenv_roundtrip() {
+        let dir =
+            std::env::temp_dir().join(format!("woojoo-builder-config-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&dir).unwrap();
+        let mut input=BuildInput{id:"config-test".into(),context:"desktop-linux".into(),name:"config-test".into(),profiles:vec![],rebuild:false,env:BTreeMap::from([("TOKEN".into(),"one\\'two\n$LITERAL\"tail\\".into())]),files:vec![
+            SourceFile{path:dir.join("base.yml").to_string_lossy().into_owned(),original:None,source:"services:\n  api:\n    image: redis:7.4\n    environment:\n      TOKEN: ${TOKEN:?required}\n    networks: [private]\n".into()},
+            SourceFile{path:dir.join("dev.yml").to_string_lossy().into_owned(),original:None,source:"networks: {private: {}}\nservices: {worker: {image: redis:7.4}}\n".into()}]};
+        let result = async {
+            let review = docker_builder_review(input.clone()).await?;
+            let plan = save_plan(review["token"].as_str().unwrap()).await?;
+            input = plan.input;
+            input.env.clear();
+            assert_eq!(resolve(&input, false).await?, plan.model);
+            input.files[1].source = input.files[1]
+                .source
+                .replace("image: redis:7.4", "image: redis:7.4-alpine");
+            let changed = docker_builder_review(input.clone()).await?;
+            assert_eq!(
+                changed["effective"]["services"]["worker"]["image"],
+                "redis:7.4-alpine"
+            );
+            assert_eq!(
+                changed["baseline"]["services"]["worker"]["image"],
+                "redis:7.4"
+            );
+            assert!(changed["changedFields"]["worker"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("image")));
+            Ok::<(), String>(())
+        }
+        .await;
+        for name in ["base.yml", "dev.yml", ".env", ".env.example", ".gitignore"] {
+            let _ = std::fs::remove_file(dir.join(name));
+        }
+        let _ = std::fs::remove_dir(dir);
+        assert!(result.is_ok(), "{result:?}");
+    }
+    #[tokio::test]
     #[ignore = "Creates only uniquely named disposable local Docker test resources"]
     async fn native_review_run_recreate_and_data_retention() {
         let id = format!("woojoo-builder-test-{}", uuid::Uuid::new_v4().simple());
@@ -735,6 +915,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("compose.yml");
         let env_path = dir.join(".env");
+        let dockerfile = dir.join("Dockerfile");
+        let marker = dir.join("marker");
+        let build_image = format!("{id}-worker:local");
         std::fs::write(&env_path, "VERIFY=one\n").unwrap();
         let source="services:\n  redis:\n    image: redis:7.4\n    command: [redis-server, --appendonly, 'yes']\n    environment:\n      VERIFY: ${VERIFY}\n    volumes: [data:/data]\n    healthcheck:\n      test: [CMD, redis-cli, ping]\n      interval: 1s\n      timeout: 2s\n      retries: 30\nvolumes:\n  data: {}\n";
         let mut input = BuildInput {
@@ -747,6 +930,7 @@ mod tests {
                 source: source.into(),
             }],
             profiles: vec![],
+            rebuild: false,
             env: BTreeMap::new(),
         };
         let result = docker_builder_review(input.clone()).await.unwrap();
@@ -789,6 +973,15 @@ mod tests {
             assert!(run(input.clone(),vec!["up","--detach","--wait","--wait-timeout","10","--remove-orphans=false"]).await.is_err());
             input.files[0].source=input.files[0].source.replace("exit 2","sleep 300");let r=docker_builder_review(input.clone()).await?;input=save_plan(r["token"].as_str().unwrap()).await?.input;
             run(input.clone(),vec!["up","--detach","--wait","--wait-timeout","30","--remove-orphans=false"]).await?;
+            std::fs::write(&dockerfile,"FROM redis:7.4\nCOPY marker /marker\n").map_err(|e|e.to_string())?;
+            input.files[0].source=input.files[0].source.replace("worker:\n    image: redis:7.4",&format!("worker:\n    image: {build_image}\n    build: {{context: .}}"));input.rebuild=true;
+            for value in ["first-build","rebuilt-source"]{
+                std::fs::write(&marker,value).map_err(|e|e.to_string())?;
+                let r=docker_builder_review(input.clone()).await?;let plan=save_plan(r["token"].as_str().unwrap()).await?;input=plan.input.clone();
+                let (state,code)=super::super::builder_jobs::execute("native-rebuild-test",&plan,std::sync::Arc::new(tokio::sync::Notify::new()),&channel,240).await?;
+                assert_eq!((state.as_str(),code),("completed",Some(0)));
+                assert_eq!(run(input.clone(),vec!["exec","-T","worker","cat","/marker"]).await?.trim(),value);
+            }
             Ok::<(),String>(())
         }.await;
         let cleanup = cli::execute(
@@ -797,7 +990,8 @@ mod tests {
             1024 * 1024,
         )
         .await;
-        for f in [&path, &env_path] {
+        let _ = cli::run(Some(&input.context), &["image", "rm", &build_image], 30).await;
+        for f in [&path, &env_path, &dockerfile, &marker] {
             let _ = std::fs::remove_file(f);
         }
         let _ = std::fs::remove_dir(&dir);
