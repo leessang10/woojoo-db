@@ -33,7 +33,7 @@ export function readProject(source: string): ProjectView {
   const rootLocked = !!obj.include || !isMap(doc.contents);
   const services: ServiceView[] = Object.entries(record(obj.services)).map(([key, value]) => {
     const raw = record(value); const node = doc.getIn(['services', key], true);
-    let shared = false; if (node) visit(node as Parameters<typeof visit>[0], (_k, n) => { if (isAlias(n) || (isMap(n) && n.items.some(p => String(p.key) === '<<'))) shared = true; });
+    let shared = false; if (node) visit(node as Parameters<typeof visit>[0], (_k, n) => { if (isAlias(n) || (n && typeof n === 'object' && 'anchor' in n && n.anchor) || (isMap(n) && n.items.some(p => String(p.key) === '<<'))) shared = true; });
     const editable = !rootLocked && !shared && !raw.extends && !raw.network_mode && isMap(node);
     const deps = Array.isArray(raw.depends_on) ? Object.fromEntries(raw.depends_on.map(v => [String(v), {condition: 'service_started'}])) : Object.fromEntries(Object.entries(record(raw.depends_on)).map(([k,v]) => [k, {...record(v), condition: record(v).condition ?? 'service_started'}]));
     const envFiles = Array.isArray(raw.env_file) ? raw.env_file : raw.env_file ? [raw.env_file] : [];
@@ -49,7 +49,7 @@ export function readProject(source: string): ProjectView {
   const networks = resources(obj.networks); if (services.some(s => s.networks.includes('default')) && !networks.some(n => n.key === 'default')) networks.unshift({key:'default', external:false});
   return {services, networks, volumes: resources(obj.volumes), issues, editable: !rootLocked && !doc.errors.length};
 }
-export function frame(d: ProjectDraft): DraftFrame { return {source:d.source, connections:structuredClone(d.connections)}; }
+export function frame(d: ProjectDraft): DraftFrame { return {source:d.source, connections:structuredClone(d.connections),files:structuredClone(d.files)}; }
 export function changeProject(d: ProjectDraft, source: string, connections = d.connections): ProjectDraft {
   return {...d, source, connections, revision:d.revision+1, past:[...d.past.slice(-49), frame(d)], future:[]};
 }
@@ -66,14 +66,29 @@ export function patchProject(draft: ProjectDraft, patches: Patch[], connections 
       const parent = p.path.slice(0,3), n = doc.getIn(parent, true);
       if (isSeq(n)) {
         const field = p.path[2];
-        if (field === 'environment') doc.setIn(parent, service?.environment ?? {});
-        if (field === 'depends_on') doc.setIn(parent, service?.depends ?? {});
-        if (field === 'networks') doc.setIn(parent, Object.fromEntries((service?.networks ?? []).map(k => [k, {}])));
+        if (field === 'environment') doc.setIn(parent, doc.createNode(service?.environment ?? {}));
+        if (field === 'depends_on') doc.setIn(parent, doc.createNode(service?.depends ?? {}));
+        if (field === 'networks') doc.setIn(parent, doc.createNode(Object.fromEntries((service?.networks ?? []).map(k => [k, {}]))));
       }
     }
-    if (p.remove) doc.deleteIn(p.path); else doc.setIn(p.path, p.value);
+    if (p.remove) doc.deleteIn(p.path); else doc.setIn(p.path, doc.createNode(p.value));
   }
-  return changeProject(draft, doc.toString(), connections);
+  const tracked=structuredClone(connections);
+  for(const connection of tracked)for(const mapping of connection.mappings){
+    const ref=mapping.reference;if(!ref)continue;
+    const consumerPath=['services',connection.consumer,...(connection.injection==='build'?['build','args']:['environment']),mapping.key];
+    const owned=connection.owned.find(o=>JSON.stringify(o.path)===JSON.stringify(consumerPath));
+    if(!owned||doc.getIn(consumerPath)!==owned.value){mapping.reference=undefined;continue;}
+    let next:unknown;
+    if(ref.field==='environment')next=doc.getIn(['services',ref.service,'environment',ref.key!]);
+    else if(ref.field==='host')next=ref.service;
+    else if(patches.some(p=>p.path[0]==='services'&&p.path[1]===ref.service&&['ports','expose'].includes(String(p.path[2])))){
+      const provider=readProject(doc.toString()).services.find(s=>s.key===ref.service);
+      next=provider?.ports[0]?.target??(provider?.raw.expose as unknown[])?.[0];
+    }
+    if(next!==undefined&&String(next)!==String(owned.value)){doc.setIn(consumerPath,String(next));mapping.value=String(next);owned.value=String(next);}
+  }
+  return changeProject(draft, doc.toString(), tracked);
 }
 export function undoProject(d: ProjectDraft): ProjectDraft { const last = d.past.at(-1); return last ? {...d, ...last, revision:d.revision+1, past:d.past.slice(0,-1), future:[frame(d), ...d.future]} : d; }
 export function redoProject(d: ProjectDraft): ProjectDraft { const next = d.future[0]; return next ? {...d, ...next, revision:d.revision+1, past:[...d.past,frame(d)], future:d.future.slice(1)} : d; }

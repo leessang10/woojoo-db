@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createProject, patchProject, readProject, undoProject } from './document';
-import { addComponent } from './catalog';
+import { addComponent, configureRedis } from './catalog';
 import { applyConnection, proposeConnection, removeConnection, renameService } from './connections';
 import { validateProject } from './validation';
 
@@ -11,6 +11,12 @@ describe('component assembly', () => {
     expect(v.services[0].ports[0]).toMatchObject({target:6379,published:'6379',hostIp:'127.0.0.1'});
     expect(v.services[0].mounts[0].source).toBe('redis-data'); expect(v.services[0].healthcheck).toBeTruthy();
     expect(readProject(addComponent(d,{template:'mysql'}).source).services[1].ports).toHaveLength(0);
+  });
+  it('configures Redis authentication and persistence without embedding a password', () => {
+    const d=configureRedis(addComponent(createProject(),{template:'redis'}),'redis',true,false);
+    const s=readProject(d.source).services[0];expect(s.environment.REDIS_PASSWORD).toContain('${REDIS_PASSWORD:?');
+    expect(JSON.stringify(s.command)).toContain('requirepass');expect(JSON.stringify(s.healthcheck)).toContain('REDISCLI_AUTH');
+    expect(JSON.stringify(s.command)).toContain('--appendonly no');
   });
   it('applies a reviewed connection as a single undo transaction', () => {
     const d=stack(), p=proposeConnection(d,'api','mysql');
@@ -24,6 +30,11 @@ describe('component assembly', () => {
     d=applyConnection(d,proposeConnection(d,'api','mysql')); expect(readProject(d.source).services[0].environment.DB_HOST).toBe('custom');
     const file=patchProject(stack(),[{path:['services','api','env_file'],value:['app.env']}]);
     expect(proposeConnection(file,'api','mysql').mappings.every(m=>!m.enabled)).toBe(true);
+  });
+  it('keeps existing values expressed in list syntax', () => {
+    const d=patchProject(stack(),[{path:['services','api','environment'],value:['DB_HOST=private-existing']}]);
+    const next=applyConnection(d,proposeConnection(d,'api','mysql'));
+    expect(readProject(next.source).services[0].environment.DB_HOST).toBe('private-existing');
   });
   it('renames only managed references and retains edited mappings on disconnect', () => {
     let d=applyConnection(stack(),proposeConnection(stack(),'api','mysql'));

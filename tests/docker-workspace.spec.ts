@@ -56,6 +56,7 @@ async function setup(page: Page, scenario = 'normal') {
   }, { scenario, id });
   await page.goto('/');
   await page.getByRole('button', { name: 'Docker', exact: true }).click();
+  await page.getByRole('button', { name: /실행 리소스|Runtime resources/, exact: true }).click();
 }
 const calls = (page: Page, command: string) => page.evaluate(command => (window as any).calls.filter((c: any) => c.command === command), command);
 async function expectAllLogsStopped(page: Page) {
@@ -184,6 +185,7 @@ test('filtering and panning preserve the position of a hidden dragged node', asy
 test('browser demo is explicit and works in English and light mode', async ({ page }, testInfo) => {
   await page.addInitScript(() => { localStorage.setItem('woojoo-language', 'en'); localStorage.setItem('woojoo-theme', 'light'); });
   await page.goto('/'); await page.getByRole('button', { name: 'Docker', exact: true }).click();
+  await page.getByRole('button', { name: /실행 리소스|Runtime resources/, exact: true }).click();
   // Language preference key is owned by the app; choose either localized label.
   await page.getByRole('button', { name: /데모 관계도 보기|View demo topology/ }).click();
   await expect(page.locator('.docker-banner')).toContainText(/데모 데이터|Demo data/);
@@ -198,11 +200,9 @@ test('browser demo is explicit and works in English and light mode', async ({ pa
 });
 
 
-test('Compose import validates before apply and preserves reviewed context and project', async ({ page }, testInfo) => {
-  await setup(page);
-  await expect(page.getByRole('button', { name: 'Compose 불러오기', exact: true })).toHaveCount(0);
-  await page.locator('.docker-project-heading').getByRole('button', { name: '새 프로젝트', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Compose 불러오기', exact: true }).click();
+test('linked Compose runtime controls validate before applying the reviewed project', async ({ page }, testInfo) => {
+  await setup(page, 'compose');
+  await page.getByRole('button', { name: 'app', exact: true }).last().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('C:/projects/app/compose.yml', { exact: false })).toBeVisible();
   await dialog.getByRole('button', { name: '검증·미리보기' }).click();
@@ -229,20 +229,15 @@ test('Compose edit invalidates preview, saves with original source and requires 
   expect(await calls(page, 'compose_action')).toHaveLength(0);
 });
 
-test('Compose wizard generates a persistent service and never starts it on save', async ({ page }) => {
+test('new project opens the builder without starting or saving containers', async ({page}) => {
   await setup(page);
-  await page.getByRole('button', { name: '새 프로젝트', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByRole('textbox', { name: '프로젝트 이름', exact: true }).fill('wizard-app');
-  await dialog.getByRole('button', { name: '다음', exact: true }).click();
-  await dialog.getByRole('button', { name: '다음', exact: true }).click();
-  await dialog.getByRole('button', { name: '다음', exact: true }).click();
-  await expect(dialog.locator('.compose-source-preview')).toContainText('postgres-data:/var/lib/postgresql/data');
-  await dialog.getByRole('button', { name: '위치 선택·저장' }).click();
-  await expect.poll(() => calls(page, 'compose_create')).toHaveLength(1);
-  expect(await calls(page, 'compose_action')).toHaveLength(0);
+  await page.getByRole('button', {name:'새 프로젝트', exact:true}).click();
+  await expect(page.getByTestId('docker-project-builder')).toBeVisible();
+  await page.getByRole('button', {name:'Redis 추가',exact:true}).click();
+  await expect(page.getByTestId('builder-service-redis')).toBeVisible();
+  expect(await calls(page,'compose_create')).toHaveLength(0);
+  expect(await calls(page,'compose_action')).toHaveLength(0);
 });
-
 test('resource removal requires confirmation and retains exact context and id', async ({ page }, testInfo) => {
   await setup(page, 'stopped'); await selectDb(page);
   await page.locator('.docker-details').getByRole('button', { name: '리소스 삭제' }).click();
@@ -509,6 +504,8 @@ for(const language of ['ko','en']) for(const theme of ['dark','light']) test('de
 
 for(const language of ['ko','en']) for(const theme of ['light','dark']) test('Compose design '+language+' '+theme,async({page},info)=>{
  await page.setViewportSize({width:960,height:640});await page.addInitScript(({language,theme})=>{localStorage.setItem('woojoo-language',language);localStorage.setItem('woojoo-theme',theme);},{language,theme});
- await setup(page);const ko=language==='ko';await page.getByRole('button',{name:ko?'새 프로젝트':'New project',exact:true}).click();const d=page.getByRole('dialog');await page.screenshot({path:info.outputPath('compose-create.png')});
- await d.getByRole('button',{name:ko?'다음':'Next',exact:true}).click();await d.getByRole('button',{name:ko?'다음':'Next',exact:true}).click();await page.screenshot({path:info.outputPath('compose-fields.png')});
+ await setup(page);const ko=language==='ko';await page.getByRole('button',{name:ko?'새 프로젝트':'New project',exact:true}).click();await page.screenshot({path:info.outputPath('compose-create.png')});
+ const add=page.getByRole('button',{name:ko?'Redis 추가':'Redis Add',exact:true});await add.focus();await page.keyboard.press('Enter');await expect(page.getByTestId('builder-service-redis')).toBeVisible();
+ await page.getByRole('button',{name:ko?'Compose 원문':'Compose source',exact:true}).click();await expect(page.getByLabel('Compose YAML')).toHaveValue(/redis:7.4/);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('compose-fields.png')});
 });

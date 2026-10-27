@@ -16,12 +16,14 @@ export function proposeConnection(d:ProjectDraft, consumer:string, provider:stri
     mappings.push(map(key,b.environment[from]??'',{service:provider,field:'environment',key:from},key.endsWith('PASSWORD')));
   }
   if(t?.id==='elasticsearch') { mappings.length=0; mappings.push(map('ELASTICSEARCH_URL',`https://${provider}:${endpoint}`),map('ELASTICSEARCH_CA',''),map('ELASTICSEARCH_API_KEY','',undefined,true)); }
+  if(t?.id==='redis'&&b.environment.REDIS_PASSWORD)mappings.push(map('REDIS_PASSWORD',b.environment.REDIS_PASSWORD,{service:provider,field:'environment',key:'REDIS_PASSWORD'},true));
   return {id:uid(),consumer,provider,origin:'container',injection:'runtime',endpoint,network:a.networks.find(n=>b.networks.includes(n))??a.networks[0]??'default',condition:b.healthcheck&&!b.healthcheck.disable?'service_healthy':'service_started',mappings,publicUrl:'',healthcheck:b.healthcheck};
 }
 export function applyConnection(d:ProjectDraft,p:ConnectionProposal):ProjectDraft {
   const v=readProject(d.source), a=v.services.find(s=>s.key===p.consumer), b=v.services.find(s=>s.key===p.provider);
   if(!a||!b||a===b) throw new Error('Choose two different services');
   if(p.origin==='browser') {
+    if(['mysql','postgres','redis'].includes(templateFor(b.image)?.id??''))throw new Error('Browser / 브라우저 연결은 HTTP API를 대상으로 설정하세요.');
     const endpoint=p.publicUrl.trim(); const host=(()=>{try{return new URL(endpoint).hostname;}catch{return '';}})();
     if(p.mappings.some(m=>m.enabled&&m.secret)||(!endpoint.startsWith('/')&&!/^https?:\/\//.test(endpoint))||v.services.some(s=>s.key===host)) throw new Error('Browser / 브라우저 연결에는 공개 HTTP 주소가 필요하며 비밀값을 넣을 수 없습니다.');
   }
@@ -36,7 +38,7 @@ export function applyConnection(d:ProjectDraft,p:ConnectionProposal):ProjectDraf
     if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(m.key)) throw new Error('Invalid environment variable name');
     const path=p.injection==='build'?['services',a.key,'build','args',m.key]:['services',a.key,'environment',m.key];
     if(p.injection==='build'&&!a.build) throw new Error('Build configuration required');
-    const existing=valueAt(d.source,path);
+    const existing=p.injection==='runtime'?a.environment[m.key]:valueAt(d.source,path);
     if(existing!==undefined&&!m.replace) continue;
     if(a.envFiles.length&&!m.replace&&p.injection==='runtime') continue;
     add(path,p.origin==='browser'?p.publicUrl:m.value);

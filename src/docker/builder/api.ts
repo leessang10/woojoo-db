@@ -18,4 +18,4 @@ export const saveDraftFile=(input:BuildInput)=>invoke<NativeFile[]>('docker_buil
 export const operations=()=>invoke<Operation[]>('docker_builder_operations');
 export const cancelOperation=(id:string)=>invoke<void>('docker_builder_cancel',{id});
 export function startOperation(token:string,seconds:number,onEvent:(event:{id:string;line?:string;state?:string;code?:number})=>void){const channel=new Channel<Parameters<typeof onEvent>[0]>();channel.onmessage=onEvent;return invoke<Operation>('docker_builder_start',{token,seconds,onEvent:channel});}
-export const inputFor=(d:ProjectDraft,env:Record<string,string>):BuildInput=>({id:d.id,context:d.context,name:d.name,profiles:d.profiles,files:d.files.map((f,i)=>({...f,original:f.original||null,source:d.files.length===1||i===0&&d.files.length===0?d.source:f.source})),env});
+export const inputFor=(d:ProjectDraft,env:Record<string,string>):BuildInput=>({id:d.id,context:d.context,name:d.name,profiles:d.profiles,files:d.files.map(f=>({...f,source:d.files.length===1?d.source:f.source})),env});

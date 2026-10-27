@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useLanguage } from '../i18n';
 
-export type ConfirmOptions = { title?: string; confirmLabel?: string; destructive?: boolean; confirmationPhrase?: string };
+export type ConfirmOptions = { title?: string; confirmLabel?: string; cancelLabel?: string; destructive?: boolean; confirmationPhrase?: string };
 type Request = ConfirmOptions & { message: string; resolve: (accepted: boolean) => void; trigger: HTMLElement | null };
 type Confirmation = { requestConfirm: (message: string, options?: ConfirmOptions) => Promise<boolean>; confirming: boolean };
 const Context = createContext<Confirmation | null>(null);
@@ -51,7 +51,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             {unlocked && <label className="grid gap-2 text-sm break-keep">{language === 'ko' ? '확인을 위해 대상 이름을 입력하세요' : 'Type the target name to confirm'}<code className="break-all">{request.confirmationPhrase}</code><Input aria-label={language === 'ko' ? '삭제 대상 이름' : 'Deletion target name'} value={phrase} onChange={event => setPhrase(event.target.value)} autoComplete="off" /></label>}
           </div>}
           <div className="flex justify-end gap-2">
-            <AlertDialog.Cancel asChild><Button variant="outline" onClick={() => finish(false)}>{t('취소')}</Button></AlertDialog.Cancel>
+            <AlertDialog.Cancel asChild><Button variant="outline" onClick={() => finish(false)}>{request?.cancelLabel ?? t('취소')}</Button></AlertDialog.Cancel>
             <AlertDialog.Action asChild><Button disabled={request?.confirmationPhrase !== undefined && (!unlocked || phrase !== request.confirmationPhrase)} variant={request?.destructive ? 'destructive' : 'default'} onClick={() => finish(true)}>{request?.confirmLabel ?? t('확인')}</Button></AlertDialog.Action>
           </div>
         </AlertDialog.Content>

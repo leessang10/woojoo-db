@@ -588,12 +588,16 @@ export default function App() {
   }, [confirming, renaming, showConnect, showReview, showHelp, showSettings, editing,dataDirty]);
   // Unsaved SQL text is restored from the workspace on restart; pending row edits and open transactions are not.
   const liveSessions = connections.filter(c => c.session !== 'demo' && !c.session.startsWith('saved:'));
-  const closeGuard = workspace.tabs.some(item => Object.keys(item.draft).length > 0) || Object.values(dataDirty).some(Boolean) || liveSessions.length > 0;
+  const [dockerBuilderGuard, setDockerBuilderGuard] = useState({dirty:false,running:false});
+  useEffect(() => { const changed=(event:Event)=>setDockerBuilderGuard((event as CustomEvent<{dirty:boolean;running:boolean}>).detail);window.addEventListener('docker-builder-guard',changed);return()=>window.removeEventListener('docker-builder-guard',changed); },[]);
+  const closeGuard = dockerBuilderGuard.dirty || dockerBuilderGuard.running || workspace.tabs.some(item => Object.keys(item.draft).length > 0) || Object.values(dataDirty).some(Boolean) || liveSessions.length > 0;
   // Guard closing only while the UI can actually receive the close request; otherwise the window must close normally.
   const [closeListener, setCloseListener] = useState(false);
   useEffect(() => { if (api.desktop) void invoke('set_close_guard', { enabled: closeGuard && closeListener }).catch(() => {}); }, [closeGuard, closeListener]);
   const appCloseRef = useRef(async () => {});
   appCloseRef.current = async () => {
+    if (dockerBuilderGuard.running && !await requestConfirm(tr('Docker CLI 작업을 중단하고 종료할 수 있습니다. Docker daemon 작업은 계속될 수 있으며 다음 실행 시 실제 상태를 확인합니다.','Exit and stop owned Docker CLI processes? Daemon work may continue; its actual state will be reconciled next time.'), {title:tr('Docker 작업 진행 중','Docker operation in progress'),confirmLabel:tr('종료하고 다음에 상태 확인','Exit and reconcile next time'),cancelLabel:tr('작업 완료까지 기다리기','Wait for completion')})) return;
+    if (dockerBuilderGuard.dirty && !await requestConfirm(tr('Docker의 안전한 초안 구조는 복원할 수 있지만 미저장 원문·환경 변수·비밀값은 복원되지 않습니다. 저장하려면 취소한 뒤 Docker에서 원문 파일을 저장하세요.','Safe Docker draft structure can be restored. Unsaved raw source, environment values and secrets cannot. Cancel and save the source in Docker to retain them.'), {title:tr('미저장 Docker 변경','Unsaved Docker changes'),confirmLabel:tr('미저장 값 버리고 닫기','Discard unsaved values and close')})) return;
     try { persistTabs(allTabsRef.current, Object.fromEntries(connections.map(c => [c.session, c.profile.id])), tab.id); } catch { /* Closing must not depend on storage. */ }
     const edits = allTabsRef.current.reduce((sum, item) => sum + collectEdits(item.result.rows, item.draft).length, 0);
     const dataTabs = allTabsRef.current.filter(item => dataDirtyRef.current[item.id]).length;

@@ -16,6 +16,10 @@ describe('project source documents', () => {
     expect(readProject(source).services[0].editable).toBe(false);
     expect(() => patchProject(createProject(source), [{ path: ['services', 'redis', 'image'], value: 'redis:8' }])).toThrow(/source|원문/i);
   });
+  it('locks an anchor definition shared by another service',()=>{
+    const d=createProject('services:\n  a:\n    image: redis:7.4\n    environment: &shared\n      MODE: original\n  b:\n    image: redis:7.4\n    environment: *shared\n');
+    expect(()=>patchProject(d,[{path:['services','a','environment','MODE'],value:'new'}])).toThrow(/source|원문/);
+  });
   it('exposes malformed YAML issues without throwing away the document', () => {
     const view = readProject('services:\n  api:\n    image: [invalid\n');
     expect(view.issues.some(i => i.severity === 'error')).toBe(true);
@@ -25,6 +29,13 @@ describe('project source documents', () => {
     expect(view.services[0].ports[0]).toMatchObject({target: 3000, published: '8080', hostIp: '127.0.0.1'});
     expect(view.services[0].mounts[0]).toMatchObject({type: 'volume', source: 'shared', target: '/uploads', readOnly: true});
     expect(view.services[0].networks).toEqual(['default']);
+  });
+  it('undo restores the original source set and a literal empty original stays an existing file', async () => {
+    const {changeProject}=await import('./document');const {inputFor}=await import('./api');
+    const d=createProject('services: {}');d.files=[{path:'C:/empty.yml',original:'',source:d.source}];
+    const next=changeProject(d,'services: {redis: {image: redis:7.4}}');next.files=[{...d.files[0],source:next.source}];
+    expect(undoProject(next).files[0].source).toBe(d.source);
+    expect(inputFor(d,{}).files[0].original).toBe('');
   });
 });
 
@@ -50,5 +61,13 @@ describe('safe draft restoration', () => {
     const redis=readProject(restoreDraft(saved).source).services[0];
     expect(redis.healthcheck?.test).toEqual(['CMD','redis-cli','ping']);
     expect(redis.command).toEqual(['redis-server','--appendonly','yes']);
+  });
+  it('persists connection references without copying their values and restores tracked renames',async()=>{
+    const {addComponent}=await import('./catalog');const {proposeConnection,applyConnection,renameService}=await import('./connections');
+    let d=addComponent(addComponent(createProject(),{name:'api',image:'example/api:1'}),{template:'mysql'});d=applyConnection(d,proposeConnection(d,'api','mysql'));
+    d=patchProject(d,[{path:['services','mysql','environment','MYSQL_PASSWORD'],value:'never-persist-this'}]);
+    const saved=safeDraft(d);expect(JSON.stringify(saved)).not.toContain('never-persist-this');
+    const restored=restoreDraft(saved);expect(restored.connections).toHaveLength(1);
+    const renamed=renameService(restored,'mysql','database');expect(readProject(renamed.source).services[0].environment.DB_HOST).toBe('database');
   });
 });
