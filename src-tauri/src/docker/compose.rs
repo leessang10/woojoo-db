@@ -43,7 +43,7 @@ fn persist(app: &tauri::AppHandle, projects: &[Project]) -> Result<(), String> {
         &serde_json::to_vec_pretty(projects).map_err(|e| e.to_string())?,
     )
 }
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
     let temp = Draft(path.with_file_name(format!(".woojoo-save-{}", uuid::Uuid::new_v4())));
     let mut file = std::fs::OpenOptions::new()

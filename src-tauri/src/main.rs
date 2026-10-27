@@ -89,6 +89,19 @@ fn main() {
             docker::storage::docker_storage_compact,
             docker::docker_container_rename,
             docker::compose::compose_list,
+            docker::builder::docker_builder_import,
+            docker::builder::docker_builder_destination,
+            docker::builder::docker_builder_pick_app,
+            docker::builder::docker_builder_pick_path,
+            docker::builder::docker_builder_example_keys,
+            docker::builder::docker_builder_search,
+            docker::builder::docker_builder_tags,
+            docker::builder::docker_builder_review,
+            docker::builder::docker_builder_save,
+            docker::builder::docker_builder_save_draft,
+            docker::builder_jobs::docker_builder_start,
+            docker::builder_jobs::docker_builder_cancel,
+            docker::builder_jobs::docker_builder_operations,
             docker::compose::compose_import,
             docker::compose::compose_create,
             docker::compose::compose_read,
@@ -177,6 +190,7 @@ fn main() {
                         tauri::async_runtime::spawn(async move {
                             app.state::<redis::State>().shutdown().await;
                             docker::logs::shutdown().await;
+                            docker::builder_jobs::shutdown().await;
                             EXIT_READY.store(true, Ordering::SeqCst);
                             app.exit(code.unwrap_or(0));
                         });
