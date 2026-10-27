@@ -44,4 +44,11 @@ describe('safe draft restoration', () => {
     const saved = safeDraft(draft);
     expect(JSON.stringify(saved)).not.toContain('secret'); expect(saved.files).toEqual(['C:/app/compose.yml']);
   });
+  it('restores the bundled Redis healthcheck and public defaults without saving arbitrary commands', async () => {
+    const {addComponent}=await import('./catalog');
+    const saved=safeDraft(addComponent(createProject(),{template:'redis'}));
+    const redis=readProject(restoreDraft(saved).source).services[0];
+    expect(redis.healthcheck?.test).toEqual(['CMD','redis-cli','ping']);
+    expect(redis.command).toEqual(['redis-server','--appendonly','yes']);
+  });
 });

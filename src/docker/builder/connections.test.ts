@@ -43,4 +43,12 @@ describe('component assembly', () => {
     const d=patchProject(stack(),[{path:['services','api','depends_on'],value:{mysql:{condition:'service_started'}}},{path:['services','mysql','depends_on'],value:{api:{condition:'service_healthy'}}}]);
     const issues=validateProject(d); expect(issues.some(i=>i.code==='cycle')).toBe(true); expect(issues.some(i=>i.code==='healthcheck')).toBe(true);
   });
+  it('updates tracked provider values but preserves detached consumer overrides', () => {
+    let d=stack();d=applyConnection(d,proposeConnection(d,'api','mysql'));
+    d=patchProject(d,[{path:['services','mysql','environment','MYSQL_DATABASE'],value:'other'}]);
+    expect(readProject(d.source).services[0].environment.DB_NAME).toBe('other');
+    d=patchProject(d,[{path:['services','api','environment','DB_NAME'],value:'manual'}]);
+    d=patchProject(d,[{path:['services','mysql','environment','MYSQL_DATABASE'],value:'third'}]);
+    expect(readProject(d.source).services[0].environment.DB_NAME).toBe('manual');
+  });
 });
