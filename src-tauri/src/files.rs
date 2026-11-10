@@ -94,3 +94,48 @@ pub async fn sql_save_file(path: Option<String>, sql: String) -> Result<Option<S
     .await
     .map_err(|e| e.to_string())?
 }
+/// Shows a query tab's linked file selected in the system file manager.
+#[tauri::command]
+pub async fn sql_reveal_file(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(path)
+            .canonicalize()
+            .map_err(|_| "The file no longer exists".to_string())?;
+        if !path.is_file() {
+            return Err("The path is not a file".into());
+        }
+        reveal(&path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[cfg(target_os = "windows")]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    // canonicalize returns a \?\ path, which Explorer does not accept.
+    let display = path.to_string_lossy();
+    let display = display.strip_prefix(r"\?\").unwrap_or(&display);
+    // Explorer parses its own command line; Windows paths cannot contain quotes.
+    std::process::Command::new("explorer.exe")
+        .raw_arg(format!("/select,\"{display}\""))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+#[cfg(target_os = "macos")]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn reveal(path: &std::path::Path) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(path.parent().unwrap_or(path))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}

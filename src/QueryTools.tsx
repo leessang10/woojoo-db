@@ -22,6 +22,8 @@ export type QueryToolsProps = {
   onExecute: (sql: string) => Promise<Result>;
   onResults?: (results: ScriptResult[]) => void;
   onFileChange?: (file: SqlFileMetadata) => void;
+  /** Saves the SQL into the workspace tab itself, like a request in an API client. */
+  onSaveInWorkspace?: (sql: string) => void;
   onBusyChange?: (busy: boolean) => void;
   initialFile?: SqlFileMetadata | null;
   historyKey?: string;
@@ -31,7 +33,7 @@ export type QueryToolsProps = {
   commandsRef?: MutableRefObject<{ save?: () => void; runScript?: () => void; cancel?: () => void }>;
 };
 
-export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, leadingAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute, commandsRef }: QueryToolsProps) {
+export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, leadingAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onSaveInWorkspace, onBusyChange, initialFile, historyKey, connectionName, beforeExecute, commandsRef }: QueryToolsProps) {
   const { language } = useLanguage();
   const { requestConfirm } = useConfirm();
   const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
@@ -73,6 +75,13 @@ export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, 
   }
   async function save(as: boolean) {
     setError('');
+    // Without a linked file, saving keeps the SQL in the app instead of asking for a file path.
+    if (!as && onSaveInWorkspace && !(isTauri() && file?.path)) {
+      onSaveInWorkspace(sql);
+      if (file) remember({ ...file, savedSql: sql });
+      setSummary(tr('탭에 저장했습니다.', 'Saved to the tab.'));
+      return;
+    }
     try {
       if (isTauri()) {
         const next = await invoke<NativeFile | null>('sql_save_file', { path: as ? null : file?.path ?? null, sql });
@@ -132,8 +141,8 @@ export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, 
       <div className="query-toolbar-scroll" ref={scroller} data-overflow-start={overflow.start} data-overflow-end={overflow.end} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
       <div className="query-tool-group" role="group" aria-label={tr('SQL 파일', 'SQL files')}>
       <Button variant="outline" size="xs" disabled={busy} onClick={() => void open()}>{tr('SQL 열기', 'Open SQL')}</Button>
-      <Button variant="outline" size="xs" title={tr('Ctrl/Cmd+S', 'Ctrl/Cmd+S')} onClick={() => void save(false)}>{isTauri() ? tr('저장', 'Save') : tr('다운로드', 'Download')}</Button>
-      {isTauri() && <Button variant="outline" size="xs" onClick={() => void save(true)}>{tr('다른 이름으로 저장', 'Save as')}</Button>}
+      <Button variant="outline" size="xs" title={isTauri() && file?.path ? tr('파일에 저장 · Ctrl/Cmd+S', 'Save to file · Ctrl/Cmd+S') : tr('탭에 저장 · Ctrl/Cmd+S', 'Save to tab · Ctrl/Cmd+S')} onClick={() => void save(false)}>{onSaveInWorkspace || isTauri() ? tr('저장', 'Save') : tr('다운로드', 'Download')}</Button>
+      {(isTauri() || onSaveInWorkspace) && <Button variant="outline" size="xs" onClick={() => void save(true)}>{isTauri() ? tr('파일로 저장…', 'Save to file…') : tr('다운로드', 'Download')}</Button>}
       </div>
       <div className="query-tool-group" role="group" aria-label={tr('SQL 도구', 'SQL tools')}>
       <Button variant="outline" size="xs" disabled={busy || !sql.trim()} onClick={() => { try { onSqlChange(formatSql(sql, engine)); setError(''); } catch (e) { setError(String(e)); } }}>{tr('SQL 정렬', 'Format SQL')}</Button>

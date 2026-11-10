@@ -20,9 +20,12 @@ type Props = {
   onDetails: (table: Table) => void; onData: (table: Table) => void; onQuery: (table: Table) => void;
   onChanged: (plan: StructurePlan) => Promise<void>; changeBlocked: (table: Table) => boolean;
   tableMenu: (table: Table) => MenuItem[]; menuFor: (items: MenuItem[]) => HTMLAttributes<HTMLElement>;
+  /** A structure change requested from elsewhere, such as the sidebar menu; opened once metadata is loaded. */
+  structureRequest?: { kind: 'alterTable' | 'dropTable'; table: Table } | null;
+  onStructureRequestHandled?: () => void;
 };
 const size = (bytes?: number|null) => bytes == null ? '—' : bytes >= 1048576 ? `${(bytes/1048576).toFixed(1)} MB` : `${(bytes/1024).toFixed(1)} KB`;
-export function ObjectPage({ onSql, readOnly, tab, database, session, engine, revision, tables, onFilter, onRefresh, onSchema, onErd, onDetails, onData, onQuery, onChanged, changeBlocked, tableMenu, menuFor }: Props) {
+export function ObjectPage({ onSql, readOnly, tab, database, session, engine, revision, tables, onFilter, onRefresh, onSchema, onErd, onDetails, onData, onQuery, onChanged, changeBlocked, tableMenu, menuFor, structureRequest, onStructureRequestHandled }: Props) {
   const {t,language}=useLanguage(),schema=tab.kind==='schema';
   const [metadata,setMetadata]=useState<SchemaInfo|null>(null),[objects,setObjects]=useState<TableObjects|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
   const [actionTarget,setActionTarget]=useState<HTMLDivElement|null>(null);
@@ -52,6 +55,13 @@ export function ObjectPage({ onSql, readOnly, tab, database, session, engine, re
   }
   const alterTable=(table:TableInfo)=>openAction({kind:'alterTable',table,info:table});
   const dropTable=(table:TableInfo)=>openAction({kind:'dropTable',table,info:table});
+  useEffect(()=>{
+    if(!structureRequest||!schema||loading)return;
+    const target=metadata?.tables.find(table=>table.name===structureRequest.table.name);
+    if(target)(structureRequest.kind==='alterTable'?alterTable:dropTable)(target);
+    else setError(language==='ko'?'테이블 정보를 불러오지 못했습니다.':'Could not load the table details.');
+    onStructureRequestHandled?.();
+  },[structureRequest,metadata,loading,schema]);
   const properties = <dl className="object-properties">
         <div><dt>{engine==='postgres'?t('DB 인코딩'):'Charset'}</dt><dd>{(engine==='postgres'?metadata?.info.charset:info?.charset)??'—'}</dd></div>
         <div><dt>{engine==='postgres'?t('DB Collation'):'Collation'}</dt><dd>{(engine==='postgres'?metadata?.info.collation:info?.collation)??'—'}</dd></div>
@@ -91,12 +101,12 @@ export function ObjectPage({ onSql, readOnly, tab, database, session, engine, re
     <div className="object-table-scroll" role="tabpanel" id={'object-content-'+tab.id} aria-labelledby={'object-tab-'+tab.id+'-'+section}>
       {section==='details'?<>{!schema&&<div className="object-path"><Database size={13}/>{database}<span>/</span>{schema?tab.objectSchema:<Button variant="ghost" size="bare" onClick={()=>onSchema(tab.objectSchema)}>{tab.objectSchema}</Button>}</div>}{properties}</>:['views','routines','triggers','ddl'].includes(section)?<ObjectDefinitions key={tab.id+section+version+':'+revision} session={session} engine={engine} schema={tab.objectSchema} table={tab.selected} section={section} actionTarget={actionTarget} onSql={onSql}/>:<>
       {schema?<SortableTable className="object-table"><thead><tr>{['이름','엔진','Charset','Collation','추정 행 수','크기','설명',''].map((label,i)=><th key={i}>{t(label)}</th>)}</tr></thead>
-        <tbody>{shown.map(table=><tr key={table.name} onDoubleClick={()=>onDetails(table)} {...menuFor([...tableMenu(table),{label:t('테이블 수정'),action:()=>alterTable(table),disabled:busy||!metadata||readOnly,divider:true},{label:t('테이블 삭제'),action:()=>dropTable(table),disabled:busy||!metadata||readOnly}])}>
+        <tbody>{shown.map(table=><tr key={table.name} onDoubleClick={()=>onDetails(table)} {...menuFor([...tableMenu(table),{label:t('테이블 수정'),action:()=>alterTable(table),disabled:busy||!metadata||readOnly,divider:true},{label:t('테이블 삭제'),action:()=>dropTable(table),disabled:busy||!metadata||readOnly,destructive:true}])}>
           <td><Button variant="ghost" size="bare" className="object-name" onClick={()=>onDetails(table)}><Table2 size={15}/>{table.name}</Button></td>
           <td>{table.engine??'—'}</td><td>{table.charset??'—'}</td><td>{table.collation??'—'}</td><td data-sort-value={table.estimatedRows}>{table.estimatedRows?.toLocaleString()??'—'}</td><td data-sort-value={table.sizeBytes}>{size(table.sizeBytes)}</td><td>{table.comment||'—'}</td>
           <td className="object-row-actions"><Button variant="outline" size="sm" onClick={()=>onDetails(table)}>{t('테이블 상세')}</Button><Button variant="outline" size="sm" onClick={()=>onData(table)}>{t('데이터 보기')}</Button><Button variant="outline" size="sm" className="row-icon-action" aria-label={t('테이블 수정')+': '+table.name} title={readOnly?t('읽기 전용 연결'):t('테이블 수정')} disabled={busy||!metadata||readOnly} onClick={()=>alterTable(table)}><Pencil size={13}/></Button><Button variant="outline" size="sm" className="row-icon-action danger-text" aria-label={t('테이블 삭제')+': '+table.name} title={readOnly?t('읽기 전용 연결'):t('테이블 삭제')} disabled={busy||!metadata||readOnly} onClick={()=>dropTable(table)}><Trash2 size={13}/></Button></td>
         </tr>)}</tbody></SortableTable>:section==='columns'?<SortableTable className="object-table"><thead><tr>{['이름','자료형','기본키','NULL 허용','기본값','Charset','Collation','추가 속성','설명',''].map((label,i)=><th key={i}>{t(label)}</th>)}</tr></thead>
-        <tbody>{columns.map(column=><tr key={column.name} {...menuFor([{label:t('컬럼 수정'),action:()=>tab.selected&&openAction({kind:'alterColumn',table:tab.selected,column}),disabled:busy||readOnly},{label:t('컬럼 삭제'),action:()=>tab.selected&&openAction({kind:'dropColumn',table:tab.selected,column}),disabled:busy||readOnly}])}>
+        <tbody>{columns.map(column=><tr key={column.name} {...menuFor([{label:t('컬럼 수정'),action:()=>tab.selected&&openAction({kind:'alterColumn',table:tab.selected,column}),disabled:busy||readOnly},{label:t('컬럼 삭제'),action:()=>tab.selected&&openAction({kind:'dropColumn',table:tab.selected,column}),disabled:busy||readOnly,destructive:true}])}>
           <td><span className="column-name">{column.primary&&<KeyRound size={13}/>}<strong>{column.name}</strong></span></td>
           <td><code>{column.dataType}</code></td><td>{column.primary?'PK':'—'}</td><td>{t(column.nullable?'허용':'허용 안 함')}</td><td><code>{column.defaultValue??'—'}</code></td>
           <td>{column.charset??'—'}</td><td>{column.collation??'—'}</td><td>{column.extra||'—'}</td><td>{column.comment||'—'}</td>

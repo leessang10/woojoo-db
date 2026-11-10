@@ -168,14 +168,18 @@ export function DockerWorkspace({ visible, sidebarOpen, onToggleSidebar, theme }
     const key = (event: KeyboardEvent) => { if (event.key === 'F5') { event.preventDefault(); if (!pollBusy.current) setRevision(v => v + 1); } };
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   }, [visible]);
+  function copy(text: string) {
+    if (!navigator.clipboard) { setError(tr('클립보드에 복사하지 못했습니다.', 'Could not copy to the clipboard.')); return; }
+    navigator.clipboard.writeText(text).then(() => { setError(''); setNotice(tr('복사했습니다.', 'Copied.')); }, () => setError(tr('클립보드에 복사하지 못했습니다.', 'Could not copy to the clipboard.')));
+  }
   function resourceMenu(event: ResourceMenuEvent, target: GraphNode) {
     event.preventDefault(); event.stopPropagation();
     const box = event.currentTarget.getBoundingClientRect(), targetContext = context, c = target.container;
     const blocked = !ready.current || actionBusy;
     setMenu({ x: 'clientX' in event ? event.clientX : box.left + 20, y: 'clientY' in event ? event.clientY : box.top + 20, trigger: event.currentTarget as HTMLElement, items: [
       { label: tr('상세 보기', 'View details'), action: () => select(target.id) },
-      { label: tr('이름 복사', 'Copy name'), action: () => { void navigator.clipboard?.writeText(target.label).catch(() => {}); } },
-      { label: tr('ID 복사', 'Copy ID'), action: () => { void navigator.clipboard?.writeText(target.resourceId).catch(() => {}); } },
+      { label: tr('이름 복사', 'Copy name'), action: () => copy(target.label) },
+      { label: tr('ID 복사', 'Copy ID'), action: () => copy(target.resourceId) },
       ...(c ? [
         { label: tr('로그 보기', 'View logs'), action: () => { select(target.id); requestAnimationFrame(() => document.querySelector('.docker-logs')?.scrollIntoView({ block: 'nearest' })); }, divider: true },
         ...(['start', 'stop', 'restart'] as const).map(action => ({ label: ({ start: tr('시작', 'Start'), stop: tr('중지', 'Stop'), restart: tr('재시작', 'Restart') })[action], disabled: blocked || !(action === 'start' ? ['created', 'exited'] : action === 'stop' ? ['running', 'restarting'] : ['running', 'exited', 'restarting']).includes(c.state), action: () => { void act(action, target, targetContext); } })),

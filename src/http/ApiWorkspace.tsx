@@ -87,17 +87,22 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
     const spec = normalizeSpec(request.spec);
     openTab({ requestId: request.id, name: request.name, collectionId: request.collectionId, spec, saved: structuredClone(spec) });
   }
-  async function close(id: string) {
-    const tab = tabs.find(item => item.id === id); if (!tab) return;
-    const empty = !tab.requestId && sameSpec(tab.spec, blankSpec());
-    if (dirty(tab) && !empty && !await requestConfirm(tr(`"${tabName(tab)}"의 저장하지 않은 변경 사항을 버릴까요?`, `Discard unsaved changes to "${tabName(tab)}"?`), { title: tr('탭 닫기', 'Close tab'), confirmLabel: tr('버리고 닫기', 'Discard and close'), destructive: true })) return;
-    const ticket = results[id]?.ticket; if (ticket) store.cancelSend(ticket);
-    setTabs(previous => {
-      const index = previous.findIndex(item => item.id === id), rest = previous.filter(item => item.id !== id);
-      if (id === active?.id) setActiveId(rest[Math.min(index, rest.length - 1)]?.id ?? '');
-      return rest;
-    });
-    setResults(previous => { const next = { ...previous }; delete next[id]; return next; });
+  const close = (id: string) => closeMany([id]);
+  async function closeMany(ids: string[]) {
+    // Each unsaved tab is confirmed on its own; a declined tab stays open.
+    const closing = new Set<string>();
+    for (const id of ids) {
+      const tab = tabs.find(item => item.id === id); if (!tab) continue;
+      const empty = !tab.requestId && sameSpec(tab.spec, blankSpec());
+      if (dirty(tab) && !empty && !await requestConfirm(tr(`"${tabName(tab)}"의 저장하지 않은 변경 사항을 버릴까요?`, `Discard unsaved changes to "${tabName(tab)}"?`), { title: tr('탭 닫기', 'Close tab'), confirmLabel: tr('버리고 닫기', 'Discard and close'), destructive: true })) continue;
+      const ticket = results[id]?.ticket; if (ticket) store.cancelSend(ticket);
+      closing.add(id);
+    }
+    if (!closing.size) return;
+    const index = tabs.findIndex(item => item.id === active?.id), rest = tabs.filter(item => !closing.has(item.id));
+    if (active && closing.has(active.id)) setActiveId((tabs.slice(index + 1).find(item => !closing.has(item.id)) ?? rest.at(-1))?.id ?? '');
+    setTabs(previous => previous.filter(item => !closing.has(item.id)));
+    setResults(previous => { const next = { ...previous }; for (const id of closing) delete next[id]; return next; });
   }
   const updateTab = (id: string, patch: Partial<ApiTab>) => setTabs(previous => previous.map(tab => tab.id === id ? { ...tab, ...patch } : tab));
 
@@ -312,7 +317,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         </div>
       </div> : <>
         <div className="tabs"><div className="tab-list" role="tablist" aria-label={tr('API 탭', 'API tabs')} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
-          {tabs.map(tab => { const name = tabName(tab); const sending = !!results[tab.id]?.ticket; return <ManagedTab key={tab.id} id={tab.id} name={name} active={active?.id === tab.id} ids={tabs.map(t => t.id)} onRename={title => setTabs(previous => previous.map(t => t.id === tab.id ? { ...t, customTitle: title } : t))} onReorder={(source, target, after) => setTabs(previous => reorderTabs(previous, source, target, after))}>
+          {tabs.map(tab => { const name = tabName(tab); const sending = !!results[tab.id]?.ticket; return <ManagedTab key={tab.id} id={tab.id} name={name} active={active?.id === tab.id} ids={tabs.map(t => t.id)} onRename={title => setTabs(previous => previous.map(t => t.id === tab.id ? { ...t, customTitle: title } : t))} onReorder={(source, target, after) => setTabs(previous => reorderTabs(previous, source, target, after))} onClose={ids => void closeMany(ids)}>
             <Button variant="ghost" size="bare" role="tab" className="tab" id={`api-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`api-panel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} title={`${tab.spec.method} ${tab.spec.url}`} onClick={() => setActiveId(tab.id)} onAuxClick={event => { if (event.button === 1) void close(tab.id); }}
               onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { const index = tabs.findIndex(item => item.id === tab.id), next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]; setActiveId(next.id); document.getElementById(`api-tab-${next.id}`)?.focus(); } }}>
               <span className="api-method-tag" data-method={tab.spec.method}>{tab.spec.method.slice(0, 6)}</span><span>{name}</span>{sending ? <span className="api-tab-busy" aria-label={tr('보내는 중', 'Sending')}/> : dirty(tab) && tab.requestId && <span className="api-dirty" aria-label={tr('저장 안 됨', 'Unsaved')}/>}</Button>

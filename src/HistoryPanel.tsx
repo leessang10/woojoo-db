@@ -8,6 +8,7 @@ import { Input } from './components/ui/input';
 import { NativeSelect, NativeSelectOption } from './components/ui/native-select';
 import { useLanguage } from './i18n';
 import { HISTORY_EVENT, readQueryHistory } from './sql-workbench';
+import { ContextMenu, type MenuState } from './ContextMenu';
 
 export type ExecutionEntry = {
   id: string; sql: string; profileId: string; connectionName: string; engine: string; database: string;
@@ -43,6 +44,7 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   // List rows carry a preview; the history tab shows the full statement once a row is expanded.
   const [fullSql, setFullSql] = useState<Record<string, string>>({});
   const labels: Record<string, string> = { running: tr('실행 중', 'Running'), success: tr('성공', 'Success'), failed: tr('실패', 'Failed'), cancelled: tr('취소됨', 'Cancelled'), interrupted: tr('중단됨', 'Interrupted') };
@@ -92,6 +94,21 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
   async function copy(entry: ExecutionEntry) {
     try { await navigator.clipboard.writeText(await detail(entry)); } catch { setError(tr('복사하지 못했습니다.', 'Could not copy SQL.')); }
   }
+  // Both views share one menu per entry; the keyboard menu key opens it at the row.
+  function menuFor(entry: ExecutionEntry, missing: boolean) {
+    const open_ = (event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
+      event.preventDefault(); event.stopPropagation();
+      const trigger = event.currentTarget, rect = trigger.getBoundingClientRect();
+      const pointer = 'clientX' in event && (event.clientX !== 0 || event.clientY !== 0);
+      setMenu({ x: pointer ? event.clientX : rect.left + 12, y: pointer ? event.clientY : rect.top + Math.min(rect.height, 32), trigger, items: [
+        { label: tr('새 쿼리 탭에서 열기', 'Open in a new query tab'), disabled: missing, action: () => void open(entry) },
+        { label: tr('SQL 복사', 'Copy SQL'), action: () => void copy(entry) },
+        ...(entry.error ? [{ label: tr('오류 메시지 복사', 'Copy error message'), action: () => { void navigator.clipboard.writeText(entry.error ?? '').catch(() => setError(tr('복사하지 못했습니다.', 'Could not copy.'))); } }] : []),
+        { label: expanded === entry.id ? tr('상세 접기', 'Hide details') : tr('상세 보기', 'Show details'), action: () => toggle(entry), divider: true },
+      ] });
+    };
+    return { onContextMenu: open_, onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => { if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') open_(event); } };
+  }
   function toggle(entry: ExecutionEntry) {
     const next = expanded === entry.id ? null : entry.id;
     setExpanded(next);
@@ -134,7 +151,7 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
         <tbody>{page.entries.map(entry => {
           const missing = !profileIds.includes(entry.profileId), open_ = expanded === entry.id;
           return <Fragment key={entry.id}>
-            <tr className="history-entry" data-status={entry.status} data-expanded={open_}>
+            <tr className="history-entry" data-status={entry.status} data-expanded={open_} {...menuFor(entry, missing)}>
               <td><Button variant="ghost" size="bare" className="history-toggle" aria-expanded={open_} aria-label={tr('상세 보기', 'Show details')} onClick={() => toggle(entry)}>{open_ ? <ChevronDown size={13}/> : <ChevronRight size={13}/>}</Button></td>
               <td><span className="history-status-cell">{statusIcon(entry)}{labels[entry.status] ?? entry.status}</span></td>
               <td data-sort-value={entry.startedAt} className="history-time" title={new Date(entry.startedAt).toLocaleString(locale)}>{new Date(entry.startedAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
@@ -155,6 +172,7 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
       {empty}
     </div>
     {more}
+    {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)}/>}
   </section>;
 
   return <section className="history-panel" aria-label={tr('쿼리 기록', 'Query history')}>
@@ -164,7 +182,7 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
     <ol className="history-list" aria-busy={busy}>
       {page.entries.map(entry => {
         const missing = !profileIds.includes(entry.profileId), open_ = expanded === entry.id;
-        return <li key={entry.id} className="history-entry" data-status={entry.status}>
+        return <li key={entry.id} className="history-entry" data-status={entry.status} {...menuFor(entry, missing)}>
           <div className="history-row">
             <Button variant="ghost" size="bare" className="history-open" disabled={missing} title={missing ? missingTitle : tr('새 쿼리 탭에서 열기', 'Open in a new query tab')} onClick={() => void open(entry)}>
               {statusIcon(entry)}
@@ -183,5 +201,6 @@ export function HistoryPanel({ profileId, connectionName, profileIds, onOpen, va
     </ol>
     {empty}
     {more}
+    {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)}/>}
   </section>;
 }

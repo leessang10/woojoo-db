@@ -154,6 +154,7 @@ fn main() {
             data::data_copy,
             files::sql_open_file,
             files::sql_save_file,
+            files::sql_reveal_file,
             db::choose_sqlite_file,
             maintenance::maintenance_tools,
             maintenance::maintenance_pick_restore,

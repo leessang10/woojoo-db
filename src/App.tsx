@@ -10,10 +10,10 @@ import { Cloud, ScrollText, Waypoints, Container as ContainerIcon } from 'lucide
 import { AwsWorkspace, type AwsCommands } from './aws/AwsWorkspace';
 import { ApiWorkspace, type ApiCommands } from './http/ApiWorkspace';
 import type { AwsPreset } from './AwsConnection';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import DataWorkbench from './DataWorkbench';
 import { MaintenanceDialog } from './MaintenanceDialog';
-import type { DataFilter, CopyTarget } from './data-workbench';
+import { rowInsert, rowJson, whereCondition, type DataFilter, type CopyTarget } from './data-workbench';
 import { QueryTools } from './QueryTools';
 import { queryOrigin } from './query-origin';
 import { appendQueryHistory, isReadOnlySql, sqlTokens, statementAt, type ScriptResult } from './sql-workbench';
@@ -150,6 +150,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommonSql, setShowCommonSql] = useState(false);
   const [contextMenu, setContextMenu] = useState<MenuState | null>(null);
+  const [structureRequest, setStructureRequest] = useState<{ kind: 'alterTable' | 'dropTable'; table: Table } | null>(null);
   // The rail picks a work area and the sidebar shows that area's explorer.
   const [area, setArea] = useState<WorkArea>(readArea);
   const areaRef = useRef(area); areaRef.current = area;
@@ -381,13 +382,15 @@ export default function App() {
     });
     return [
       {label:t('새 쿼리'),action:()=>addQuery()},
-      {label:t('SQL 복제'),action:()=>addQuery(item.editorSql),disabled:!item.editorSql},
+      ...(item.kind === 'query' ? [{label:t('SQL 복제'),action:()=>addQuery(item.editorSql),disabled:!item.editorSql}] : []),
       {label:tr('탭 이름 변경','Rename tab'),action:()=>setRenaming({id:item.id,name:tabName(item)})},
+      ...(item.file?.path && isTauri() ? [{label:tr('탐색기에서 열기','Reveal in file explorer'),divider:true,action:()=>{ void invoke('sql_reveal_file',{path:item.file!.path}).catch(reason=>announceError(tr(`파일을 찾을 수 없습니다: ${reason}`,`Could not reveal the file: ${reason}`))); }},
+        {label:tr('파일 경로 복사','Copy file path'),action:()=>void copyText(item.file!.path!)}] : []),
       {label:t('탭 닫기'),action:()=>closeTab(item),disabled:item.busy,divider:true},
-      group(tr('모든 탭 닫기', 'Close all tabs'), tabs),
       group(tr('다른 탭 닫기', 'Close other tabs'), tabs.filter(candidate => candidate.id !== item.id)),
       group(tr('오른쪽 탭 닫기', 'Close tabs to the right'), tabs.slice(index + 1)),
       group(tr('왼쪽 탭 닫기', 'Close tabs to the left'), tabs.slice(0, index)),
+      group(tr('모든 탭 닫기', 'Close all tabs'), tabs),
     ];
   }
   async function activateTab(id: string) { if(id!==tab.id&&!await leaveData())return; editorSelection.current = ''; setEditing(null); setShowReview(false); workspace.activate(id);  return true; }
@@ -470,10 +473,11 @@ export default function App() {
   }
   async function openSchema(schema: string, view?: TabView) {
     const existing = schemaTab(schema);
-    if (existing) { if (await activateTab(existing.id) && view) setView(existing.id, view); return; }
-    if(!await leaveData())return;
+    if (existing) { const opened = !!await activateTab(existing.id); if (opened && view) setView(existing.id, view); return opened; }
+    if(!await leaveData())return false;
     const next = workspace.add();
     workspace.patch(next.id, { kind: 'schema', view: view ?? 'objects', objectSchema: schema, loaded: true });
+    return true;
   }
   const openErd = (schema: string) => openSchema(schema, 'erd');
   // Each connection keeps at most one full history tab.
@@ -505,6 +509,14 @@ export default function App() {
       { label: t('SELECT 쿼리 열기'), action: () => addQuery(tableQuery(connection.profile.engine, table.schema, table.name), table.schema) },
       { label: t('테이블 이름 복사'), action: () => void copyText(`${table.schema}.${table.name}`), divider: true },
     ];
+  }
+  // The sidebar has no structure page of its own, so changes open in the schema's table list.
+  function sidebarTableMenu(table: Table): MenuItem[] {
+    const request = (kind: 'alterTable' | 'dropTable') => () => { void openSchema(table.schema, 'objects').then(opened => { if (opened) setStructureRequest({ kind, table }); }); };
+    const blocked = !connected || connection.profile.readOnly;
+    return [...tableMenu(table),
+      { label: t('테이블 수정'), action: request('alterTable'), disabled: blocked, divider: true },
+      { label: t('테이블 삭제'), action: request('dropTable'), disabled: blocked, destructive: true }];
   }
   useEffect(() => {
     const token = ++op.current;
@@ -727,6 +739,15 @@ export default function App() {
     { label: t('CSV 내보내기'), action: exportCsv, disabled: !result.columns.length },
     { label: t('필터 지우기'), action: () => { setFilter(''); setScroll(0); }, disabled: !filter },
   ];
+  // Row copy formats shared by the row and cell menus; INSERT needs a known table.
+  const rowCopyItems = (row: Record<string, string | null>): MenuItem[] => {
+    const names = result.columns.map(c => c.name);
+    return [
+      {label:t('행 복사'),action:()=>void copyText(names.map(name=>row[name] ?? 'NULL').join('\t'))},
+      {label:tr('행을 JSON으로 복사','Copy row as JSON'),action:()=>void copyText(rowJson(names,row))},
+      {label:tr('행을 INSERT문으로 복사','Copy row as INSERT'),action:()=>{ if (selected) void copyText(rowInsert(selected,names,row,connection.profile.engine)); },disabled:source!=='table'||!selected},
+    ];
+  };
   const filtered = result.rows.map((original, index) => {
     const row = { ...original };
     for (const col of result.columns) {
@@ -783,7 +804,7 @@ export default function App() {
         {label:tr('프로필 수정 / 다시 연결','Edit profile / reconnect'),action:()=>{setEditProfile(c.profile);setShowConnect(true);},disabled:c.session==='demo'},
         {label:tr('백업 / 복원','Backup / restore'),action:()=>{setActive(c.session);setShowMaintenance(true);},disabled:c.session==='demo'||c.session.startsWith('saved:')},
         {label:tr('연결 끊기','Disconnect'),action:()=>void disconnectProfile(c),disabled:c.session==='demo'||c.session.startsWith('saved:')},
-        {label:tr('프로필 삭제','Delete profile'),action:()=>void deleteProfile(c),disabled:c.session==='demo'},
+        {label:tr('프로필 삭제','Delete profile'),action:()=>void deleteProfile(c),disabled:c.session==='demo',destructive:true},
         {label:t('연결 추가'), action:()=>setShowConnect(true), divider:true},
       ])} className={`connection ${active === c.session ? 'active' : ''}`} aria-label={tr('연결 전환','Switch connection')}>
         <span className={`db-icon ${c.profile.engine !== 'postgres' ? 'mysql' : ''}`}><Database size={18}/></span>
@@ -794,7 +815,7 @@ export default function App() {
       <label className="search-field"><Search size={14}/><Input aria-label={t("테이블 검색")} placeholder={t("테이블 검색")} value={search} onChange={e => setSearch(e.target.value)}/></label>
       <div className="tree">
         {schemas.map(schema => <div key={schema}><div className="schema-tree-row"><Button variant="ghost" size="bare" className="schema-expander icon-button" aria-label={t('스키마 펼치기/접기') + ': ' + schema} aria-expanded={!collapsedSchemas.has(schema) || !!search} disabled={!!search} title={search?tr('검색 중에는 일치하는 스키마를 모두 펼칩니다','Matching schemas stay expanded while searching'):undefined} onClick={() => toggleSchema(schema)}>{!collapsedSchemas.has(schema)||search?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</Button><Button variant="ghost" size="bare" className={`tree-schema ${tab.kind==='schema'&&tab.objectSchema===schema?'active':''}`} aria-current={tab.kind==='schema'&&tab.objectSchema===schema?'page':undefined} {...menuFor([{label:t("스키마 상세"),action:()=>openSchema(schema)},{label:t("ERD 열기"),action:()=>openErd(schema)},{label:t("이름 복사"),action:()=>void copyText(schema)},{label:t("목록 새로고침"),action:refreshTables,disabled:tablesLoading}])} onClick={() => openSchema(schema)}><Layers3 size={14}/>{schema}</Button><Button variant="ghost" size="bare" className="schema-open icon-button" aria-label={t("스키마 상세 이름", {name:schema})} title={t("스키마 상세")} onClick={() => openSchema(schema)}><ArrowRight size={13}/></Button></div>
-          {(!collapsedSchemas.has(schema) || !!search) && visibleTables.filter(t => t.schema === schema).map(t => <Button variant="ghost" size="bare" key={`${t.schema}.${t.name}`} {...menuFor(tableMenu(t))} className={`tree-table ${selected?.name === t.name && selected.schema === t.schema ? 'active' : ''}`} onClick={() => void openObject(t)}><Table2 size={14}/><span>{t.name}</span>{selected?.name === t.name && selected.schema === t.schema && <span className="table-dot"/>}</Button>)}
+          {(!collapsedSchemas.has(schema) || !!search) && visibleTables.filter(t => t.schema === schema).map(t => <Button variant="ghost" size="bare" key={`${t.schema}.${t.name}`} {...menuFor(sidebarTableMenu(t))} className={`tree-table ${selected?.name === t.name && selected.schema === t.schema ? 'active' : ''}`} onClick={() => void openObject(t)}><Table2 size={14}/><span>{t.name}</span>{selected?.name === t.name && selected.schema === t.schema && <span className="table-dot"/>}</Button>)}
         </div>)}
         {tablesLoading && !tableList.length ? <p className="empty-tree" role="status"><Loader2 size={13} className="spin"/> {tr('테이블 목록을 불러오는 중…','Loading tables…')}</p>
           : tablesError ? <div className="empty-tree tree-error" role="alert"><p>{tr('테이블 목록을 불러오지 못했습니다.','Could not load tables.')}</p><small title={tablesError}>{tablesError}</small><Button variant="outline" size="xs" onClick={() => void refreshTables()}>{tr('다시 시도','Retry')}</Button></div>
@@ -827,7 +848,7 @@ export default function App() {
         canApply={()=>!allTabsRef.current.some(item=>item.session===active&&item.id!==tab.id&&(item.busy||Object.keys(item.draft).length||dataDirtyRef.current[item.id]))}
         onApplied={()=>{for(const item of allTabsRef.current.filter(item=>item.session===active&&item.id!==tab.id)){if(item.kind==='table')workspace.patch(item.id,{loaded:false,details:[]});if(item.kind==='schema')workspace.patch(item.id,{erd:null});}setCatalogVersion(v=>v+1);refreshTables();}}
         storageKey={'woojoo-erd-v1:' + JSON.stringify([connection.profile.engine,connection.profile.host,connection.profile.port,connection.profile.database,connection.profile.username,tab.objectSchema])}
-        onChange={erd => workspace.patch(tab.id,{erd})}/></Suspense></> : tab.kind === 'table' && tab.view === 'ddl' && tab.selected ? <>{viewBar}<DdlView session={active} engine={connection.profile.engine} table={tab.selected} revision={catalogVersion} onSql={sql=>void addQuery(sql,tab.selected?.schema)}/></> : tab.kind === 'table' && tab.view === 'relations' && tab.selected ? <>{viewBar}<RelationsView session={active} table={tab.selected} revision={catalogVersion} onOpen={table=>void openObject(table,'relations')} onSchemaErd={schema=>void openErd(schema)}/></> : tab.kind === 'schema' || tab.kind === 'table' && tab.view === 'structure' ? <>{viewBar}<ObjectPage key={tab.id} session={active} engine={connection.profile.engine} revision={catalogVersion} onSql={addQuery} readOnly={connection.profile.readOnly} onChanged={structureChanged} changeBlocked={changeBlocked} tab={tab.kind === 'table' ? {...tab, filter: tab.objectFilter ?? ''} : tab} database={connection.profile.database} tables={tableList} onFilter={value => tab.kind === 'table' ? workspace.patch(tab.id, {objectFilter: value}) : setFilter(value)}
+        onChange={erd => workspace.patch(tab.id,{erd})}/></Suspense></> : tab.kind === 'table' && tab.view === 'ddl' && tab.selected ? <>{viewBar}<DdlView session={active} engine={connection.profile.engine} table={tab.selected} revision={catalogVersion} onSql={sql=>void addQuery(sql,tab.selected?.schema)}/></> : tab.kind === 'table' && tab.view === 'relations' && tab.selected ? <>{viewBar}<RelationsView session={active} table={tab.selected} revision={catalogVersion} onOpen={table=>void openObject(table,'relations')} onSchemaErd={schema=>void openErd(schema)}/></> : tab.kind === 'schema' || tab.kind === 'table' && tab.view === 'structure' ? <>{viewBar}<ObjectPage key={tab.id} structureRequest={tab.kind==='schema'&&structureRequest?.table.schema===tab.objectSchema?structureRequest:null} onStructureRequestHandled={()=>setStructureRequest(null)} session={active} engine={connection.profile.engine} revision={catalogVersion} onSql={addQuery} readOnly={connection.profile.readOnly} onChanged={structureChanged} changeBlocked={changeBlocked} tab={tab.kind === 'table' ? {...tab, filter: tab.objectFilter ?? ''} : tab} database={connection.profile.database} tables={tableList} onFilter={value => tab.kind === 'table' ? workspace.patch(tab.id, {objectFilter: value}) : setFilter(value)}
         onRefresh={() => tab.kind === 'schema' ? refreshTables() : tab.selected && void openDetails(tab.selected,true)}
         onSchema={openSchema} onErd={openErd} onDetails={table => void openDetails(table)} onData={table => void openTable(table)}
         onQuery={table => addQuery(tableQuery(connection.profile.engine,table.schema,table.name),table.schema)} tableMenu={tableMenu} menuFor={menuFor}/></> : <>{tab.kind === 'table' && viewBar}
@@ -837,7 +858,7 @@ export default function App() {
         {label:t('전체 SQL 복사'),action:()=>void copyText(editorSql),disabled:!editorSql},
         {label:t('새 쿼리'),action:()=>addQuery(),divider:true},
       ])} className="editor-pane" id="query-panel" role="tabpanel" aria-labelledby={`tab-${tab.id}`}>
-        <QueryTools leadingAction={connection.profile.engine !== 'sqlite' && <label className="schema-select" title={tr('스키마를 생략한 SQL이 실행될 스키마','Schema for unqualified names')}><Layers3 size={13} aria-hidden="true"/><NativeSelect size="sm" aria-label={tr('실행 스키마','Execution schema')} value={executionSchema() ?? ''} disabled={busy} onChange={event=>workspace.patch(tab.id,{querySchema:event.target.value||undefined})}><NativeSelectOption value="">{tr('기본 스키마','Default schema')}</NativeSelectOption>{pickerSchemas.map(name=><NativeSelectOption key={name} value={name}>{name}</NativeSelectOption>)}</NativeSelect></label>} onOpenCommonSql={() => setShowCommonSql(true)} commonSqlDisabled={!connected || busy} primaryAction={<><Button variant="ghost" size="sm" aria-expanded={!editorCollapsed} aria-controls="sql-editor" onClick={()=>workspace.patch(tab.id,{editorCollapsed:!editorCollapsed})}>{editorCollapsed?tr("SQL 펼치기","Show SQL"):tr("SQL 접기","Hide SQL")}</Button>{busy ? <Button variant="outline" size="sm" className="run-button stop-button" title={canStop ? tr("실행 중인 쿼리 중지 · Esc","Stop the running query · Esc") : tr("이 연결에서는 중지할 수 없습니다","This connection cannot stop queries")} disabled={!canStop} onClick={stopQuery}><Square size={12}/> {tr("중지","Stop")} <span className="run-elapsed">{(elapsed/1000).toFixed(1)}s</span></Button> : <Button variant="default" size="sm" className="run-button" title={tr("선택한 SQL 또는 커서가 있는 구문 실행 · Ctrl/Cmd + Enter","Run the selection or the statement at the cursor · Ctrl/Cmd + Enter")} disabled={!connected || !editorSql.trim()} onClick={run}><Play size={14}/> {t("실행")} </Button>}</>} commandsRef={queryCommands} key={`tools-${tab.id}`} engine={connection.profile.engine} session={active} beforeExecute={async(sql)=>await askDiscard()&&await leaveData()&&await confirmProduction(sql,executionSchema())&&await confirmSchemaSwitch(executionSchema())} connectionName={connection.profile.name} historyKey={connection.profile.id} initialFile={tab.file} sql={editorSql} disabled={busy} onSqlChange={setEditorSql} onFileChange={file=>{workspace.markQuery(tab.id);workspace.patch(tab.id,{file,initialSql:file.savedSql});}} onBusyChange={value=>{if(value)pending.current.add(tab.id);else pending.current.delete(tab.id);workspace.patch(tab.id,{busy:value});}} onExecute={text=>api.query(active,text,executionSchema()).catch(e=>{throw new Error(timeoutHint(String(e),language));})} onResults={results=>{setScriptResults(previous=>({...previous,[tab.id]:results}));const last=results.at(-1);workspace.markQuery(tab.id);if(last?.result)workspace.patch(tab.id,{result:last.result,resultStale:false,source:'query',draft:{},queryTable:null,lastQuery:last.sql,error:''});if(last?.error)workspace.patch(tab.id,{error:last.error,resultStale:true});}}/>
+        <QueryTools leadingAction={connection.profile.engine !== 'sqlite' && <label className="schema-select" title={tr('스키마를 생략한 SQL이 실행될 스키마','Schema for unqualified names')}><Layers3 size={13} aria-hidden="true"/><NativeSelect size="sm" aria-label={tr('실행 스키마','Execution schema')} value={executionSchema() ?? ''} disabled={busy} onChange={event=>workspace.patch(tab.id,{querySchema:event.target.value||undefined})}><NativeSelectOption value="">{tr('기본 스키마','Default schema')}</NativeSelectOption>{pickerSchemas.map(name=><NativeSelectOption key={name} value={name}>{name}</NativeSelectOption>)}</NativeSelect></label>} onOpenCommonSql={() => setShowCommonSql(true)} commonSqlDisabled={!connected || busy} primaryAction={<><Button variant="ghost" size="sm" aria-expanded={!editorCollapsed} aria-controls="sql-editor" onClick={()=>workspace.patch(tab.id,{editorCollapsed:!editorCollapsed})}>{editorCollapsed?tr("SQL 펼치기","Show SQL"):tr("SQL 접기","Hide SQL")}</Button>{busy ? <Button variant="outline" size="sm" className="run-button stop-button" title={canStop ? tr("실행 중인 쿼리 중지 · Esc","Stop the running query · Esc") : tr("이 연결에서는 중지할 수 없습니다","This connection cannot stop queries")} disabled={!canStop} onClick={stopQuery}><Square size={12}/> {tr("중지","Stop")} <span className="run-elapsed">{(elapsed/1000).toFixed(1)}s</span></Button> : <Button variant="default" size="sm" className="run-button" title={tr("선택한 SQL 또는 커서가 있는 구문 실행 · Ctrl/Cmd + Enter","Run the selection or the statement at the cursor · Ctrl/Cmd + Enter")} disabled={!connected || !editorSql.trim()} onClick={run}><Play size={14}/> {t("실행")} </Button>}</>} commandsRef={queryCommands} key={`tools-${tab.id}`} engine={connection.profile.engine} session={active} beforeExecute={async(sql)=>await askDiscard()&&await leaveData()&&await confirmProduction(sql,executionSchema())&&await confirmSchemaSwitch(executionSchema())} connectionName={connection.profile.name} historyKey={connection.profile.id} initialFile={tab.file} sql={editorSql} disabled={busy} onSqlChange={setEditorSql} onSaveInWorkspace={sql=>workspace.patch(tab.id,{initialSql:sql})} onFileChange={file=>{workspace.markQuery(tab.id);workspace.patch(tab.id,{file,initialSql:file.savedSql});}} onBusyChange={value=>{if(value)pending.current.add(tab.id);else pending.current.delete(tab.id);workspace.patch(tab.id,{busy:value});}} onExecute={text=>api.query(active,text,executionSchema()).catch(e=>{throw new Error(timeoutHint(String(e),language));})} onResults={results=>{setScriptResults(previous=>({...previous,[tab.id]:results}));const last=results.at(-1);workspace.markQuery(tab.id);if(last?.result)workspace.patch(tab.id,{result:last.result,resultStale:false,source:'query',draft:{},queryTable:null,lastQuery:last.sql,error:''});if(last?.error)workspace.patch(tab.id,{error:last.error,resultStale:true});}}/>
         <div id="sql-editor" className="sql-editor" hidden={editorCollapsed}><CodeMirror key={tab.id} value={editorSql} height="100%" theme={theme === 'dark' ? oneDark : 'light'} extensions={[sqlLanguage({dialect: connection.profile.engine === 'sqlite'?SQLite:connection.profile.engine === 'postgres' ? PostgreSQL : MySQL, schema: completionSchema, defaultSchema: executionSchema()})]} onChange={setEditorSql} onCreateEditor={view => { const saved = editorStates.current.get(tab.id); if (saved && saved.doc.toString() === editorSql) { view.setState(saved); editorSelection.current = saved.sliceDoc(saved.selection.main.from, saved.selection.main.to); } }} onUpdate={u => { editorStates.current.set(tab.id, u.state); editorSelection.current = u.state.sliceDoc(u.state.selection.main.from, u.state.selection.main.to); }} basicSetup={{lineNumbers: true, foldGutter:false, highlightActiveLine:true, autocompletion:true}}/></div>
       </section>
       {selected&&source==='table'&&<div className="data-tool-switch"><Button variant="outline" size="sm" onClick={async()=>{if((dataDirty[tab.id]||edits.length)&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:!previous[tab.id]}));}}>{advanced[tab.id]?tr('간단한 보기','Simple view'):tr('데이터 도구','Data tools')}</Button><span>{advanced[tab.id]?tr('필터 · 페이징 · 행 편집 · 가져오기 · 내보내기','Filter · paging · row editing · import · export'):''}</span></div>}
@@ -854,11 +875,13 @@ export default function App() {
               {label:t('정렬 해제'),action:()=>{setSort(null);setScroll(0);},disabled:!sort},
             ])} onClick={() => {setSort(sort?.name !== c.name ? {name:c.name,desc:false} : !sort.desc ? {name:c.name,desc:true} : null);setScroll(0);}} ><div>{c.primary ? <KeyRound size={12} className="key-icon"/> : <span className="type-icon">{c.dataType.includes('int') ? '#' : 'T'}</span>}<strong>{c.name}</strong><span className="table-sort-arrow" aria-hidden="true">{sort?.name === c.name ? (sort.desc ? '↓' : '↑') : '↕'}</span><span className="col-type">{c.dataType}</span></div></th>)}</tr></thead><tbody>
             {start > 0 && <tr className="spacer-row" style={{height:start * 39}}><td colSpan={result.columns.length + 1}/></tr>}
-            {visible.map(({row, index}) => <tr key={index} {...menuFor([{label:t("행 복사"),action:()=>void copyText(result.columns.map(c=>row[c.name] ?? "NULL").join("\t"))}])}><td className="row-number">{index + 1}</td>{result.columns.map(col => {
+            {visible.map(({row, index}) => <tr key={index} {...menuFor(rowCopyItems(row))}><td className="row-number">{index + 1}</td>{result.columns.map(col => {
               const key = `${index}:${col.name}`, changed = key in draft && draft[key] !== result.rows[index][col.name], value = key in draft ? draft[key] : row[col.name];
               return <td key={col.name} tabIndex={0} {...menuFor([
                 {label:t('셀 복사'),action:()=>void copyText(value ?? 'NULL')},
-                {label:t('행 복사'),action:()=>void copyText(result.columns.map(c=>row[c.name] ?? 'NULL').join('\t'))},
+                {label:tr('WHERE 조건으로 복사','Copy as WHERE condition'),action:()=>void copyText(whereCondition(col.name,value,connection.profile.engine))},
+                {label:tr('이 값으로 결과 필터','Filter results by this value'),action:()=>{setFilter(value ?? '');setScroll(0);},disabled:!value},
+                ...rowCopyItems(row).map((item,i)=>i===0?{...item,divider:true}:item),
                 {label:t('셀 편집'),action:()=>setEditing({index,col:col.name,value:value ?? '',isNull:value===null}),disabled:busy||!canEdit||!col.editable,divider:true},
                 {label:t('NULL로 설정'),action:()=>setEditing({index,col:col.name,value:value ?? '',isNull:true}),disabled:busy||!canEdit||!col.editable},
                 {label:t('셀 변경 취소'),action:()=>setDraft(previous=>{const next={...previous};delete next[key];return next;}),disabled:busy||!changed},
@@ -908,7 +931,7 @@ export default function App() {
         ['Ctrl + Shift + Enter', tr('편집기 전체를 스크립트로 실행','Run the whole editor as a script')],
         ['Esc', tr('실행 중인 쿼리 중지 · 대화상자 닫기','Stop the running query · close dialogs')],
         ['F5', tr('결과 또는 목록 새로고침','Refresh results or lists')],
-        ['Ctrl + S', tr('SQL 파일 저장','Save SQL file')],
+        ['Ctrl + S', tr('쿼리 저장 (연결된 파일이 있으면 파일에)','Save query (to its file when linked)')],
         ['Ctrl + T / Ctrl + W', tr('새 쿼리 탭 / 현재 탭 닫기','New query tab / close tab')],
         ['Ctrl + B', tr('사이드바 접기/펼치기','Toggle sidebar')],
         ['Ctrl + Alt + B', tr('쿼리 기록 패널 열기/닫기','Toggle the query history panel')],

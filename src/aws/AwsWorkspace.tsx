@@ -77,11 +77,13 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   const openService = (service: AwsService) => ready && open({ kind: 'resources', profile, region: region.trim(), service });
   const openTopology = () => ready && open({ kind: 'topology', profile, region: region.trim() });
   const openResource = (tab: AwsTab, row: AwsRow) => open({ kind: 'resource', profile: tab.profile, region: tab.region, service: tab.service, row });
-  function close(id: string) {
-    const index = tabs.findIndex(tab => tab.id === id), rest = tabs.filter(tab => tab.id !== id);
+  const close = (id: string) => closeMany([id]);
+  function closeMany(ids: string[]) {
+    const closing = new Set(ids), index = tabs.findIndex(tab => tab.id === active?.id), rest = tabs.filter(tab => !closing.has(tab.id));
     setTabs(rest);
-    if (id === active?.id && rest.length) activate(rest[Math.min(index, rest.length - 1)].id);
-    setSelection(previous => { const next = { ...previous }; delete next[id]; return next; });
+    const next = tabs.slice(index + 1).find(tab => !closing.has(tab.id)) ?? rest.at(-1);
+    if (active && closing.has(active.id) && next) activate(next.id);
+    setSelection(previous => { const kept = { ...previous }; for (const id of closing) delete kept[id]; return kept; });
   }
   const refresh = (id = active?.id) => { if (id) setRevisions(previous => ({ ...previous, [id]: (previous[id] ?? 0) + 1 })); };
   commandsRef.current = { refresh: () => refresh(), closeTab: () => active && close(active.id), togglePanel: () => setPanelOpen(open => !open) };
@@ -147,7 +149,7 @@ export function AwsWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
         {ready && <div className="empty-connection-actions">{AWS_SERVICES.map(service => { const Icon = SERVICE_ICONS[service]; return <Button key={service} variant="outline" size="sm" onClick={() => openService(service)}><Icon size={14}/>{serviceLabel[service][language === 'ko' ? 0 : 1]}</Button>; })}<Button variant="outline" size="sm" onClick={openTopology}><Network size={14}/>{tr('인프라 맵', 'Infrastructure map')}</Button></div>}
       </div> : <>
         <div className="tabs"><div className="tab-list" role="tablist" aria-label={tr('AWS 탭', 'AWS tabs')} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
-          {tabs.map(tab => { const [ko, en] = tabTitle(tab); const name = tr(ko, en); const scope = `${tab.profile} · ${tab.region}`; return <ManagedTab key={tab.id} id={tab.id} name={name} active={active?.id === tab.id} ids={tabs.map(t => t.id)} onRename={title => setTabs(previous => previous.map(t => t.id === tab.id ? { ...t, customTitle: title } : t))} onReorder={(source, target, after) => setTabs(previous => reorderTabs(previous, source, target, after))}>
+          {tabs.map(tab => { const [ko, en] = tabTitle(tab); const name = tr(ko, en); const scope = `${tab.profile} · ${tab.region}`; return <ManagedTab key={tab.id} id={tab.id} name={name} active={active?.id === tab.id} ids={tabs.map(t => t.id)} onRename={title => setTabs(previous => previous.map(t => t.id === tab.id ? { ...t, customTitle: title } : t))} onReorder={(source, target, after) => setTabs(previous => reorderTabs(previous, source, target, after))} onClose={closeMany}>
             <Button variant="ghost" size="bare" role="tab" className="tab" id={`aws-tab-${tab.id}`} aria-selected={active?.id === tab.id} aria-controls={`aws-panel-${tab.id}`} tabIndex={active?.id === tab.id ? 0 : -1} title={`${name}\n${scope}`} onClick={() => activate(tab.id)} onAuxClick={event => { if (event.button === 1) close(tab.id); }}
               onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { const index = tabs.findIndex(item => item.id === tab.id), next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]; activate(next.id); document.getElementById(`aws-tab-${next.id}`)?.focus(); } }}>
               {icon(tab)}<span>{name}</span>{(tab.profile !== profile || tab.region !== region) && <small className="aws-tab-scope">{tab.region}</small>}</Button>

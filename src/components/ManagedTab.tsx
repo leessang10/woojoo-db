@@ -15,9 +15,11 @@ export function reorderTabs<T extends { id: string }>(tabs: T[], source: string,
 }
 
 /** Pointer drag, keyboard menu and rename use the same tab identity. */
-export function ManagedTab({ id, name, active, ids, onRename, onReorder, children }: {
+export function ManagedTab({ id, name, active, ids, onRename, onReorder, onClose, children }: {
   id: string; name: string; active: boolean; ids: string[]; children: ReactNode;
   onRename: (name: string) => void; onReorder: (source: string, target: string, after: boolean) => void;
+  /** Closes the given tabs; the owner confirms unsaved work. */
+  onClose?: (ids: string[]) => void;
 }) {
   const { language } = useLanguage(); const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -30,6 +32,13 @@ export function ManagedTab({ id, name, active, ids, onRename, onReorder, childre
       { label: tr('이름 바꾸기', 'Rename'), action: () => { setDraft(name); setRenaming(true); } },
       { label: tr('왼쪽으로 이동', 'Move left'), disabled: index <= 0, action: () => onReorder(id, ids[index - 1], false) },
       { label: tr('오른쪽으로 이동', 'Move right'), disabled: index >= ids.length - 1, action: () => onReorder(id, ids[index + 1], true) },
+      ...(onClose ? [
+        { label: tr('탭 닫기', 'Close tab'), action: () => onClose([id]), divider: true },
+        { label: tr('다른 탭 닫기', 'Close other tabs'), disabled: ids.length < 2, action: () => onClose(ids.filter(other => other !== id)) },
+        { label: tr('오른쪽 탭 닫기', 'Close tabs to the right'), disabled: index >= ids.length - 1, action: () => onClose(ids.slice(index + 1)) },
+        { label: tr('왼쪽 탭 닫기', 'Close tabs to the left'), disabled: index <= 0, action: () => onClose(ids.slice(0, index)) },
+        { label: tr('모든 탭 닫기', 'Close all tabs'), action: () => onClose(ids) },
+      ] : []),
     ] });
   }
   return <div className={`tab-item ${active ? 'active' : ''} ${drop ? `drop-${drop}` : ''}`} data-managed-tab={id} draggable onContextMenu={open}

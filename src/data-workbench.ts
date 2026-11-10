@@ -8,6 +8,11 @@ export type CopyTarget = {session:string;label:string;table:Table;engine:Engine}
 export const emptyRequest:PageRequest={offset:0,limit:100,filters:[],order:[]};
 export const quoteIdentifier=(name:string,engine:Engine)=>engine==='mysql'||engine==='mariadb'?`\`${name.replaceAll('`','``')}\``:`"${name.replaceAll('"','""')}"`;
 export const tableName=(table:Table,engine:Engine)=>`${quoteIdentifier(table.schema,engine)}.${quoteIdentifier(table.name,engine)}`;
+// MySQL and MariaDB also treat backslashes as escapes inside string literals by default.
+export const sqlLiteral=(value:string|null,engine:Engine)=>value===null?'NULL':`'${(engine==='mysql'||engine==='mariadb'?value.replaceAll('\\','\\\\'):value).replaceAll("'","''")}'`;
+export const whereCondition=(column:string,value:string|null,engine:Engine)=>`${quoteIdentifier(column,engine)} ${value===null?'IS NULL':`= ${sqlLiteral(value,engine)}`}`;
+export const rowInsert=(table:Table,columns:string[],row:Row,engine:Engine)=>`INSERT INTO ${tableName(table,engine)} (${columns.map(c=>quoteIdentifier(c,engine)).join(', ')}) VALUES (${columns.map(c=>sqlLiteral(row[c]??null,engine)).join(', ')});`;
+export const rowJson=(columns:string[],row:Row)=>JSON.stringify(Object.fromEntries(columns.map(c=>[c,row[c]??null])),null,2);
 export function operationPreview(table:Table,engine:Engine,operations:DataOperation[]) {
   const q=(s:string)=>quoteIdentifier(s,engine), literal=(v:string|null)=>v===null?'NULL':`'${v.replaceAll("'","''")}'`;
   return operations.map(op=>{

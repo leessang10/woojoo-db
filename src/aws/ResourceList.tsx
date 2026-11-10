@@ -1,5 +1,6 @@
 import { SortableTable } from '../components/SortableTable';
 import { useEffect, useRef, useState } from 'react';
+import { ContextMenu, type MenuState } from '../ContextMenu';
 import { Loader2, RefreshCw, Search, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,8 @@ type Cached = { rows: AwsRow[]; nextToken: string | null; updated: number };
 const cache = new Map<string, Cached>();
 const FRESH_MS = 30_000;
 export const clearListCache = () => cache.clear();
+// Services name their ARN field differently (FunctionArn, DBInstanceArn, arn, ...).
+export const rowArn = (row: AwsRow) => Object.entries(row).find(([name, value]) => /(^arn$|Arn$)/.test(name) && typeof value === 'string' && value.startsWith('arn:'))?.[1] as string | undefined;
 
 export function ResourceList({ tab, revision, selected, onSelect, onOpen }: { tab: AwsTab; revision: number; selected?: string; onSelect: (row: AwsRow) => void; onOpen: (row: AwsRow) => void }) {
   const { language } = useLanguage(); const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
@@ -22,6 +25,22 @@ export function ResourceList({ tab, revision, selected, onSelect, onOpen }: { ta
   const [page, setPage] = useState<Cached>(() => cache.get(key) ?? { rows: [], nextToken: null, updated: 0 });
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [search, setSearch] = useState(''), [state, setState] = useState('');
   const running = useRef<string | null>(null), pageRef = useRef(page); pageRef.current = page;
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  function copy(text: string) {
+    void navigator.clipboard?.writeText(text).then(() => setError(''), () => setError(tr('클립보드에 복사하지 못했습니다.', 'Could not copy to the clipboard.')));
+  }
+  function openMenu(event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>, row: AwsRow, id: string, name: string) {
+    event.preventDefault(); event.stopPropagation();
+    const trigger = event.currentTarget, rect = trigger.getBoundingClientRect(), arn = rowArn(row);
+    const pointer = 'clientX' in event && (event.clientX !== 0 || event.clientY !== 0);
+    onSelect(row);
+    setMenu({ x: pointer ? event.clientX : rect.left + 12, y: pointer ? event.clientY : rect.top + Math.min(rect.height, 32), trigger, items: [
+      { label: tr('상세 열기', 'Open details'), action: () => onOpen(row) },
+      { label: tr('이름 복사', 'Copy name'), action: () => copy(name), disabled: !name, divider: true },
+      { label: tr('ID 복사', 'Copy ID'), action: () => copy(id) },
+      ...(arn ? [{ label: tr('ARN 복사', 'Copy ARN'), action: () => copy(arn) }] : []),
+    ] });
+  }
   async function load(more = false) {
     if (running.current) { if (!more) void awsCancel(running.current); else return; }
     const request = requestId(); running.current = request;
@@ -68,7 +87,7 @@ export function ResourceList({ tab, revision, selected, onSelect, onOpen }: { ta
     <div className="grid-scroll" aria-busy={busy}>
       <SortableTable className="data-grid aws-grid">
         <thead><tr>{labels.map(([ko, en]) => <th key={en}><div><strong>{tr(ko, en)}</strong></div></th>)}</tr></thead>
-        <tbody>{filtered.map(item => <tr key={item.id} tabIndex={0} aria-selected={selected === item.id} data-selected={selected === item.id} onClick={() => onSelect(item.row)} onDoubleClick={() => onOpen(item.row)} onKeyDown={event => { if (event.key === 'Enter') onOpen(item.row); else if (event.key === ' ') { event.preventDefault(); onSelect(item.row); } }}>
+        <tbody>{filtered.map(item => <tr key={item.id} tabIndex={0} aria-selected={selected === item.id} data-selected={selected === item.id} onClick={() => onSelect(item.row)} onDoubleClick={() => onOpen(item.row)} onContextMenu={event => openMenu(event, item.row, item.id, item.cells[0] ?? '')} onKeyDown={event => { if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') openMenu(event, item.row, item.id, item.cells[0] ?? ''); else if (event.key === 'Enter') onOpen(item.row); else if (event.key === ' ') { event.preventDefault(); onSelect(item.row); } }}>
           {item.cells.map((value, index) => <td key={index} title={value} data-sort-value={service === "s3" && index === 2 ? (item.row.CreationDate ? Date.parse(item.row.CreationDate) : undefined) : service === "logs" && index === 1 ? item.row.retentionInDays : service === "logs" && index === 2 ? (item.row.storedBytes ?? 0) : service === "logs" && index === 3 ? item.row.creationTime : value}>{index === 1 && hasState(service) ? <span className="aws-state" data-state={value}>{value}</span> : value}</td>)}
         </tr>)}</tbody>
       </SortableTable>
@@ -77,5 +96,6 @@ export function ResourceList({ tab, revision, selected, onSelect, onOpen }: { ta
       {page.rows.length > 0 && !filtered.length && <div className="empty-result"><Search size={24}/><p>{tr('일치하는 리소스가 없습니다.', 'No matching resources.')}</p></div>}
     </div>
     <div className="result-footer"><span>{tr('클릭: 요약 · 더블클릭: 상세', 'Click: summary · Double-click: details')}</span>{page.nextToken && <Button variant="outline" size="xs" disabled={busy} onClick={() => void load(true)}>{busy ? <Loader2 size={12} className="spin"/> : null}{tr('더 불러오기', 'Load more')}</Button>}</div>
+    {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)}/>}
   </section>;
 }
