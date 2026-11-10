@@ -139,3 +139,46 @@
 .api-response-bar{flex-wrap:wrap}
 
 .api-tree-row{display:flex;align-items:center;min-width:0}.api-tree-row>.tree-table{flex:1;min-width:0}.api-tree-row>button:last-child{flex-shrink:0}
+
+/* Template collections: pick a provider, then fill keys step by step. */
+.modal.api-template-modal{width:640px}
+.api-template-heading{display:flex;align-items:center;gap:6px;min-width:0}
+.api-template-list{display:flex;flex-direction:column;gap:8px}
+[data-slot=button].api-template-card{display:flex;align-items:center;gap:12px;width:100%;height:auto;padding:12px 14px;border-radius:8px;text-align:left;font-weight:400;white-space:normal}
+[data-slot=button].api-template-card:hover{border-color:var(--brand)}
+.api-template-logo{display:grid;place-items:center;width:36px;height:36px;flex-shrink:0;border-radius:8px;font-weight:700;font-size:15px;color:#fff;background:var(--muted-foreground)}
+.api-template-logo[data-template=tosspayments]{background:#0064ff}.api-template-logo[data-template=stripe]{background:#635bff}.api-template-logo[data-template=paypal]{background:#003087}
+.api-template-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.api-template-text strong{font-size:13px;font-weight:600}
+.api-template-text span,.api-template-card small{font-size:12px;color:var(--muted-foreground);word-break:keep-all;overflow-wrap:anywhere}
+.api-template-card small{flex-shrink:0;font-size:11px;font-variant-numeric:tabular-nums}
+.api-template-steps{display:flex;flex-direction:column;gap:0;margin:0;padding:0;list-style:none}
+.api-template-step{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
+.api-template-step:first-child{border-top:0;padding-top:0}
+.api-template-number{display:grid;place-items:center;width:22px;height:22px;flex-shrink:0;border-radius:50%;font-size:11px;font-weight:600;color:var(--brand);border:1px solid var(--brand);font-variant-numeric:tabular-nums}
+.api-template-number[data-done]{color:#fff;background:#3f9d6c;border-color:#3f9d6c}
+.api-template-step-body{flex:1;min-width:0}
+.modal .api-template-step-body h3{margin:1px 0 4px;font-size:13px;font-weight:600}
+.api-template-step-body p{margin:0 0 8px;font-size:12px;line-height:1.7;color:var(--muted-foreground);word-break:keep-all;overflow-wrap:anywhere}
+.api-template-link{display:inline-flex;align-items:center;gap:5px;margin-bottom:10px;font-size:12px;color:var(--brand);text-decoration:none}
+.api-template-link:hover{text-decoration:underline}
+.api-template-link span{font-size:11px;color:var(--muted-foreground)}
+.modal label.api-template-field{gap:5px;margin:0 0 10px}
+.api-template-field>span:first-child{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.api-template-field em{font-style:normal;font-size:10px;font-weight:600;color:var(--brand)}
+.api-template-field code{margin-left:auto;font:11px 'Cascadia Code',Consolas,monospace;color:var(--muted-foreground)}
+.api-template-input{display:flex;align-items:center;gap:4px}
+.modal .api-template-input input{flex:1;font-family:'Cascadia Code',Consolas,monospace;font-size:12px}
+.api-template-warn{display:flex;align-items:flex-start;gap:5px;font-size:12px;line-height:1.5;color:var(--changed-line);font-weight:400;word-break:keep-all;overflow-wrap:anywhere}
+.api-template-warn svg{flex-shrink:0;margin-top:3px}
+.api-template-fetch{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.api-template-fetch .api-hint{margin:0}
+.api-template-requests{margin-top:6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.api-template-requests summary{cursor:pointer;font-weight:500}
+.api-template-requests ul{display:flex;flex-direction:column;gap:6px;margin:10px 0;padding:0;list-style:none}
+.api-template-requests li{display:flex;align-items:baseline;gap:8px;min-width:0}
+.api-template-requests li small{margin-left:auto;color:var(--muted-foreground);text-align:right;word-break:keep-all}
+.api-template-requests .api-template-link{margin:0}
+.api-template-note{margin:12px 0 0}
+@media(max-width:700px){[data-slot=button].api-template-card{flex-wrap:wrap}.api-template-requests li{flex-wrap:wrap}.api-template-requests li small{margin-left:42px;text-align:left}}
+.api-tree-template{align-self:flex-start;margin:0 16px}

@@ -1,7 +1,7 @@
 import { ManagedTab, reorderTabs } from '../components/ManagedTab';
 import { SidebarTitle } from '../components/SidebarTitle';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, FolderPlus, MoreHorizontal, History, Import, PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Search, Settings2, Trash2, Waypoints, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Folder, FolderPlus, MoreHorizontal, History, Import, LayoutTemplate, PanelLeftClose, PanelLeftOpen, PanelRight, Plus, Search, Settings2, Trash2, Waypoints, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -13,6 +13,8 @@ import type { Theme } from '../theme';
 import * as store from './api';
 import { CurlDialog, EnvironmentDialog, NameDialog } from './Dialogs';
 import { RequestPanel } from './RequestPanel';
+import { TemplateDialog } from './TemplateDialog';
+import { templateVariables, uniqueName, type ApiTemplate } from './templates';
 import type { Result } from './ResponseView';
 import { blankSpec, buildOutgoing, formatDuration, normalizeSpec, readApiTabs, requestTitle, sameSpec, specFromOutgoing, statusTone, writeApiTabs, type ApiTab, type Environment, type HistoryEntry, type RequestSpec, type SavedRequest, type Workspace } from './model';
 import './http.css';
@@ -38,7 +40,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
   const [collapsed, setCollapsed] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]')); } catch { return new Set(); } });
   const [panelOpen, setPanelOpen] = useState(() => { try { return localStorage.getItem(PANEL_KEY) === 'open'; } catch { return false; } });
   const [history, setHistory] = useState<HistoryEntry[]>([]), [historySearch, setHistorySearch] = useState(''), [historyRevision, setHistoryRevision] = useState(0);
-  const [naming, setNaming] = useState<Naming | null>(null), [curl, setCurl] = useState<string | null>(null), [editingEnvironments, setEditingEnvironments] = useState(false);
+  const [naming, setNaming] = useState<Naming | null>(null), [curl, setCurl] = useState<string | null>(null), [editingEnvironments, setEditingEnvironments] = useState(false), [choosingTemplate, setChoosingTemplate] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [notice, setNotice] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -182,6 +184,20 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
     await store.saveRequest({ ...request, collectionId, sort: workspace.requests.filter(r => r.collectionId === collectionId).length }); await reload();
     setTabs(previous => previous.map(tab => tab.requestId === request.id ? { ...tab, collectionId } : tab));
   }
+  /** A template becomes a collection, its requests, and its own environment, which is made active. */
+  async function createFromTemplate(template: ApiTemplate, values: Record<string, string>) {
+    const collection = { id: crypto.randomUUID(), name: uniqueName(template.name, workspace.collections.map(c => c.name)), sort: workspace.collections.length };
+    const environment: Environment = { id: crypto.randomUUID(), name: uniqueName(template.environment, workspace.environments.map(e => e.name)), sort: workspace.environments.length, variables: templateVariables(template, values) };
+    await store.saveCollection(collection);
+    const requests: SavedRequest[] = template.requests.map((item, sort) => ({ id: crypto.randomUUID(), collectionId: collection.id, name: item.name, sort, spec: structuredClone(item.spec), updatedAt: 0 }));
+    for (const request of requests) await store.saveRequest(request);
+    await store.saveEnvironment(environment);
+    await store.setActiveEnvironment(environment.id);
+    await reload();
+    setCollapsed(previous => { const next = new Set(previous); next.delete(collection.id); return next; });
+    openSaved(requests[0]);
+    setNotice(tr(`${collection.name} 컬렉션을 만들고 "${environment.name}" 환경을 켰습니다`, `Created ${collection.name} and switched to "${environment.name}"`));
+  }
   async function chooseEnvironment(id: string) {
     const value = id || null;
     setWorkspace(previous => ({ ...previous, activeEnvironment: value }));
@@ -253,6 +269,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
       <div className="section-label"><span>{tr('컬렉션', 'Collections')}</span><span className="api-section-actions">
         <Button variant="ghost" size="bare" title={tr('새 요청', 'New request') + ' · Ctrl/Cmd+N'} aria-label={tr('새 요청', 'New request')} onClick={() => newTab()}><Plus size={15}/></Button>
         <Button variant="ghost" size="bare" title={tr('새 컬렉션', 'New collection')} aria-label={tr('새 컬렉션', 'New collection')} onClick={newCollection}><FolderPlus size={14}/></Button>
+        <Button variant="ghost" size="bare" title={tr('템플릿에서 추가 (토스페이먼츠, Stripe, PayPal)', 'Add from a template (Toss Payments, Stripe, PayPal)')} aria-label={tr('템플릿에서 추가', 'Add from a template')} onClick={() => setChoosingTemplate(true)}><LayoutTemplate size={14}/></Button>
         <Button variant="ghost" size="bare" title={tr('cURL 가져오기', 'Import cURL')} aria-label={tr('cURL 가져오기', 'Import cURL')} onClick={() => setCurl('')}><Import size={14}/></Button>
       </span></div>
       <label className="search-field"><Search size={13}/><input value={search} placeholder={tr('요청 검색', 'Search requests')} aria-label={tr('요청 검색', 'Search requests')} onChange={event => setSearch(event.target.value)}/>{search && <Button variant="ghost" size="bare" aria-label={tr('검색 지우기', 'Clear search')} onClick={() => setSearch('')}><X size={12}/></Button>}</label>
@@ -271,7 +288,10 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
             {open && !requests.length && <p className="api-tree-empty">{tr('오른쪽 클릭 → 새 요청, 또는 요청을 저장할 때 이 컬렉션을 고르세요.', 'Right-click → New request, or pick this collection when saving.')}</p>}
           </div>;
         })}
-        {!workspace.requests.length && !workspace.collections.length && !loadError && <p className="api-tree-empty">{tr('저장한 요청이 없습니다. 요청을 만든 뒤 Ctrl/Cmd+S로 저장하세요.', 'No saved requests yet. Build a request and save it with Ctrl/Cmd+S.')}</p>}
+        {!workspace.requests.length && !workspace.collections.length && !loadError && <>
+          <p className="api-tree-empty">{tr('저장한 요청이 없습니다. 요청을 만든 뒤 Ctrl/Cmd+S로 저장하세요.', 'No saved requests yet. Build a request and save it with Ctrl/Cmd+S.')}</p>
+          <Button variant="outline" size="sm" className="api-tree-template" onClick={() => setChoosingTemplate(true)}><LayoutTemplate size={13}/>{tr('템플릿에서 추가', 'Add from a template')}</Button>
+        </>}
       </nav>
     </aside>}
     {renderMain()}
@@ -292,6 +312,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
     {naming && <NameDialog title={naming.title} initial={naming.initial} collections={naming.withCollection ? workspace.collections : undefined} collectionId={naming.collectionId} onSubmit={naming.submit} onClose={() => setNaming(null)}/>}
     {curl !== null && <CurlDialog initial={curl} onImport={spec => newTab(spec)} onClose={() => setCurl(null)}/>}
     {editingEnvironments && <EnvironmentDialog environments={workspace.environments} initial={workspace.activeEnvironment} onSave={saveEnvironments} onClose={() => setEditingEnvironments(false)}/>}
+    {choosingTemplate && <TemplateDialog onCreate={createFromTemplate} onClose={() => setChoosingTemplate(false)}/>}
     {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)}/>}
   </>;
 
@@ -309,10 +330,11 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
       </div></header>
       {saveError && <div className="api-error-banner" role="alert"><span>{saveError}</span><Button variant="ghost" size="icon-sm" aria-label={tr("오류 닫기", "Dismiss error")} onClick={() => setSaveError('')}><X size={14}/></Button></div>}
       {!tabs.length ? <div className="workspace-empty"><Waypoints size={28}/><h1>{tr('API 요청을 보내 보세요', 'Send an API request')}</h1>
-        <p className="connection-availability">{tr('요청을 만들거나 cURL을 가져와 시작하세요.', 'Create a request or import cURL to get started.')}</p>
+        <p className="connection-availability">{tr('요청을 만들거나 cURL·템플릿을 가져와 시작하세요.', 'Create a request, or start from cURL or a template.')}</p>
         <div className="empty-connection-actions">
           <Button variant="default" size="sm" onClick={() => newTab()}><Plus size={14}/>{tr('새 요청', 'New request')}</Button>
           <Button variant="outline" size="sm" onClick={() => setCurl('')}><Import size={14}/>{tr('cURL 가져오기', 'Import cURL')}</Button>
+          <Button variant="outline" size="sm" onClick={() => setChoosingTemplate(true)}><LayoutTemplate size={14}/>{tr('템플릿에서 추가', 'Add from a template')}</Button>
           <Button variant="outline" size="sm" onClick={() => setEditingEnvironments(true)}><Settings2 size={14}/>{tr('환경 변수', 'Environments')}</Button>
         </div>
       </div> : <>
