@@ -80,3 +80,42 @@ test('DB headers cycle sorting and restore query order', async ({ page }) => {
  await expect(field).toHaveAttribute('aria-sort','none');
  expect(await metadataRows.allTextContents()).toEqual(initial);
 });
+
+test('a newly opened table shows data first and remembers when SQL is expanded', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  await page.locator('.tab-close').click();
+  await page.locator('.tree-table').click();
+  await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  await expect(page.locator('#sql-editor')).toBeHidden();
+  await page.getByRole('button', { name: 'SQL 펼치기', exact: true }).click();
+  await expect(page.locator('.cm-content')).toBeVisible();
+  await view(page, '구조').click();
+  await view(page, '데이터').click();
+  await expect(page.locator('.cm-content')).toBeVisible();
+  await page.getByRole('button', { name: '이 테이블로 새 쿼리' }).click();
+  await expect(page.locator('.cm-content')).toBeVisible();
+});
+
+test('row details panel follows the selected row and steps through results', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  await page.locator('.data-grid tbody td.row-number').nth(1).click();
+  const panel = page.getByRole('complementary', { name: '행 상세' });
+  await expect(panel.getByText('행 2 / 12')).toBeVisible();
+  await expect(panel.getByText('Sofia Chen', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '이전 행' }).click();
+  await expect(panel.getByText('행 1 / 12')).toBeVisible();
+  await expect(panel.getByText('Alex Morgan', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '다음 행' }).click();
+  await expect(panel.getByText('행 2 / 12')).toBeVisible();
+  await expect(panel.getByText('Sofia Chen', { exact: true })).toBeVisible();
+  await page.locator('.data-grid tbody tr').filter({ hasText: 'James Park' }).locator('td').nth(2).click();
+  await expect(panel.getByText('행 3 / 12')).toBeVisible();
+  await panel.getByLabel('열과 값 검색').fill('email');
+  await expect(panel.locator('.row-inspector-field')).toHaveCount(1);
+  await panel.getByRole('button', { name: '행 상세 닫기' }).click();
+  await expect(panel).toBeHidden();
+  await page.getByRole('button', { name: '행 상세 패널' }).click();
+  await expect(page.getByRole('complementary', { name: '행 상세' })).toBeVisible();
+});

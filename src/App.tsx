@@ -37,7 +37,9 @@ import type { StructurePlan } from './structure';
 import { DdlView, ObjectPage } from './ObjectPage';
 import { RelationsView } from './RelationsView';
 import { createTab, isDirty, useWorkspaceTabs, type TabView, type WorkspaceTab } from './workspace-tabs';
-import { AlertTriangle, ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileCode2, Filter, Info, KeyRound, Layers3, Loader2, Plus, RefreshCw, Search, Settings2, Square, Table2, Terminal, Undo2, X } from 'lucide-react';
+import { RowInspector } from './RowInspector';
+import { isNumericType } from './row-inspector';
+import { AlertTriangle, ArrowDownToLine, PanelRight, ArrowRight, Check, ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileCode2, Filter, Info, KeyRound, Layers3, Loader2, Plus, RefreshCw, Search, Settings2, Square, Table2, Terminal, Undo2, X } from 'lucide-react';
 import * as api from './api';
 import { collectEdits, csv, tableQuery, type Profile, type Table, type Result } from './model';
 
@@ -69,6 +71,8 @@ const timeoutHint = (message: string, language: string) => /statement timeout|ca
   ? `${message}\n${language === 'ko' ? '쿼리 제한 시간을 넘었습니다. 연결 편집에서 "쿼리 제한 시간"을 늘리거나 0(제한 없음)으로 바꿀 수 있습니다.' : 'The query exceeded the time limit. Raise "Query timeout" in the connection settings, or set it to 0 for no limit.'}`
   : message;
 const ErdPage = lazy(() => import('./ErdPage'));
+
+const GRID_ROW_HEIGHT = 32;
 
 export default function App() {
   const { language, t } = useLanguage();
@@ -117,6 +121,8 @@ export default function App() {
   const setResult = (value: Result) => workspace.patch(tab.id,{result:value,resultStale:false});
   const [source, setSource] = workspace.field('source');
   const editorCollapsed = tab.editorCollapsed ?? (!!advanced[tab.id] && source === 'table');
+  const [inspectorOpen, setInspectorOpen] = useState(()=>{try{return localStorage.getItem('woojoo-row-inspector')==='1';}catch{return false;}});
+  const [inspected, setInspected] = useState<Record<string,{result:Result;index:number}>>({});
   const [draft, setDraft] = workspace.field('draft');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = workspace.field('filter');
@@ -701,8 +707,23 @@ export default function App() {
     return { row, index };
   }).filter(({ row }) => !filter || Object.values(row).some(v => v?.toLowerCase().includes(filter.toLowerCase())));
   if (sort) filtered.sort((a, b) => compareValues(a.row[sort.name], b.row[sort.name]) * (sort.desc ? -1 : 1));
-  const start = Math.max(0, Math.floor(scroll / 39) - 6);
-  const visible = filtered.slice(start, start + 40);
+  const start = Math.max(0, Math.floor(scroll / GRID_ROW_HEIGHT) - 6);
+  const visible = filtered.slice(start, start + 48);
+  const inspectedEntry = inspected[tab.id];
+  const inspectedIndex = inspectedEntry && inspectedEntry.result === result && inspectedEntry.index < result.rows.length ? inspectedEntry.index : null;
+  const inspectedPosition = inspectedIndex === null ? -1 : filtered.findIndex(item => item.index === inspectedIndex);
+  function selectRow(index: number) { setInspected(previous => previous[tab.id]?.result === result && previous[tab.id].index === index ? previous : { ...previous, [tab.id]: { result, index } }); }
+  function showInspector(open: boolean, index?: number) { setInspectorOpen(open); try { localStorage.setItem('woojoo-row-inspector', open ? '1' : '0'); } catch { /* The panel still works without a remembered preference. */ } if (open && index !== undefined) selectRow(index); else if (open && inspectedPosition < 0 && filtered[0]) selectRow(filtered[0].index); }
+  function moveInspected(step: 1 | -1) {
+    const next = filtered[inspectedPosition + step];
+    if (!next) return;
+    selectRow(next.index);
+    const grid = gridRef.current;
+    if (!grid) return;
+    const top = (inspectedPosition + step) * GRID_ROW_HEIGHT, header = grid.querySelector('thead')?.clientHeight ?? 0;
+    if (top < grid.scrollTop) grid.scrollTop = top;
+    else if (top + GRID_ROW_HEIGHT > grid.scrollTop + grid.clientHeight - header) grid.scrollTop = top + GRID_ROW_HEIGHT - grid.clientHeight + header;
+  }
   useEffect(()=>{let cancelled=false;setCompletionSchema({});if(!connected)return;const chosen=schemaFilters[connection.profile.id];const tables=chosen?tableList.filter(table=>chosen.includes(table.schema)):tableList;let cursor=0;const fields:Record<string,string[]>={};const worker=async()=>{while(!cancelled&&cursor<tables.length){const table=tables[cursor++];try{const cols=await api.describeTable(active,table);if(cancelled)return;fields[table.schema+'.'+table.name]=cols.map(c=>c.name);if(tables.filter(t=>t.name===table.name).length===1)fields[table.name]=cols.map(c=>c.name);setCompletionSchema({...fields});}catch{/* A metadata failure must not prevent SQL editing. */}}};void Promise.all(Array.from({length:Math.min(3,tables.length)},worker));return()=>{cancelled=true;};},[active,tableList,catalogVersion,JSON.stringify(schemaFilters[connection.profile.id]??null)]);
   const allSchemas = [...new Set([...schemaCatalog,...tableList.map(t=>t.schema)])].sort();
   const chosenSchemas = schemaFilters[connection.profile.id];
@@ -808,18 +829,18 @@ export default function App() {
       {selected&&source==='table'&&<div className="data-tool-switch"><Button variant="outline" size="sm" onClick={async()=>{if((dataDirty[tab.id]||edits.length)&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:!previous[tab.id]}));}}>{advanced[tab.id]?tr('간단한 보기','Simple view'):tr('데이터 도구','Data tools')}</Button><span>{advanced[tab.id]?tr('필터 · 페이징 · 행 편집 · 가져오기 · 내보내기','Filter · paging · row editing · import · export'):''}</span></div>}
       {!!scriptResults[tab.id]?.length&&<div className="script-result-tabs">{scriptResults[tab.id].map(item=><Button key={item.index} variant="outline" size="sm" onClick={()=>{if(item.result)workspace.patch(tab.id,{result:item.result,resultStale:false,lastQuery:item.sql,source:'query',queryTable:null,error:''});else workspace.patch(tab.id,{error:item.error??'',resultStale:true});}}>{tr('결과','Result')} {item.index} · {item.error?tr('오류','Error'):tr(`${item.result?.rows.length}행`,`${item.result?.rows.length} rows`)}</Button>)}</div>}
       {advanced[tab.id]&&selected&&source==='table'?<DataWorkbench key={tab.id} session={active} engine={connection.profile.engine} table={selected} readOnly={connection.profile.readOnly} initialResult={result} initialFilters={initialFilters[tab.id]} targets={copyTargets} onBusyChange={value=>workspace.patch(tab.id,{busy:value})} onDirtyChange={dirty=>setDataDirty(previous=>previous[tab.id]===dirty?previous:{...previous,[tab.id]:dirty})} onNavigate={async(table,filter)=>{if(!await leaveData())return;const next=workspace.add(table,tableQuery(connection.profile.engine,table.schema,table.name));setAdvanced(previous=>({...previous,[next.id]:true}));setInitialFilters(previous=>({...previous,[next.id]:filter?[filter]:[]}));}} onChanged={()=>{setCatalogVersion(v=>v+1);}}/>:<section className="results-pane" {...menuFor(resultMenu)}>
-        <div className="result-tabs"><div className="result-tab"><Table2 size={15}/> {t("결과")} <span title={result.truncated?tr(`처음 ${result.rows.length}행만 불러왔습니다`,`Only the first ${result.rows.length} rows were loaded`):undefined}>{result.rows.length}{result.truncated?'+':''}</span></div>{selected && tab.kind !== 'table' && <Button variant="ghost" size="bare" className="subtle-button" onClick={() => void openDetails(selected)}>{t("테이블 상세")}</Button>}<div className="result-meta" data-stale={!!tab.resultStale}>{busy ? <Loader2 size={13} className="spin"/> : tab.resultStale || error ? <X size={13}/> : result.columns.length || lastQuery ? <Check size={13}/> : null}<span aria-live="polite">{busy ? t("처리 중…") + (elapsed >= 1000 ? ` ${(elapsed/1000).toFixed(0)}s` : '') : tab.resultStale || error ? tr("작업 실패","Operation failed") : tr("DB 처리","DB time")+" "+result.elapsedMs+" ms"}</span>{tab.resultStale&&result.columns.length>0&&<span className="stale-result-label" title={lastQuery}>{tr("이전 성공 결과","Previous successful result")} · {result.elapsedMs} ms</span>}<span className="sep">·</span><span>{source === 'table' ? t("테이블 보기") : canEdit?tr("쿼리 결과 · 편집 가능","Query result · editable"):t("쿼리 결과 · 읽기 전용")}</span></div><span className="tabs-spacer"/><Button variant="ghost" size="bare" className="icon-button" title={t("CSV 내보내기")} aria-label={t("CSV 내보내기")} disabled={!result.columns.length} onClick={exportCsv}><ArrowDownToLine size={16}/></Button><Button variant="ghost" size="bare" className="icon-button" title={source === 'query' ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} aria-label={source === "query" ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} disabled={busy || (source === 'table' ? !selected : !lastQuery)} onClick={refreshResults}><RefreshCw size={15}/></Button></div>
+        <div className="result-tabs"><div className="result-tab"><Table2 size={15}/> {t("결과")} <span title={result.truncated?tr(`처음 ${result.rows.length}행만 불러왔습니다`,`Only the first ${result.rows.length} rows were loaded`):undefined}>{result.rows.length}{result.truncated?'+':''}</span></div>{selected && tab.kind !== 'table' && <Button variant="ghost" size="bare" className="subtle-button" onClick={() => void openDetails(selected)}>{t("테이블 상세")}</Button>}<div className="result-meta" data-stale={!!tab.resultStale}>{busy ? <Loader2 size={13} className="spin"/> : tab.resultStale || error ? <X size={13}/> : result.columns.length || lastQuery ? <Check size={13}/> : null}<span aria-live="polite">{busy ? t("처리 중…") + (elapsed >= 1000 ? ` ${(elapsed/1000).toFixed(0)}s` : '') : tab.resultStale || error ? tr("작업 실패","Operation failed") : tr("DB 처리","DB time")+" "+result.elapsedMs+" ms"}</span>{tab.resultStale&&result.columns.length>0&&<span className="stale-result-label" title={lastQuery}>{tr("이전 성공 결과","Previous successful result")} · {result.elapsedMs} ms</span>}<span className="sep">·</span><span>{source === 'table' ? t("테이블 보기") : canEdit?tr("쿼리 결과 · 편집 가능","Query result · editable"):t("쿼리 결과 · 읽기 전용")}</span></div><span className="tabs-spacer"/><Button variant="ghost" size="bare" className="icon-button" data-active={inspectorOpen || undefined} title={tr("행 상세 패널","Row details panel")} aria-label={tr("행 상세 패널","Row details panel")} aria-pressed={inspectorOpen} aria-controls="row-inspector" disabled={!result.rows.length} onClick={()=>showInspector(!inspectorOpen)}><PanelRight size={15}/></Button><Button variant="ghost" size="bare" className="icon-button" title={t("CSV 내보내기")} aria-label={t("CSV 내보내기")} disabled={!result.columns.length} onClick={exportCsv}><ArrowDownToLine size={16}/></Button><Button variant="ghost" size="bare" className="icon-button" title={source === 'query' ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} aria-label={source === "query" ? t("마지막 쿼리 다시 실행") : t("테이블 새로고침")} disabled={busy || (source === 'table' ? !selected : !lastQuery)} onClick={refreshResults}><RefreshCw size={15}/></Button></div>
         <div className="result-toolbar"><label className="result-filter"><Filter size={14}/><Input aria-label={t("결과 필터")} placeholder={result.truncated ? tr(`결과 검색 (불러온 ${result.rows.length}행)`,`Search loaded ${result.rows.length} rows`) : t("결과 검색")} value={filter} onChange={e => {setFilter(e.target.value);setScroll(0);}}/></label>{result.truncated && (filter || sort) && <span className="truncation-note" role="note"><AlertTriangle size={13}/>{tr(`불러온 ${result.rows.length}행 안에서만 ${filter && sort ? '검색·정렬' : filter ? '검색' : '정렬'}했습니다`,`${filter && sort ? 'Search and sort cover' : filter ? 'Search covers' : 'Sort covers'} only the ${result.rows.length} loaded rows`)}{source === 'table' && selected && <Button variant="link" size="bare" onClick={async()=>{if(edits.length&&!await requestConfirm(tr('저장하지 않은 데이터 변경을 버릴까요?','Discard pending data edits?'),discardOptions))return;setDraft({});setAdvanced(previous=>({...previous,[tab.id]:true}));}}>{tr('데이터 도구에서 서버 정렬·필터','Server-side sort and filter in Data tools')}</Button>}</span>}<span className="tabs-spacer"/>{edits.length > 0 && <><Button variant="ghost" size="bare" className="subtle-button" disabled={busy} onClick={() => setDraft({})}><Undo2 size={14}/> {t("취소")} </Button><Button variant="default" size="sm" className="save-button" disabled={busy} onClick={() => setShowReview(true)}><Check size={14}/> {t("변경 검토")} <span>{edits.length}</span></Button></>}</div>
         {error && <div role="alert" className="error-banner"><Terminal size={15}/><span>{error}</span><Button variant="ghost" size="bare" title={t("오류 닫기")} aria-label={t("오류 닫기")} onClick={() => setError('')}><X size={14}/></Button></div>}
-        <div className="grid-scroll" ref={gridRef} aria-busy={busy} onScroll={e => setScroll(e.currentTarget.scrollTop)} key={tab.id}>
-          <table className="data-grid" onKeyDown={gridKey} aria-describedby="grid-keys"><thead><tr><th className="row-number">#</th>{result.columns.map(c => <th key={c.name} aria-sort={sort?.name === c.name ? (sort.desc ? "descending" : "ascending") : "none"} tabIndex={0} {...menuFor([
+        <div className="grid-area"><div className="grid-scroll" ref={gridRef} aria-busy={busy} onScroll={e => setScroll(e.currentTarget.scrollTop)} key={tab.id}>
+          <table className="data-grid" onKeyDown={gridKey} aria-describedby="grid-keys"><thead><tr><th className="row-number">#</th>{result.columns.map(c => <th key={c.name} className={isNumericType(c.dataType) ? "num-head" : undefined} aria-sort={sort?.name === c.name ? (sort.desc ? "descending" : "ascending") : "none"} tabIndex={0} {...menuFor([
               {label:t('열 이름 복사'),action:()=>void copyText(c.name)},
               {label:t('오름차순 정렬'),action:()=>{setSort({name:c.name,desc:false});setScroll(0);}},
               {label:t('내림차순 정렬'),action:()=>{setSort({name:c.name,desc:true});setScroll(0);}},
               {label:t('정렬 해제'),action:()=>{setSort(null);setScroll(0);},disabled:!sort},
             ])} onClick={() => {setSort(sort?.name !== c.name ? {name:c.name,desc:false} : !sort.desc ? {name:c.name,desc:true} : null);setScroll(0);}} ><div>{c.primary ? <KeyRound size={12} className="key-icon"/> : <span className="type-icon">{c.dataType.includes('int') ? '#' : 'T'}</span>}<strong>{c.name}</strong><span className="table-sort-arrow" aria-hidden="true">{sort?.name === c.name ? (sort.desc ? '↓' : '↑') : '↕'}</span><span className="col-type">{c.dataType}</span></div></th>)}</tr></thead><tbody>
-            {start > 0 && <tr className="spacer-row" style={{height:start * 39}}><td colSpan={result.columns.length + 1}/></tr>}
-            {visible.map(({row, index}) => <tr key={index} {...menuFor([{label:t("행 복사"),action:()=>void copyText(result.columns.map(c=>row[c.name] ?? "NULL").join("\t"))}])}><td className="row-number">{index + 1}</td>{result.columns.map(col => {
+            {start > 0 && <tr className="spacer-row" style={{height:start * GRID_ROW_HEIGHT}}><td colSpan={result.columns.length + 1}/></tr>}
+            {visible.map(({row, index}) => <tr key={index} className={index === inspectedIndex ? "selected-row" : undefined} aria-selected={index === inspectedIndex} onFocus={() => selectRow(index)} {...menuFor([{label:t("행 복사"),action:()=>void copyText(result.columns.map(c=>row[c.name] ?? "NULL").join("\t"))}])}><td className="row-number" title={tr("행 상세 열기","Open row details")} onClick={() => showInspector(true, index)}>{index + 1}</td>{result.columns.map(col => {
               const key = `${index}:${col.name}`, changed = key in draft && draft[key] !== result.rows[index][col.name], value = key in draft ? draft[key] : row[col.name];
               return <td key={col.name} tabIndex={0} {...menuFor([
                 {label:t('셀 복사'),action:()=>void copyText(value ?? 'NULL')},
@@ -827,15 +848,17 @@ export default function App() {
                 {label:t('셀 편집'),action:()=>setEditing({index,col:col.name,value:value ?? '',isNull:value===null}),disabled:busy||!canEdit||!col.editable,divider:true},
                 {label:t('NULL로 설정'),action:()=>setEditing({index,col:col.name,value:value ?? '',isNull:true}),disabled:busy||!canEdit||!col.editable},
                 {label:t('셀 변경 취소'),action:()=>setDraft(previous=>{const next={...previous};delete next[key];return next;}),disabled:busy||!changed},
-              ])} className={`${changed ? 'changed' : ''} ${col.primary ? 'pk-cell' : ''}`} title={value ?? 'NULL'} onDoubleClick={() => { if (busy) return; if (canEdit && col.editable) setEditing({index,col:col.name,value:value ?? '',isNull:value === null}); else announce(!canEdit ? t("읽기 전용 결과입니다. 기본키가 있는 테이블을 열어 편집하세요.") : t("기본키·생성 열 또는 지원하지 않는 형식은 수정할 수 없습니다."),'info'); }}>
+              ])} className={`${changed ? 'changed' : ''} ${col.primary ? 'pk-cell' : ''} ${isNumericType(col.dataType) ? 'num-cell' : ''}`} title={value ?? 'NULL'} onDoubleClick={() => { if (busy) return; if (canEdit && col.editable) setEditing({index,col:col.name,value:value ?? '',isNull:value === null}); else announce(!canEdit ? t("읽기 전용 결과입니다. 기본키가 있는 테이블을 열어 편집하세요.") : t("기본키·생성 열 또는 지원하지 않는 형식은 수정할 수 없습니다."),'info'); }}>
                 {value === null ? <span className="null-value">NULL</span> : value}
               </td>;
             })}</tr>)}
-            {start + visible.length < filtered.length && <tr className="spacer-row" style={{height:(filtered.length - start - visible.length) * 39}}><td colSpan={result.columns.length + 1}/></tr>}
+            {start + visible.length < filtered.length && <tr className="spacer-row" style={{height:(filtered.length - start - visible.length) * GRID_ROW_HEIGHT}}><td colSpan={result.columns.length + 1}/></tr>}
           </tbody></table>
           <p id="grid-keys" className="sr-only">{tr('화살표로 셀 이동, Enter 또는 F2로 편집, 열 제목에서 Enter로 정렬','Arrow keys move between cells, Enter or F2 edits, Enter on a heading sorts')}</p>
           {!result.rows.length && <div className="empty-result"><Database size={32}/><h3>{busy ? t("데이터를 불러오는 중...") : t("결과 없음")}</h3><p>{result.affected ? t('영향받은 행', {count: result.affected}) : t("테이블을 선택하거나 SQL을 실행해 보세요.")}</p></div>}
           {result.rows.length > 0 && !filtered.length && <div className="empty-result"><Search size={26}/><p> {t("일치하는 결과가 없습니다.")} </p></div>}
+        </div>
+        {inspectorOpen && inspectedIndex !== null && <RowInspector key={tab.id} columns={result.columns} row={result.rows[inspectedIndex]} draft={draft} rowIndex={inspectedIndex} position={Math.max(0, inspectedPosition)} total={filtered.length} canEdit={canEdit} busy={busy} onMove={moveInspected} onClose={()=>showInspector(false)} onCopy={text=>void copyText(text)} onEdit={(col,value)=>setEditing({index:inspectedIndex,col:col.name,value:value ?? '',isNull:value===null})}/>}
         </div>
         <div className="result-footer"><span><span className="live-dot"/> {filtered.length} {t("행")} <span className="sep">·</span> {result.columns.length} {t("열")} {result.truncated && <strong className="limit-note"><AlertTriangle size={12}/> {tr(`처음 ${result.rows.length}행만 표시 · 정렬·검색·CSV는 이 범위만 대상`,`First ${result.rows.length} rows only · sort, search and CSV cover these rows`)} </strong>}</span><span>{edits.length > 0 && t('변경 대기', {count: edits.length})}</span></div>
       </section>}

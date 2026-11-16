@@ -124,12 +124,13 @@ export function useWorkspaceTabs(session: string, initial: WorkspaceTab) {
     if (!item || item.kind === 'query') return;
     const number = Math.max(counters.current.get(item.session) ?? 0, ...tabs.filter(candidate => candidate.session === item.session).map(candidate => candidate.number)) + 1;
     counters.current.set(item.session, number);
-    patch(id, { kind: 'query', number, initialSql: '' });
+    patch(id, { kind: 'query', number, initialSql: '', editorCollapsed: false });
   }
   function add(table: Table | null = null, sql = '', targetSession = session) {
     const number = table ? 0 : Math.max(counters.current.get(targetSession) ?? 0, ...tabs.filter(item=>item.session===targetSession).map(item => item.number)) + 1;
     if (!table) counters.current.set(targetSession, number);
     const next = createTab(targetSession, number, table, sql);
+    if (table) next.editorCollapsed = true;
     setTabs(previous => [...previous, next]);
     setSelectedIds(previous=>({...previous,[targetSession]:next.id}));
     return next;

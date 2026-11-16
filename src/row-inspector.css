@@ -1,0 +1,31 @@
+.grid-area{display:flex;flex:1;min-height:70px;overflow:hidden}
+.grid-area>.grid-scroll{flex:1;min-width:0}
+.row-inspector{display:flex;flex-direction:column;width:min(340px,40%);min-width:240px;border-left:1px solid var(--line);background:var(--surface);overflow:hidden}
+.row-inspector-head{display:flex;align-items:center;gap:2px;min-height:36px;padding:0 6px 0 14px;border-bottom:1px solid var(--line);font-size:12px}
+.row-inspector-head strong{font-weight:500;font-variant-numeric:tabular-nums}
+.row-inspector-search{display:flex;align-items:center;gap:8px;padding:0 12px;min-height:34px;border-bottom:1px solid var(--line);color:var(--muted-foreground)}
+.row-inspector-search input{flex:1;height:30px;border:0;padding:0;font-size:12px;background:transparent;box-shadow:none}
+.row-inspector-fields{flex:1;margin:0;overflow:auto}
+.row-inspector-field{padding:8px 12px 10px 14px;border-bottom:1px solid var(--line)}
+.row-inspector-field[data-changed]{background:var(--changed);box-shadow:inset 2px 0 var(--changed-line)}
+.row-inspector-field dt{display:flex;align-items:center;gap:8px;min-height:22px;font-size:11px;color:var(--muted-foreground)}
+.row-inspector-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-inspector-type{margin-left:auto;flex-shrink:0;font:10px Consolas,monospace;opacity:.8}
+.row-inspector-actions{display:flex;flex-shrink:0;opacity:0}
+.row-inspector-field:hover .row-inspector-actions,.row-inspector-actions:focus-within{opacity:1}
+.row-inspector-actions .icon-button{width:22px;height:22px}
+.row-inspector-field dd{margin:2px 0 0;font:12px/1.55 Consolas,'Cascadia Mono',monospace;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.row-inspector-field dd.is-json{max-height:320px;overflow:auto;padding:6px 8px;border-radius:4px;background:var(--background)}
+.row-inspector-field .empty-value{color:var(--muted-foreground);font-style:italic}
+.row-inspector-empty{padding:16px 14px;margin:0;font-size:12px;color:var(--muted-foreground)}
+@media (max-width:720px){.row-inspector{position:absolute;right:0;top:0;bottom:0;z-index:3;width:min(320px,90%);box-shadow:-8px 0 24px rgb(0 0 0/.25)}.grid-area{position:relative}}
+/* Compact grid: rows stay in step with GRID_ROW_HEIGHT in App.tsx. */
+.grid-area .data-grid th{height:32px}
+.grid-area .data-grid td{height:32px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;font-size:12px}
+.grid-area .data-grid td.row-number{font-family:inherit;cursor:pointer}
+.grid-area .data-grid td.row-number:hover{color:var(--text)}
+.grid-area .data-grid td.num-cell{text-align:right}
+.grid-area .data-grid tr.selected-row td{background:var(--selection)}
+.grid-area .data-grid tr.selected-row td.row-number{color:var(--text);box-shadow:inset 2px 0 var(--accent)}
+.grid-area .data-grid td:focus-visible{outline:1px solid var(--accent);outline-offset:-1px}
+.result-tabs .icon-button[data-active]{color:var(--text);background:var(--hover)}
