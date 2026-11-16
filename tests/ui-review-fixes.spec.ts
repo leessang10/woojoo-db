@@ -18,17 +18,6 @@ for(const language of ['ko','en']) for(const theme of ['light','dark']) test('re
  await page.getByRole('menuitem',{name:ko?'이름 바꾸기':'Rename',exact:true}).click();
  await page.screenshot({animations:'disabled',path:testInfo.outputPath('rename.png')});
  await page.getByRole('dialog').getByRole('button',{name:ko?'취소':'Cancel',exact:true}).click();
- await page.getByRole('button',{name:'Docker',exact:true}).click();
- await page.getByRole('button',{name:ko?'데모 관계도 보기':'View demo topology'}).click();
- await expect(page.locator('.docker-node')).toHaveCount(9);
- await page.screenshot({animations:'disabled',path:testInfo.outputPath('docker.png')});
- await page.getByRole('button',{name:'Redis',exact:true}).click();
- await page.getByRole('button',{name:ko?'데모 살펴보기':'Explore demo'}).click();
- await page.getByTestId('redis-key-list').getByRole('button',{name:'user:1001',exact:true}).click();
- await page.getByRole('button',{name:ko?'상세 닫기':'Close detail',exact:true}).click();
- await page.getByTestId('redis-key-list').getByRole('button',{name:'user::empty',exact:true}).click();
- await expect(page.getByRole('button',{name:'TEXT',exact:true})).toHaveAttribute('aria-pressed','true');
- await page.screenshot({animations:'disabled',path:testInfo.outputPath('redis.png')});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
 
@@ -111,14 +100,4 @@ for(const language of ['ko','en']) for(const theme of ['light','dark']) test('DB
  await expect(remove).toBeDisabled();
  await page.screenshot({path:testInfo.outputPath('db-delete.png'),animations:'disabled'});
  const box=await remove.boundingBox();expect(box!.y+box!.height).toBeLessThanOrEqual(640);
-});
-test('Redis switching from JSON to text selects the actual format',async({page})=>{
- await page.goto('/');await page.getByRole('button',{name:'Redis',exact:true}).click();
- await page.getByRole('button',{name:'데모 살펴보기'}).click();
- const list=page.getByTestId('redis-key-list');
- await list.getByRole('button',{name:'user:1001',exact:true}).click();
- await expect(page.getByRole('button',{name:'JSON',exact:true})).toHaveAttribute('aria-pressed','true');
- await list.getByRole('button',{name:'user::empty',exact:true}).click();
- await expect(page.getByRole('button',{name:'TEXT',exact:true})).toHaveAttribute('aria-pressed','true');
- await expect(page.getByRole('button',{name:'JSON',exact:true})).toHaveAttribute('aria-pressed','false');
 });

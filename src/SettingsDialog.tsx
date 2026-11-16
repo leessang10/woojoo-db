@@ -56,12 +56,9 @@ export function SettingsDialog({ theme, onThemeChange, sidebarOpen, onSidebarCha
           </NativeSelect>
         </label>
 
-        <h3 className="settings-section">AWS</h3>
-        <label className="settings-row"><span>{tr('변경 작업 허용', 'Allow changes')}<small>{tr('시작·중지·삭제 같은 작업을 상세 탭에서 검토 후 실행', 'Review and run actions such as start, stop or delete from detail tabs')}</small></span>
-          <Input type="checkbox" aria-label={tr('AWS 변경 작업 허용', 'Allow AWS changes')} checked={settings.awsActions} onChange={event => updateSettings({ awsActions: event.target.checked })}/>
-        </label>
-        <label className="settings-row settings-row-stacked"><span>{tr('운영 프로필로 볼 단어', 'Production profile words')}<small>{tr('프로필 이름에 이 단어가 들어가면 PRODUCTION 경고를 표시합니다 · 쉼표로 구분', 'Profiles whose names contain one of these words show the PRODUCTION warning · comma-separated')}</small></span>
-          <Input aria-label={tr('운영 프로필로 볼 단어', 'Production profile words')} value={settings.productionPattern} maxLength={200} placeholder={DEFAULT_SETTINGS.productionPattern} onChange={event => updateSettings({ productionPattern: event.target.value })}/>
+        <h3 className="settings-section">API</h3>
+        <label className="settings-row settings-row-stacked"><span>{tr('운영 환경으로 볼 단어', 'Production environment words')}<small>{tr('환경 이름에 이 단어가 들어가면 PRODUCTION 경고를 표시합니다 · 쉼표로 구분', 'Environments whose names contain one of these words show the PRODUCTION warning · comma-separated')}</small></span>
+          <Input aria-label={tr('운영 환경으로 볼 단어', 'Production environment words')} value={settings.productionPattern} maxLength={200} placeholder={DEFAULT_SETTINGS.productionPattern} onChange={event => updateSettings({ productionPattern: event.target.value })}/>
         </label>
       </div>
     </section>

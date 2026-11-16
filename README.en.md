@@ -4,7 +4,7 @@
 
 A desktop database client for PostgreSQL, MySQL, MariaDB, and SQLite. Write SQL, edit data, inspect schemas, and export ER diagrams in one workspace.
 
-[Download for Windows](https://github.com/leessang10/woojoo-db/releases/latest) · [Release notes](https://github.com/leessang10/woojoo-db/releases/tag/v0.1.4) · [Report an issue](https://github.com/leessang10/woojoo-db/issues) · [MIT license](LICENSE)
+[Download for Windows](https://github.com/leessang10/woojoo-db/releases/latest) · [Release notes](https://github.com/leessang10/woojoo-db/releases/tag/v0.1.5) · [Report an issue](https://github.com/leessang10/woojoo-db/issues) · [MIT license](LICENSE)
 
 ![Woojoo SQL editor and query results in English, light mode](docs/images/workspace-en.png)
 
@@ -15,7 +15,7 @@ Captured from the actual Windows release using a separate SQLite database and fi
 | Area | Capabilities |
 | --- | --- |
 | Connections | PostgreSQL, MySQL, MariaDB, SQLite; connection testing; searchable connection switcher; saved profiles; groups, environments, and read-only settings |
-| AWS RDS | Select a local AWS CLI profile, region, and RDS instance to populate connection details |
+| API | Compose and send HTTP requests, manage collections and environments, and inspect responses and history |
 | SQL workspace | Multiple tabs, highlighting, completion, formatting, SQL files, selection and script execution, parameters, EXPLAIN |
 | Sessions | Manual commit and rollback, query cancellation requests, restoration of SQL tabs and file metadata |
 | Data | Search, filtering, sorting, pagination, row insertion/editing/deletion, SQL review, CSV import, CSV/JSON/SQL export, table data copying |
@@ -32,14 +32,14 @@ Add tables, columns, indexes, and physical foreign keys in the ERD, then use **C
 
 The current binary release targets **Windows x64**. macOS and Linux binaries are not provided.
 
-1. Download `Woojoo-0.1.4-windows-x64.exe` from the [latest release](https://github.com/leessang10/woojoo-db/releases/latest).
+1. Download `Woojoo-0.1.5-windows-x64.exe` from the [latest release](https://github.com/leessang10/woojoo-db/releases/latest).
 2. If needed, install the WebView2 Runtime from [Microsoft](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
 3. Run the EXE. No installer, Node.js, Rust, or development server is required.
 
 The executable is not code-signed yet, so Windows may display a publisher warning. Compare its hash with the release's `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash .\Woojoo-0.1.4-windows-x64.exe -Algorithm SHA256
+Get-FileHash .\Woojoo-0.1.5-windows-x64.exe -Algorithm SHA256
 ```
 
 To update, close the app and replace the executable. Profiles and local data are stored in the application's user data directories, not beside the EXE. If the original v0.1.0 download shows a localhost connection error, download the corrected executable again.
@@ -51,7 +51,6 @@ To update, close the app and replace the executable. Profiles and local data are
 - **Server database:** Choose `Add connection`, select an engine, and enter the host, port, database, and credentials. You can also save a profile without connecting.
 - **SQLite file:** Choose `Add connection → SQLite` to select or create a file.
 - **First connection:** With no connections, choose the local SQLite creation action. It creates empty `user` and `board` tables with a one-to-many relationship through `board.user_id → user.id`. Existing files are reused without resetting them.
-- **AWS RDS:** Authenticate with your local AWS CLI first, then choose `Add connection → AWS RDS` and select a profile, region, and instance. You still need database credentials and network access to private instances.
 - **Remember passwords:** Select `Remember password on this PC` to save a password after successful authentication and automatically reconnect to the last connection on startup. `Delete saved password` removes it. Changes to host, port, user, database, engine, or TLS settings require entering the password again.
 - **RDS TLS:** RDS hosts in commercial AWS regions automatically use the official CA bundle embedded in the app, including direct connections. Keep TLS and server certificate verification enabled. See the [CA notes](src-tauri/certs/README.md) for certificate updates and connection verification.
 
@@ -106,7 +105,7 @@ Change the language in the top bar. Theme and settings controls are at the botto
 - Backup and restore may require engine-specific command-line tools on PATH: `pg_dump`/`psql`, `mysqldump`/`mysql`, or `mariadb-dump`/`mariadb`. SQLite backup is built in; restore requires the `sqlite3` CLI.
 - Foreign-key value selection supports single-column keys. SQLite type/constraint changes requiring table reconstruction are not automated. PostgreSQL DDL reconstructed from metadata is not a replacement for a full `pg_dump` backup.
 - Session state and transactions are not restored after restart. MySQL `DELIMITER` directives are not handled directly; use the main execution action for supported object definitions and review its confirmation.
-- SSH tunnels, custom CA certificate UI, and full cross-database schema comparison/synchronization are not included. AWS discovery does not create tunnels, issue IAM database tokens, or retrieve passwords from Secrets Manager.
+- SSH tunnels, custom CA certificate UI, and full cross-database schema comparison/synchronization are not included.
 
 ## Development and verification
 

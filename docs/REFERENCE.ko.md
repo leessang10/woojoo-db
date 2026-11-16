@@ -2,8 +2,6 @@
 
 > 고급 기능, 제한 사항과 전용 DB 테스트 환경을 위한 참고 문서입니다.
 
-Redis 전용 작업 공간은 [Redis 사용 안내](REDIS.ko.md)를 참고하세요.
-
 # Woojoo DB
 
 PostgreSQL · MySQL · MariaDB · SQLite를 위한 Tauri 2 데스크톱 클라이언트.
@@ -145,20 +143,6 @@ docker stop woojoo-test-pg woojoo-test-my woojoo-test-ma
 사이드바의 스키마·테이블 이름을 클릭하면 상세 화면이 열립니다. 펼치기/접기는 별도 화살표를 사용합니다. 스키마 상세에서 테이블을 생성·변경·삭제하고, 테이블 상세에서 컬럼을 추가·변경·삭제할 수 있습니다. 실행 전 SQL 검토가 필요하며 삭제는 대상 이름을 입력해야 합니다.
 
 MySQL/MariaDB의 charset·collation, PostgreSQL의 DB 인코딩·collation, 소유자·설명·추정 행 수·크기와 인덱스·제약조건을 조회합니다. MySQL 테이블 기본 charset 변경은 기존 컬럼을 변환하지 않습니다. 생성 컬럼·특수 자료형 등 폼에서 지원하지 않는 변경은 SQL 편집기를 사용합니다. MySQL/MariaDB DDL은 자동 커밋되며 PostgreSQL의 여러 변경 문장은 트랜잭션으로 실행됩니다. 데모 구조는 현재 세션에만 유지되며 실제 DB의 형 변환·제약조건 검증 전체를 재현하지 않습니다.
-
-### AWS CLI에서 RDS 연결
-
-데스크톱의 **새 연결 → AWS RDS**에서 로컬 AWS CLI를 확인하고 저장된 프로필을 선택합니다. 로그인된 계정 ID를 확인한 뒤 리전을 선택하거나 직접 입력하고 **RDS 조회**를 누릅니다. 인스턴스를 고르면 엔진·호스트·포트·초기 DB명·마스터 사용자명을 연결 폼에 채웁니다. 실제 사용할 DB명과 사용자명은 변경할 수 있으며 비밀번호는 직접 입력합니다. DB명이 없는 PostgreSQL 인스턴스는 `postgres`를 기본값으로 사용하고 MySQL/MariaDB는 입력을 요구합니다.
-
-- AWS CLI v2 권장. PATH 또는 Windows 기본 설치 위치에서 실행 파일을 찾습니다. 프로필은 `aws configure list-profiles`로 조회하며 CLI의 기존 인증/역할 설정을 사용합니다.
-- `sts get-caller-identity`로 계정을 확인하고 `ec2:DescribeRegions`, `rds:DescribeDBInstances`를 사용합니다. 리전 조회 권한이 없으면 리전 코드를 직접 입력할 수 있습니다. 인스턴스 목록은 CLI 자동 페이지 조회를 사용합니다.
-- PostgreSQL, MySQL, MariaDB, Aurora PostgreSQL/MySQL의 사용 가능한 인스턴스 엔드포인트를 지원합니다. Aurora 클러스터 writer/reader 엔드포인트 선택은 아직 지원하지 않습니다.
-- AWS 인증은 리소스 조회용입니다. IAM DB 인증 토큰 발급이나 Secrets Manager 비밀번호 조회는 수행하지 않습니다. SSO 인증 만료 시 터미널에서 `aws sso login --profile <프로필>` 실행 후 다시 확인합니다.
-- 사설 RDS는 접속 가능한 VPN/터널이 필요하고 보안 그룹도 접속을 허용해야 합니다. 이 흐름이 터널이나 AWS 리소스를 생성·변경하지는 않습니다.
-- 셸 문자열을 조합하지 않고 고정된 CLI 명령과 인자를 전달하며, 조회 시간 제한·Windows 콘솔 숨김·인증 오류 안내를 적용합니다. 원본 CLI 오류 내용이나 자격증명은 화면/로그에 전달하지 않습니다.
-
-로컬 CLI의 읽기 전용 연결 경로 검증: `cargo test --manifest-path src-tauri/Cargo.toml aws::tests::local_aws_discovery -- --ignored`. 기본 `default` 프로필을 사용하며 `WOOJOO_TEST_AWS_PROFILE` 환경변수로 변경할 수 있습니다. DB에 연결하거나 데이터를 변경하지 않습니다.
-
 
 ### 실행한 쿼리
 

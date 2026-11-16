@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { Cloud, Database, Loader2, Play, X } from 'lucide-react';
+import { Database, Loader2, Play, X } from 'lucide-react';
 import { ModalSurface } from '@/components/ModalSurface';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { AwsConnection, type AwsPreset } from './AwsConnection';
-import { rdsEngine, type RdsInstance } from './aws';
 import { useLanguage } from './i18n';
 import type { Engine, Profile } from './model';
 import * as api from './api';
@@ -16,9 +14,8 @@ function switchEngine(p:Profile,engine:Engine):Profile{
  const keep=<K extends keyof typeof before>(key:K)=>p[key]===''||p[key]===before[key]||(key==='port'&&!p.port)?after[key]:p[key];
  return {...p,engine,port:keep('port') as number,username:keep('username') as string,database:engine==='sqlite'||p.engine==='sqlite'?after.database:keep('database') as string,name:keep('name') as string,password:''};
 }
-export function ConnectionDialog({onClose,onConnected,initialProfile,initialAws,onSave,onPasswordForgotten,saveDisabled=false}:{onClose:()=>void;onConnected:(p:Profile,id:string)=>void|Promise<void>;initialProfile?:Profile;initialAws?:AwsPreset;onSave?:(p:Profile)=>void|Promise<void>;onPasswordForgotten?:(id:string)=>void;saveDisabled?:boolean}) {
+export function ConnectionDialog({onClose,onConnected,initialProfile,onSave,onPasswordForgotten,saveDisabled=false}:{onClose:()=>void;onConnected:(p:Profile,id:string)=>void|Promise<void>;initialProfile?:Profile;onSave?:(p:Profile)=>void|Promise<void>;onPasswordForgotten?:(id:string)=>void;saveDisabled?:boolean}) {
  const {t,language}=useLanguage(); const tr=(ko:string,en:string)=>language==='ko'?ko:en;
- const [mode,setMode]=useState<'direct'|'aws'>(initialAws&&api.desktop?'aws':'direct'),[rdsSelected,setRdsSelected]=useState(false);
  const [profile,setProfile]=useState<Profile>(initialProfile ?? {id:crypto.randomUUID(),name:'Local PostgreSQL',engine:'postgres',host:'localhost',port:5432,database:'postgres',username:'postgres',password:'',tls:true});
  const [loading,setLoading]=useState(false),[message,setMessageText]=useState(''),[messageKind,setMessageKind]=useState<'info'|'success'|'error'>('info');
  const setMessage=(text:string,kind:'info'|'success'|'error'='error')=>{setMessageText(text);setMessageKind(kind);};
@@ -42,35 +39,23 @@ export function ConnectionDialog({onClose,onConnected,initialProfile,initialAws,
    await onSave({...profile,password:''});
   }catch(e){setMessage(String(e));}finally{setLoading(false);}
  }
- function selectRds(instance:RdsInstance|null,region:string){
-  setMessage('');setRdsSelected(!!instance);
-  if(!instance){setProfile(p=>({...p,host:'',database:'',username:'',password:''}));return;}
-  const engine=rdsEngine(instance.engine);
-  setProfile(p=>({...p,name:`${instance.id} (${region})`,engine,host:instance.host,port:instance.port,database:instance.database||(engine==='postgres'?'postgres':''),username:instance.username,password:'',tls:true}));
- }
  async function submit(test:boolean){
-  if(!api.desktop||loading||mode==='aws'&&!rdsSelected)return;
+  if(!api.desktop||loading)return;
   if(!profile.name.trim()||(profile.engine==='sqlite'&&!profile.database.trim())||(profile.engine!=='sqlite'&&(!profile.host.trim()||!profile.username.trim()||!Number.isInteger(profile.port)||profile.port<1||profile.port>65535))){setMessage(t('연결 이름, 호스트, DB, 사용자와 유효한 포트를 입력하세요.'));return;}
   setLoading(true);setMessage('');
   try{const id=await api.connect(profile);setProfile(p=>({...p,password:''}));if(test){await api.disconnect(id);setCredential(await api.credentialStatus(profile));setMessage(t('연결에 성공했습니다.'),'success');}else await onConnected({...profile,password:''},id);}
   catch(reason){setMessage(String(reason));}finally{setLoading(false);}
  }
- const unavailable=!api.desktop||loading||mode==='aws'&&!rdsSelected;
- return <ModalSurface title={title} onClose={onClose} locked={loading}><form role="dialog" aria-modal="true" aria-label={title} className={`modal connection-modal ${mode==='aws'?'aws-connection-modal':''}`} onSubmit={event=>{event.preventDefault();void submit(false);}}>
+ const unavailable=!api.desktop||loading;
+ return <ModalSurface title={title} onClose={onClose} locked={loading}><form role="dialog" aria-modal="true" aria-label={title} className="modal connection-modal" onSubmit={event=>{event.preventDefault();void submit(false);}}>
   <div className="connection-scroll">
   <div className="modal-heading"><h2>{title}</h2><Button type="button" variant="ghost" size="icon-sm" disabled={loading} onClick={onClose} aria-label={t('닫기')}><X size={20}/></Button></div>
   {editing&&<p className="modal-description">{initialProfile?.name}</p>}
   {!api.desktop&&<p className="connection-availability">{tr('데이터베이스 연결은 데스크톱 앱에서 사용할 수 있습니다.','Database connections are available in the desktop app.')}</p>}
-  <div className="connection-methods" aria-label={t('연결 방법')}>
-   <Button type="button" variant={mode==='direct'?'secondary':'ghost'} size="sm" aria-pressed={mode==='direct'} disabled={loading} onClick={()=>{setMode('direct');setMessage('');}}><Database size={14}/>{t('직접 연결')}</Button>
-   <Button type="button" variant={mode==='aws'?'secondary':'ghost'} size="sm" aria-pressed={mode==='aws'} disabled={loading||!api.desktop} onClick={()=>{if(mode!=='aws'){setMode('aws');setRdsSelected(false);setMessage('');}}}><Cloud size={14}/>AWS RDS</Button>
-  </div>
-  <div className={mode==='aws'&&rdsSelected?'aws-connection-grid':''}>
-  {mode==='aws'&&<AwsConnection disabled={loading} onSelect={selectRds} initial={initialAws}/>}
   <fieldset className="connection-fields" disabled={loading}>
-   {mode==='direct'?<div className="engine-options">{(['postgres','mysql','mariadb','sqlite'] as Engine[]).map(engine=><Button type="button" variant="ghost" size="bare" key={engine} className={profile.engine===engine?'active':''} onClick={()=>{setMessage('');setProfile(p=>switchEngine(p,engine));}}><Database size={20}/>{engine==='sqlite'?'SQLite':engine==='postgres'?'PostgreSQL':engine==='mysql'?'MySQL':'MariaDB'}</Button>)}</div>:rdsSelected&&<p className="connection-engine">{profile.engine==='postgres'?'PostgreSQL':profile.engine==='mysql'?'MySQL':'MariaDB'}</p>}
-   {(mode==='direct'||rdsSelected)&&<div className="connection-profile-grid">
-    <label className={profile.engine==='postgres'?undefined:'connection-wide'}>{t('연결 이름')}<Input aria-label={t('연결 이름')} autoFocus={mode==='direct'} value={profile.name} onChange={e=>field('name',e.target.value)}/></label>
+   <div className="engine-options">{(['postgres','mysql','mariadb','sqlite'] as Engine[]).map(engine=><Button type="button" variant="ghost" size="bare" key={engine} className={profile.engine===engine?'active':''} onClick={()=>{setMessage('');setProfile(p=>switchEngine(p,engine));}}><Database size={20}/>{engine==='sqlite'?'SQLite':engine==='postgres'?'PostgreSQL':engine==='mysql'?'MySQL':'MariaDB'}</Button>)}</div>
+   <div className="connection-profile-grid">
+    <label className={profile.engine==='postgres'?undefined:'connection-wide'}>{t('연결 이름')}<Input aria-label={t('연결 이름')} autoFocus value={profile.name} onChange={e=>field('name',e.target.value)}/></label>
     {profile.engine==='postgres'&&<label>{tr('쿼리 제한 시간(초)','Query timeout (seconds)')}<Input aria-label={tr('쿼리 제한 시간(초)','Query timeout (seconds)')} type="number" min={0} value={profile.queryTimeoutSeconds??30} onChange={e=>field('queryTimeoutSeconds',Math.max(0,Math.floor(Number(e.target.value)||0)))}/><small className="field-hint">{tr('0은 제한 없음 · 다음 연결부터 적용','0 means no limit · applies on next connect')}</small></label>}
     {profile.engine!=='sqlite'&&<div className="form-row"><label>{t('호스트')}<Input aria-label={t('호스트')} value={profile.host} onChange={e=>field('host',e.target.value)}/></label><label className="port">{t('포트')}<Input aria-label={t('포트')} type="number" value={profile.port} onChange={e=>field('port',Number(e.target.value))}/></label></div>}
     <label className="connection-wide">{profile.engine==='sqlite'?tr('SQLite 파일 경로','SQLite file path'):t('데이터베이스')}<Input aria-label={t('데이터베이스')} value={profile.database} onChange={e=>field('database',e.target.value)}/></label>{profile.engine!=='sqlite'&&<p className="credential-note">{profile.engine==='postgres'?tr('선택 사항 · 비워두면 postgres DB에 연결하여 해당 DB의 스키마를 조회합니다.','Optional · Leave blank to connect to postgres and browse its schemas.'):tr('선택 사항 · 비워두면 기본 DB 없이 연결하여 접근 가능한 모든 스키마를 조회합니다.','Optional · Leave blank to browse all accessible schemas without a default database.')}</p>}{profile.engine==='sqlite'&&api.desktop&&<div className="sqlite-file-actions"><Button type="button" variant="outline" size="sm" onClick={()=>void invoke<string|null>('choose_sqlite_file',{create:false}).then(path=>{if(path)field('database',path);}).catch(e=>setMessage(String(e)))}>{tr('파일 선택','Choose file')}</Button><Button type="button" variant="outline" size="sm" onClick={()=>void invoke<string|null>('choose_sqlite_file',{create:true}).then(path=>{if(path)field('database',path);}).catch(e=>setMessage(String(e)))}>{tr('새 파일','New file')}</Button></div>}
@@ -81,9 +66,8 @@ export function ConnectionDialog({onClose,onConnected,initialProfile,initialAws,
     {(credential.saved||credential.available||profile.rememberPassword)&&<Button type="button" variant="ghost" className="text-destructive" size="sm" onClick={()=>void forget()}>{tr('저장된 비밀번호 삭제','Delete saved password')}</Button>}
     <p className="credential-note"><span>{tr('연결 성공 후 이 PC에 안전하게 저장합니다.','Stored securely on this PC after a successful connection.')}</span></p></>}
     <div className="form-row"><label>{tr('그룹','Group')}<Input value={profile.group??''} onChange={e=>field('group',e.target.value)}/></label><label>{tr('환경','Environment')}<NativeSelect aria-label={tr('환경','Environment')} value={profile.environment??'development'} onChange={e=>field('environment',e.target.value)}><NativeSelectOption value="development">{tr('개발 (Development)','Development')}</NativeSelectOption><NativeSelectOption value="staging">{tr('스테이징 (Staging)','Staging')}</NativeSelectOption><NativeSelectOption value="production">{tr('운영 (Production)','Production')}</NativeSelectOption></NativeSelect></label></div>{profile.environment==='production'&&<p className="credential-note">{tr('운영 연결은 상단에 PRODUCTION 표시가 나오고, 데이터를 바꾸는 SQL은 실행 전에 확인합니다.','Production connections show a PRODUCTION banner and confirm SQL that changes data.')}</p>}<label className="checkbox-label"><Input type="checkbox" checked={profile.readOnly??false} onChange={e=>field('readOnly',e.target.checked)}/>{tr('읽기 전용 연결','Read-only connection')}</label>
-   </div>}
+   </div>
   </fieldset>
-  </div>
   {message&&<p role={messageKind==='error'?'alert':'status'} className="dialog-message" data-kind={messageKind}>{message}</p>}
   </div>
   <div className="modal-actions"><Button type="button" variant="outline" disabled={unavailable} onClick={()=>void submit(true)}>{t('연결 테스트')}</Button><span className="connection-action-spacer"/><Button type="button" variant="ghost" disabled={loading} onClick={onClose}>{tr('취소','Cancel')}</Button>{onSave&&<Button type="button" variant="default" disabled={(!api.desktop&&!!profile.rememberPassword)||loading||saveDisabled||!profile.name.trim()||(profile.engine==='sqlite'&&!profile.database.trim())} title={saveDisabled?tr('연결 중인 프로필은 다시 연결하여 변경 내용을 적용하세요.','Reconnect to apply changes to an active profile.'):undefined} onClick={()=>void save()}>{tr('프로필 저장','Save profile')}</Button>}<Button type="submit" variant="default" disabled={unavailable}>{loading?<Loader2 size={15} className="spin"/>:<Play size={15}/>} {t('연결하기')}</Button></div>

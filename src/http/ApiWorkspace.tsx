@@ -281,7 +281,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
           <span className="api-history-line"><span className="api-method-tag" data-method={entry.method}>{entry.method.slice(0, 6)}</span><span className="api-status" data-tone={statusTone(entry.status)}>{entry.status ?? tr('실패', 'Failed')}</span><time>{new Date(entry.sentAt).toLocaleTimeString(language === 'ko' ? 'ko-KR' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time><small>{formatDuration(entry.durationMs)}</small></span>
           <span className="api-history-url">{entry.url}</span>
         </Button>)}
-        {!history.length && <p className="history-empty aws-panel-empty">{historySearch ? tr('검색 결과가 없습니다.', 'No matching requests.') : tr('보낸 요청이 여기에 쌓입니다. 최근 500개까지 보관합니다.', 'Requests you send appear here. The latest 500 are kept.')}</p>}
+        {!history.length && <p className="history-empty api-panel-empty">{historySearch ? tr('검색 결과가 없습니다.', 'No matching requests.') : tr('보낸 요청이 여기에 쌓입니다. 최근 500개까지 보관합니다.', 'Requests you send appear here. The latest 500 are kept.')}</p>}
       </div>
     </aside>}
     {naming && <NameDialog title={naming.title} initial={naming.initial} collections={naming.withCollection ? workspace.collections : undefined} collectionId={naming.collectionId} onSubmit={naming.submit} onClose={() => setNaming(null)}/>}
@@ -320,7 +320,7 @@ export function ApiWorkspace({ visible, sidebarOpen, onToggleSidebar, commandsRe
           </ManagedTab>; })}
           <Button variant="ghost" size="bare" className="api-new-tab" aria-label={tr('새 요청', 'New request')} title={tr('새 요청', 'New request') + ' · Ctrl/Cmd+N'} onClick={() => newTab()}><Plus size={14}/></Button>
         </div></div>
-        {tabs.map(panel => <div key={panel.id} hidden={panel.id !== active?.id} className="aws-tab-panel" id={`api-panel-${panel.id}`} role="tabpanel" aria-labelledby={`api-tab-${panel.id}`}>
+        {tabs.map(panel => <div key={panel.id} hidden={panel.id !== active?.id} className="api-tab-panel" id={`api-panel-${panel.id}`} role="tabpanel" aria-labelledby={`api-tab-${panel.id}`}>
           <RequestPanel tab={panel} variables={variables} result={results[panel.id]} theme={theme} dirty={dirty(panel)}
             onChange={spec => updateTab(panel.id, { spec })} onSend={() => void send(panel)} onCancel={() => cancel(panel)} onSave={() => save(panel)}/>
         </div>)}

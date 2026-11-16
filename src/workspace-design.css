@@ -82,23 +82,9 @@
  .mode-tag[data-slot=badge]{font-size:11px}
 }
 @layer components {
- .connection-methods{display:flex;gap:6px;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);margin:18px 0}
- .connection-methods button{flex:1}
  .connection-fields{padding:0;border:0;min-width:0}
- .aws-discovery{border:1px solid var(--line);border-radius:8px;padding:16px;background:var(--surface);margin:16px 0;font-size:12px}
- .aws-heading{display:flex;align-items:center;gap:8px;margin-bottom:12px}.aws-heading>span{color:var(--muted-foreground);font-size:11px}.aws-heading>button{margin-left:auto}
- .aws-status{display:flex;align-items:center;gap:8px;color:var(--muted-foreground)}
- .aws-account{font-size:11px;color:var(--muted-foreground);margin:12px 0}.aws-account strong{color:var(--text);margin-left:6px;font-family:Consolas,monospace}
- .aws-region-row{display:flex;align-items:end;gap:8px;margin-bottom:16px}.aws-region-row>label{flex:1;min-width:0;margin-bottom:0}.aws-region-row>button{margin-bottom:0;flex-shrink:0}
- .aws-instance-info{border-top:1px solid var(--line);padding-top:12px;margin-top:14px;font-size:11px;color:var(--muted-foreground);line-height:1.6}.aws-instance-info code{overflow-wrap:anywhere;color:var(--text)}.aws-instance-info p{margin-top:8px}
- .aws-login-hint{display:block;margin-top:8px;overflow-wrap:anywhere}.connection-engine{font-size:11px;color:var(--muted-foreground);margin:12px 0}
 }
 @layer components {
- .aws-connection-modal{width:800px;max-width:calc(100vw - 48px)}
- .aws-connection-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
- .aws-connection-grid .aws-discovery{margin:0}
- .aws-connection-grid .connection-engine{margin-top:0}
- @media(max-width:760px){.aws-connection-grid{grid-template-columns:1fr}}
 }
 .structure-tools,.script-result-tabs,.data-tool-switch {display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;}
 .object-list {display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow:auto;margin:12px 0;}
@@ -282,26 +268,6 @@
 .object-page .object-definition-toolbar{margin-bottom:12px;}
 .object-page .object-definition-toolbar .structure-note{margin:0;}
 /* RDS discovery keeps account, region and results in stable sections. */
-.aws-selection-fields{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-.aws-profile-field,.aws-region-field{min-width:0;}
-.modal .aws-selection-fields label{margin-bottom:0;}
-.aws-account-slot{min-height:28px;padding-top:8px;font-size:12px;color:var(--muted-foreground);}
-.aws-account-slot .aws-account,.aws-account-slot .aws-status{margin:0;}
-.aws-region-row{margin:0;}
-.aws-instance-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);min-height:116px;}
-.aws-instance-section h3{font-size:13px;font-weight:600;margin:0 0 12px;}
-.aws-instance-placeholder,.aws-instance-section>p{font-size:12px;line-height:1.7;color:var(--muted-foreground);margin:0;}
-.aws-instance-list{display:flex;flex-direction:column;gap:8px;max-height:240px;overflow:auto;}
-.modal .aws-instance-choice{display:flex;flex-direction:row;align-items:center;flex:none;gap:12px;padding:12px;border:1px solid var(--line);border-radius:6px;margin:0;cursor:pointer;}
-.modal .aws-instance-choice[data-selected=true]{border-color:var(--brand);background:var(--selection);}
-.modal .aws-instance-choice:has(input:disabled){opacity:.5;cursor:default;}
-.modal .aws-instance-choice input{width:16px;height:16px;padding:0;flex-shrink:0;accent-color:var(--primary);}
-.aws-instance-choice span{min-width:0;display:flex;flex-direction:column;gap:4px;overflow-wrap:anywhere;}
-.aws-instance-choice small{font-size:12px;color:var(--muted-foreground);}
-.aws-connection-grid{grid-template-columns:1fr!important;}
-@media(max-width:600px){.aws-selection-fields{grid-template-columns:1fr;gap:16px;}}
-.aws-instance-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
-.aws-instance-heading h3{margin:0;}
 .schema-picker-actions{display:flex;gap:8px;margin:16px 0;}
 .schema-picker-list{max-height:45vh;overflow:auto;display:flex;flex-direction:column;gap:4px;}
 .schema-picker-list .checkbox-label{padding:10px;border:1px solid var(--line);border-radius:6px;gap:10px;}

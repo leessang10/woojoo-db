@@ -139,3 +139,7 @@
 .api-response-bar{flex-wrap:wrap}
 
 .api-tree-row{display:flex;align-items:center;min-width:0}.api-tree-row>.tree-table{flex:1;min-width:0}.api-tree-row>button:last-child{flex-shrink:0}
+
+.api-tab-panel { display:flex; flex-direction:column; flex:1; min-height:0; }
+.api-tab-panel[hidden] { display:none; }
+.api-panel-empty { padding:40px 16px 0; line-height:1.6; word-break:keep-all; overflow-wrap:anywhere; }

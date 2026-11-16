@@ -84,7 +84,11 @@ test('rail navigation restores the workspace without toggling the sidebar or los
   const explorer = page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true});
   const history = page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true});
   await expect(explorer).toHaveAttribute('aria-pressed','true');
-  await expect(page.locator('.rail .rail-button[aria-pressed]')).toHaveCount(5);
+  await expect(page.locator('.rail .rail-button[aria-pressed]')).toHaveCount(2);
+  const api = page.locator('.rail').getByRole('button',{name:'API',exact:true});
+  await api.click();
+  await expect(api).toHaveAttribute('aria-pressed','true');
+  await explorer.click();
   await expect(page.locator('.rail .rail-button[aria-pressed=true]')).toHaveCount(1);
   await history.click();
   await expect(history).toHaveAttribute('aria-pressed','true');

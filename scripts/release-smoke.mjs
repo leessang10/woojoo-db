@@ -58,6 +58,8 @@ try {
   expect(await page.evaluate(() => !!window.__TAURI_INTERNALS__)).toBe(true);
   await chooseLanguage(page, 'ko');
   await expect(page.locator('.workspace-empty')).toBeVisible();
+  await expect(page.locator('.rail > button')).toHaveCount(2);
+  await expect(page.locator('.rail').getByRole('button',{name:'API',exact:true})).toBeVisible();
   const database = page.locator('.rail').getByRole('button',{name:'데이터베이스',exact:true});
   const archive = page.locator('.topbar').getByRole('button',{name:'쿼리 기록',exact:true});
   await archive.click();

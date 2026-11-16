@@ -13,7 +13,5 @@ for(const language of ['ko','en']) for(const theme of ['light','dark']) test('co
  await page.screenshot({path:info.outputPath('db-select.png')});await page.keyboard.press('Escape');
  await dialog.getByRole('button',{name:'SQLite',exact:true}).click();await page.screenshot({path:info.outputPath('sqlite.png')});
  await dialog.getByRole('button',{name:ko?'취소':'Cancel',exact:true}).click();
- await page.getByRole('button',{name:'Docker',exact:true}).click();await page.getByRole('button',{name:ko?'데모 관계도 보기':'View demo topology'}).click();
- await page.locator('.docker-node').first().click();await expect(page.locator('.docker-details')).toBeVisible();await page.screenshot({path:info.outputPath('docker-detail.png')});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

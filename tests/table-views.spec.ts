@@ -72,9 +72,11 @@ test('DB headers cycle sorting and restore query order', async ({ page }) => {
  expect(await rows.allTextContents()).toEqual(original);
  await view(page,'구조').click();
  const metadata = page.locator('.object-table');
- const initial = await metadata.locator('tbody tr').allTextContents();
+ const metadataRows = metadata.locator('tbody tr');
+ await expect(metadataRows.first()).toBeVisible();
+ const initial = await metadataRows.allTextContents();
  const field = metadata.getByRole('columnheader').first();
  await field.click(); await field.click(); await field.click();
  await expect(field).toHaveAttribute('aria-sort','none');
- expect(await metadata.locator('tbody tr').allTextContents()).toEqual(initial);
+ expect(await metadataRows.allTextContents()).toEqual(initial);
 });
