@@ -96,6 +96,11 @@ try {
     await page.locator('.tree-table').click();
     await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
     await expect(page.locator('.object-view-bar')).toBeVisible();
+    await expect(page.locator('#sql-editor')).toBeHidden();
+    await expect(page.getByRole('group',{name:'SQL 파일',exact:true})).toHaveCount(0);
+    await page.getByRole('button',{name:'SQL 펼치기',exact:true}).click();
+    await expect(page.getByRole('group',{name:'SQL 파일',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'SQL 접기',exact:true}).click();
   }
   await page.locator('.tab-add').click();
   const last=page.getByRole('tab').last();

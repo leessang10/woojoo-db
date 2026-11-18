@@ -12,6 +12,7 @@ import { appendQueryHistory, bindParameters, executeScript, explainSql, formatSq
 export type SqlFileMetadata = { path: string | null; name: string; savedSql: string };
 type NativeFile = { path: string; name: string; sql: string };
 export type QueryToolsProps = {
+  collapsed?: boolean;
   primaryAction?: ReactNode;
   /** Controls shown before the tool groups, such as the execution schema. */
   leadingAction?: ReactNode;
@@ -31,7 +32,7 @@ export type QueryToolsProps = {
   commandsRef?: MutableRefObject<{ save?: () => void; runScript?: () => void; cancel?: () => void }>;
 };
 
-export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, leadingAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute, commandsRef }: QueryToolsProps) {
+export function QueryTools({ collapsed = false, onOpenCommonSql, commonSqlDisabled, primaryAction, leadingAction, engine, session, sql, disabled, onSqlChange, onExecute, onResults, onFileChange, onBusyChange, initialFile, historyKey, connectionName, beforeExecute, commandsRef }: QueryToolsProps) {
   const { language } = useLanguage();
   const { requestConfirm } = useConfirm();
   const tr = (ko: string, en: string) => language === 'ko' ? ko : en;
@@ -125,12 +126,12 @@ export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, 
     const observer = new ResizeObserver(update); observer.observe(element);
     element.addEventListener('scroll', update, { passive: true });
     return () => { observer.disconnect(); element.removeEventListener('scroll', update); };
-  }, [nativeSession, !!onOpenCommonSql]);
+  }, [nativeSession, !!onOpenCommonSql, collapsed]);
   return <div className="query-tools">
     <div className="query-toolbar">
-      {leadingAction && <div className="query-leading-action">{leadingAction}</div>}
+      {!collapsed && leadingAction && <div className="query-leading-action">{leadingAction}</div>}
       <div className="query-toolbar-scroll" ref={scroller} data-overflow-start={overflow.start} data-overflow-end={overflow.end} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
-      <div className="query-tool-group" role="group" aria-label={tr('SQL 파일', 'SQL files')}>
+      {!collapsed && <><div className="query-tool-group" role="group" aria-label={tr('SQL 파일', 'SQL files')}>
       <Button variant="outline" size="xs" disabled={busy} onClick={() => void open()}>{tr('SQL 열기', 'Open SQL')}</Button>
       <Button variant="outline" size="xs" title={tr('Ctrl/Cmd+S', 'Ctrl/Cmd+S')} onClick={() => void save(false)}>{isTauri() ? tr('저장', 'Save') : tr('다운로드', 'Download')}</Button>
       {isTauri() && <Button variant="outline" size="xs" onClick={() => void save(true)}>{tr('다른 이름으로 저장', 'Save as')}</Button>}
@@ -141,7 +142,8 @@ export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, 
       <Button variant="outline" size="xs" disabled={buttonDisabled || !session || !sql.trim()} onClick={() => { try { void execute(explainSql(sql, engine)); } catch (e) { setError(String(e)); } }}>EXPLAIN</Button>
       </div>
       {onOpenCommonSql && <div className="query-tool-group" role="group" aria-label={tr('SQL 템플릿', 'SQL templates')}><Button variant="outline" size="xs" disabled={commonSqlDisabled || buttonDisabled} onClick={onOpenCommonSql}>{tr('자주 쓰는 SQL', 'Common SQL')}</Button></div>}
-      {nativeSession && <div className="query-tool-group" role="group" aria-label={tr('트랜잭션', 'Transactions')}>
+      </>}
+      {nativeSession && (!collapsed || execution.manual || execution.inTransaction || !execution.transactionStateKnown) && <div className="query-tool-group" role="group" aria-label={tr('트랜잭션', 'Transactions')}>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || execution.readOnly || execution.inTransaction && execution.manual} onClick={() => void control('transaction_mode', { manual: !execution.manual })}>{execution.manual ? tr('수동 커밋', 'Manual commit') : tr('자동 커밋', 'Auto commit')}</Button>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || !execution.inTransaction} onClick={() => void control('transaction_finish', { commit: true })}>COMMIT</Button>
         <Button variant="outline" size="xs" disabled={buttonDisabled || execution.running || !execution.inTransaction} onClick={() => void control('transaction_finish', { commit: false })}>ROLLBACK</Button>
@@ -150,8 +152,8 @@ export function QueryTools({ onOpenCommonSql, commonSqlDisabled, primaryAction, 
       </div>
       {primaryAction && <div className="query-primary-action">{primaryAction}</div>}
     </div>
-    {(file || summary) && <div className="query-tool-status">
-      {file && <span title={file.path ?? file.name}>{file.name}{dirty ? ' •' : ''}</span>}
+    {((!collapsed && file) || summary) && <div className="query-tool-status">
+      {!collapsed && file && <span title={file.path ?? file.name}>{file.name}{dirty ? ' •' : ''}</span>}
       {summary && <span role="status">{summary}</span>}
     </div>}
     {execution.transactionStateKnown===false&&<p role="status">{tr('서버 스크립트 실행 후 트랜잭션 상태를 확인할 수 없습니다. COMMIT 또는 ROLLBACK으로 종료하세요.','Transaction state is unknown after the server script. Finish with COMMIT or ROLLBACK.')}</p>}
