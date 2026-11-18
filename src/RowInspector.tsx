@@ -1,3 +1,4 @@
+import { cellType } from './cell-data';
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Copy, Pencil, Search, X } from 'lucide-react';
 import type { Column, Row } from './model';
@@ -53,7 +54,7 @@ export function RowInspector({ columns, row, draft, rowIndex, position, total, c
               {editable && <Button variant="ghost" size="bare" className="icon-button" title={tr('셀 편집', 'Edit cell')} aria-label={`${tr('셀 편집', 'Edit cell')}: ${column.name}`} onClick={() => onEdit(column, value)}><Pencil size={12}/></Button>}
             </span>
           </dt>
-          <dd className={formatted?.json ? 'is-json' : undefined}>{formatted === null ? <span className="null-value">NULL</span> : formatted.text === '' ? <span className="empty-value">{tr('(빈 문자열)', '(empty string)')}</span> : formatted.text}</dd>
+          <dd data-value-type={cellType(column.dataType,value)} className={`data-cell ${formatted?.json ? 'is-json' : ''}`}>{formatted === null ? <span className="null-value">NULL</span> : formatted.text === '' ? <span className="empty-value">{tr('(빈 문자열)', '(empty string)')}</span> : formatted.text}</dd>
         </div>;
       })}
       {!shown.length && <p className="row-inspector-empty">{tr('일치하는 열이 없습니다.', 'No matching columns.')}</p>}

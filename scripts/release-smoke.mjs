@@ -88,12 +88,22 @@ try {
   await page.locator('.cm-content').fill('CREATE TABLE tab_smoke (id INTEGER PRIMARY KEY);');
   await page.locator('.run-button').click();
   await expect(page.locator('.run-button')).toBeEnabled();
+  for (const sql of [
+    'INSERT INTO tab_smoke VALUES (1);',
+    'CREATE TABLE link_smoke (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES tab_smoke(id), label TEXT, created_at DATETIME);',
+    "INSERT INTO link_smoke VALUES (10,1,'NULL',NULL);",
+  ]) {
+    await page.locator('.cm-content').fill(sql);
+    await page.locator('.run-button').click();
+    await expect(page.locator('.run-button')).toBeEnabled();
+    await expect(page.locator('.error-banner')).toHaveCount(0);
+  }
   await page.getByTitle('목록 새로고침',{exact:true}).click();
-  await expect(page.locator('.tree-table')).toHaveCount(1);
+  await expect(page.locator('.tree-table')).toHaveCount(2);
   for(let i=0;i<2;i++) {
     await archive.click();
     await archive.click();
-    await page.locator('.tree-table').click();
+    await page.locator('.tree-table').filter({hasText:'tab_smoke'}).click();
     await expect(page.getByRole('region',{name:'쿼리 기록',exact:true})).toHaveCount(0);
     await expect(page.locator('.object-view-bar')).toBeVisible();
     await expect(page.locator('#sql-editor')).toBeHidden();
@@ -102,6 +112,21 @@ try {
     await expect(page.getByRole('group',{name:'SQL 파일',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'SQL 접기',exact:true}).click();
   }
+  await page.locator('.tree-table').filter({hasText:'link_smoke'}).click();
+  await expect(page.locator('.data-grid tbody tr')).toHaveCount(1);
+  await expect(page.getByRole('cell',{name:'NULL',exact:true}).and(page.locator('[data-value-type="text"]'))).toBeVisible();
+  await expect(page.locator('.data-grid [data-value-type="null"]')).toHaveCount(1);
+  await page.getByRole('button',{name:'사이드바 접기',exact:true}).click();
+  await page.getByRole('button',{name:'테이블 선택',exact:true}).click();
+  await expect(page.locator('.workspace-picker [data-workspace-option]')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'사이드바 펼치기',exact:true}).click();
+  await page.getByRole('button',{name:'parent_id 관계 이동',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'1 id',exact:true})).toHaveValue('1');
+  await page.getByRole('button',{name:'id 관계 이동',exact:true}).click();
+  await page.getByRole('menuitem',{name:/참조하는 행 · main.link_smoke/}).click();
+  await expect(page.getByRole('textbox',{name:'1 parent_id',exact:true})).toHaveValue('1');
+  await page.screenshot({path:'test-results/relations-native.png'});
   await page.locator('.tab-add').click();
   const last=page.getByRole('tab').last();
   await last.dblclick();

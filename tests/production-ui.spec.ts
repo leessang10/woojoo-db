@@ -11,7 +11,7 @@ test('startup contains only real profiles and no sample workspace', async ({ pag
   await expect(page.getByRole('dialog')).not.toContainText(/데모|npm run/);
 });
 
-test('long connection labels stay inside the card in both themes', async ({ page }) => {
+test('long connection labels stay inside the breadcrumb in both themes', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('woojoo-profiles-v1', JSON.stringify([{
       id:'long-profile',name:'Production database with a very long connection name',
@@ -32,21 +32,21 @@ test('long connection labels stay inside the card in both themes', async ({ page
       const name = element.querySelector('.connection-name')!.getBoundingClientRect();
       const dot = element.querySelector('.live-dot')!.getBoundingClientRect();
       return { centered:Math.abs(icon.x+icon.width/2-svg.x-svg.width/2)<1,
-        noOverlap:name.right<=dot.left, noOverflow:element.scrollWidth<=element.clientWidth };
+        noOverlap:dot.right<=name.left, noOverflow:element.scrollWidth<=element.clientWidth };
     });
     expect(layout).toEqual({centered:true,noOverlap:true,noOverflow:true});
   }
 });
 
-test('sidebar header is compact and its add action aligns with its label', async ({ page }) => {
+test('sidebar header keeps connection creation accessible without a connection card', async ({ page }) => {
   await page.setViewportSize({width:960,height:700});
   await page.goto('/');
   await expect(page.locator('#database-sidebar').getByRole('heading', {name:'Database',exact:true})).toBeVisible();
-  const layout = await page.locator('.section-label').first().evaluate(element => {
+  const layout = await page.locator('.workspace-sidebar-title').evaluate(element => {
     const rect=element.getBoundingClientRect(), button=element.querySelector('button')!.getBoundingClientRect();
     const sidebar=element.closest('.sidebar')!, box=sidebar.getBoundingClientRect();
     const title=sidebar.querySelector('.workspace-sidebar-title')!.getBoundingClientRect();
-    return { gap:rect.top-title.bottom, inset:box.right-button.right, center:Math.abs(rect.y+rect.height/2-button.y-button.height/2), overflow:sidebar.scrollWidth>sidebar.clientWidth };
+    return { gap:0, inset:box.right-button.right, center:Math.abs(rect.y+rect.height/2-button.y-button.height/2), overflow:sidebar.scrollWidth>sidebar.clientWidth };
   });
   expect(layout.gap).toBeLessThanOrEqual(8);
   expect(layout.gap).toBeGreaterThanOrEqual(0);

@@ -437,16 +437,16 @@ pub async fn read_erd(
              JOIN LATERAL unnest(con.confkey) WITH ORDINALITY tk(attnum, ord) ON sk.ord=tk.ord
              JOIN pg_catalog.pg_attribute sa ON sa.attrelid=src.oid AND sa.attnum=sk.attnum
              JOIN pg_catalog.pg_attribute ta ON ta.attrelid=dst.oid AND ta.attnum=tk.attnum
-             WHERE con.contype='f' AND ns.nspname=$1
+             WHERE con.contype='f' AND (ns.nspname=$1 OR nt.nspname=$1)
              ORDER BY ns.nspname,src.relname,con.conname,sk.ord")
             .bind(&schema).fetch_all(p).await.map_err(error)?
             .into_iter().map(|r| Ok((r.try_get(0).map_err(error)?,r.try_get(1).map_err(error)?,r.try_get(2).map_err(error)?,r.try_get(3).map_err(error)?,r.try_get(4).map_err(error)?,r.try_get(5).map_err(error)?,r.try_get(6).map_err(error)?))).collect::<DbResult<_>>()?,
         Pool::My(p) => sqlx::query(
             "SELECT CONSTRAINT_NAME,TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_SCHEMA,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME
              FROM information_schema.KEY_COLUMN_USAGE
-             WHERE TABLE_SCHEMA=? AND REFERENCED_TABLE_NAME IS NOT NULL
+             WHERE (TABLE_SCHEMA=? OR REFERENCED_TABLE_SCHEMA=?) AND REFERENCED_TABLE_NAME IS NOT NULL
              ORDER BY TABLE_SCHEMA,TABLE_NAME,CONSTRAINT_NAME,ORDINAL_POSITION")
-            .bind(&schema).fetch_all(p).await.map_err(error)?
+            .bind(&schema).bind(&schema).fetch_all(p).await.map_err(error)?
             .into_iter().map(|r| Ok((r.try_get_unchecked(0).map_err(error)?,r.try_get_unchecked(1).map_err(error)?,r.try_get_unchecked(2).map_err(error)?,r.try_get_unchecked(3).map_err(error)?,r.try_get_unchecked(4).map_err(error)?,r.try_get_unchecked(5).map_err(error)?,r.try_get_unchecked(6).map_err(error)?))).collect::<DbResult<_>>()?,
     };
     let mut foreign_keys: Vec<ForeignKey> = vec![];
@@ -478,6 +478,9 @@ pub async fn read_erd(
         .filter(|table| table.schema == schema)
         .collect();
     for fk in &foreign_keys {
+        if !selected.iter().any(|table| table.schema == fk.source.schema && table.name == fk.source.name) {
+            selected.push(fk.source.clone());
+        }
         if !selected
             .iter()
             .any(|table| table.schema == fk.target.schema && table.name == fk.target.name)

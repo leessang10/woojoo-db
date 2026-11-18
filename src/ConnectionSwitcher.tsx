@@ -33,8 +33,9 @@ export function ConnectionSwitcher({ connections, active, onSelect, onAdd, child
       <div className="connection-picker-search"><Search size={15}/><Input ref={input} aria-label={tr('연결 검색','Search connections')} placeholder={tr('이름, 그룹, 주소 검색','Search name, group, or host')} value={search} onChange={event=>setSearch(event.target.value)}/></div>
       <div className="connection-picker-list">
         {filtered.map(c=><Button key={c.session} variant="ghost" size="bare" data-connection-option aria-pressed={active===c.session} className="connection-picker-option" onClick={()=>{setOpen(false);setSearch('');onSelect(c.session);}}>
-          <Database size={16}/><span className="connection-picker-description"><strong>{c.profile.name}</strong><small>{[c.profile.group,c.profile.environment,c.profile.engine,c.profile.readOnly?'RO':null].filter(Boolean).join(' · ')}</small></span>
-          <span className={`live-dot ${c.session.startsWith('saved:')?'offline':''}`}/>{active===c.session?<Check size={15}/>:<span className="connection-picker-check"/>}
+          <span className={`live-dot ${c.session.startsWith('saved:')?'offline':''}`} title={c.session.startsWith('saved:')?tr('연결 안 됨','Not connected'):tr('연결됨','Connected')}/>
+          <Database size={16}/><span className="connection-picker-description"><strong>{c.profile.name}</strong><small>{[c.profile.group,c.profile.environment,c.profile.engine,c.profile.readOnly?'RO':null].filter(Boolean).join(' · ')}</small><small className="connection-picker-host" title={c.profile.host || c.profile.database}>{c.profile.host || c.profile.database}{c.profile.engine!=='sqlite' && ` · ${c.profile.tls?'TLS':tr('TLS 없음','No TLS')}`}</small></span>
+          {active===c.session?<Check size={15}/>:<span className="connection-picker-check"/>}
         </Button>)}
         {!filtered.length&&<p className="connection-picker-empty">{tr('일치하는 연결이 없습니다.','No matching connections.')}</p>}
       </div>

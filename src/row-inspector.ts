@@ -1,4 +1,4 @@
-const NUMERIC = /int|numeric|decimal|float|double|real|serial|money|number|bit/i;
+const NUMERIC = /^(?:(?:tiny|small|medium|big)?int(?:eger)?\d*|numeric|decimal|float\d*|double|real|(?:big|small)?serial\d*|money|number|bit)(?:\b|\()/i;
 export const isNumericType = (dataType: string) => NUMERIC.test(dataType);
 
 /** Pretty-prints JSON objects and arrays; any other value is returned unchanged. */

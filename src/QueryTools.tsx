@@ -127,7 +127,7 @@ export function QueryTools({ collapsed = false, onOpenCommonSql, commonSqlDisabl
     element.addEventListener('scroll', update, { passive: true });
     return () => { observer.disconnect(); element.removeEventListener('scroll', update); };
   }, [nativeSession, !!onOpenCommonSql, collapsed]);
-  return <div className="query-tools">
+  return <div className="query-tools" data-transaction-active={!!(busy || disabled || nativeSession && (execution.manual || execution.inTransaction || execution.running || !execution.transactionStateKnown))}>
     <div className="query-toolbar">
       {!collapsed && leadingAction && <div className="query-leading-action">{leadingAction}</div>}
       <div className="query-toolbar-scroll" ref={scroller} data-overflow-start={overflow.start} data-overflow-end={overflow.end} onWheel={event => { if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY; }}>
